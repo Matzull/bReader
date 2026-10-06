@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """zxing-cpp baseline with the same matching, normalization, timing and report format as the Rust bench.
 
-usage: zxingcpp_bench.py <dataset-dir> [--json out.json]
+usage: zxingcpp_bench.py <dataset-dir> [--json out.json] [--no-overrides]
 """
 import json
 import sys
@@ -159,6 +159,97 @@ def stats_json(stats):
     }
 
 
+OVERRIDES_PATH = Path(__file__).with_name("gt-overrides.json")
+
+
+def load_overrides():
+    return json.loads(OVERRIDES_PATH.read_text())["datasets"]
+
+
+def apply_overrides(ann, dir_name, overrides):
+    applied = 0
+    for entry in overrides.get(dir_name, []):
+        for img in ann["images"]:
+            if img["file"] != entry["file"]:
+                continue
+            for b in img["barcodes"]:
+                if b["format"] == entry["from"]["format"] and b["text"] == entry["from"]["text"]:
+                    b["format"] = entry["to"]["format"]
+                    b["text"] = entry["to"]["text"]
+                    applied += 1
+                    break
+    return applied
+
+
+def centroid(pts):
+    if not pts:
+        return None
+    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+
+def inside(poly, p):
+    if len(poly) < 3:
+        return False
+    hit = False
+    j = len(poly) - 1
+    for i in range(len(poly)):
+        a, b = poly[i], poly[j]
+        if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]:
+            hit = not hit
+        j = i
+    return hit
+
+
+def bbox(pts):
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def bbox_iou(a, b):
+    if not a or not b:
+        return 0.0
+    a, b = bbox(a), bbox(b)
+    w = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    h = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = w * h
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def quads_overlap(a, b):
+    ca, cb = centroid(a), centroid(b)
+    return (ca is not None and inside(b, ca)) or (cb is not None and inside(a, cb)) or bbox_iou(a, b) > 0.5
+
+
+def gt_key(b):
+    sym = map_symbology(b["format"])
+    if sym is None:
+        return (b["format"], b["text"].strip().encode("utf-8"))
+    return canonical(sym, b["text"].encode("utf-8"))
+
+
+def dedup_annotations(ann):
+    """Drop GT entries labelling the same symbol twice; prefer UPC-A over EAN-13. Returns removed count."""
+    removed = 0
+    for img in ann["images"]:
+        kept = []
+        for b in img["barcodes"]:
+            pts = b.get("points") or []
+            dup = next(
+                (i for i, k in enumerate(kept) if gt_key(k) == gt_key(b) and quads_overlap(k.get("points") or [], pts)),
+                None,
+            )
+            if dup is None:
+                kept.append(b)
+            else:
+                if map_symbology(b["format"]) == "UPC-A":
+                    kept[dup] = b
+                removed += 1
+        img["barcodes"] = kept
+    return removed
+
+
 def find_annotations(root):
     return sorted(p for p in root.rglob("annotations.json") if ".git" not in p.parts)
 
@@ -206,28 +297,37 @@ def main(argv):
     args = argv[1:]
     out_json = None
     root = None
+    use_overrides = True
     while args:
         a = args.pop(0)
         if a == "--json":
             out_json = args.pop(0)
+        elif a == "--no-overrides":
+            use_overrides = False
         elif root is None:
             root = Path(a)
         else:
-            sys.exit("usage: zxingcpp_bench.py <dataset-dir> [--json out.json]")
+            sys.exit("usage: zxingcpp_bench.py <dataset-dir> [--json out.json] [--no-overrides]")
     if root is None:
-        sys.exit("usage: zxingcpp_bench.py <dataset-dir> [--json out.json]")
+        sys.exit("usage: zxingcpp_bench.py <dataset-dir> [--json out.json] [--no-overrides]")
     files = find_annotations(root)
     if not files:
         sys.exit(f"no annotations.json found under {root}")
     total = Stats()
     per_dataset = {}
     name = "zxing-cpp"
+    overrides = load_overrides()
     for f in files:
         ann = json.loads(f.read_text())
         if not str(ann.get("format", "")).startswith("barcode-benchmark/"):
             print(f"skipping {f}: unknown annotation format", file=sys.stderr)
             continue
         ds = dataset_name(root, f.parent)
+        if use_overrides:
+            n = apply_overrides(ann, f.parent.resolve().name, overrides)
+            if n:
+                print(f"{ds}: applied {n} GT override(s)", file=sys.stderr)
+        print(f"{ds}: removed {dedup_annotations(ann)} duplicate GT entries", file=sys.stderr)
         stats = run_dataset(f.parent, ann)
         print_table(name, ds, stats)
         per_dataset[ds] = stats_json(stats)

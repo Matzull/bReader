@@ -18,7 +18,7 @@ use groundtruth::Expected;
 use matching::Stats;
 
 const USAGE: &str = "usage: bench <dataset-dir> [--engine breader|rxing|rqrr|all] \
-[--effort fast|balanced|exhaustive] [--json out.json]";
+[--effort fast|balanced|exhaustive] [--json out.json] [--no-overrides]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EngineSel {
@@ -33,6 +33,7 @@ struct Args {
     engine: EngineSel,
     effort: Effort,
     json: Option<PathBuf>,
+    overrides: bool,
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -40,6 +41,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut engine = EngineSel::Breader;
     let mut effort = Effort::Balanced;
     let mut json = None;
+    let mut overrides = true;
     let mut args = args;
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -61,6 +63,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
                 };
             }
             "--json" => json = Some(args.next().ok_or("--json needs a path")?.into()),
+            "--no-overrides" => overrides = false,
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             _ if dataset.is_none() => dataset = Some(PathBuf::from(arg)),
             _ => return Err("multiple dataset directories given".into()),
@@ -71,6 +74,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
         engine,
         effort,
         json,
+        overrides,
     })
 }
 
@@ -119,7 +123,7 @@ struct Dataset {
     images: Vec<(PathBuf, Vec<Expected>)>,
 }
 
-fn load_datasets(root: &Path) -> Result<Vec<Dataset>, String> {
+fn load_datasets(root: &Path, use_overrides: bool) -> Result<Vec<Dataset>, String> {
     let mut files = Vec::new();
     find_annotation_files(root, &mut files);
     if files.is_empty() {
@@ -128,9 +132,10 @@ fn load_datasets(root: &Path) -> Result<Vec<Dataset>, String> {
             root.display()
         ));
     }
+    let overrides = groundtruth::parse_overrides(groundtruth::OVERRIDES_JSON)?;
     let mut datasets = Vec::new();
     for ann_path in &files {
-        let ann = match groundtruth::load_annotations(ann_path) {
+        let mut ann = match groundtruth::load_annotations(ann_path) {
             Ok(a) => a,
             Err(e) => {
                 eprintln!("skipping {}: {e}", ann_path.display());
@@ -146,6 +151,19 @@ fn load_datasets(root: &Path) -> Result<Vec<Dataset>, String> {
                 .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
                 .unwrap_or_else(|| root.display().to_string()),
         };
+        let dir_name = base
+            .canonicalize()
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_default();
+        if use_overrides {
+            let n = groundtruth::apply_overrides(&mut ann, &dir_name, &overrides);
+            if n > 0 {
+                eprintln!("{name}: applied {n} GT override(s)");
+            }
+        }
+        let removed = groundtruth::dedup_annotations(&mut ann);
+        eprintln!("{name}: removed {removed} duplicate GT entries");
         let images = groundtruth::expected_by_file(&ann)
             .into_iter()
             .map(|(file, expected)| (base.join(file), expected))
@@ -204,7 +222,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let datasets = match load_datasets(&args.dataset) {
+    let datasets = match load_datasets(&args.dataset, args.overrides) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{e}");

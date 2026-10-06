@@ -1,0 +1,12 @@
+{
+  "datasets": {
+    "challenging-images": [
+      {
+        "file": "barcode-with-shadow-1.jpg",
+        "from": { "format": "UPC_A", "text": "268290760343" },
+        "to": { "format": "UPC_A", "text": "888290760343" },
+        "reason": "Human-readable digits printed under the symbol read 888290 760343 (verified visually on the EXIF-corrected crop). Both strings share check digit 3, so the checksum cannot disambiguate."
+      }
+    ]
+  }
+}

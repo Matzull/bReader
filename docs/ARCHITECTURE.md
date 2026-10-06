@@ -94,40 +94,44 @@ Validation is part of each decoder, not an optional post-step: a `SymbologyReade
 
 ### 3.1 Linear (`breader-linear`)
 
-`LinearReader` returns `uses_binary() == false`: it reads grayscale profiles, so the pipeline runs it once per (image variant, polarity) and skips binarizer-only passes.
+`LinearReader` returns `uses_binary() == false` and `handles_inversion() == true`: it reads grayscale profiles and decodes both polarities from the same edges, so the pipeline runs it once per image variant.
 
 Internal modules and data flow for one pass:
 
 ```
-ScanPlan ─► Scanline ─► profile (u8, polarity-normalized) ─► Edges ─► Runs
-                                                                       │
-                              LinearDecoder × K (EAN/UPC, 128, 39, ITF) ◄┘
-                                          │ LineHit
-                                          ▼
-                                     Aggregator ─► Symbol
+ScanPlan ─► Scanline ─► profile (u8) ─► Edges ─► Runs ─┬─ dark bars  ─┐
+                                                        └─ light bars ─┤
+                       LinearDecoder × K (EAN/UPC, 128, 39, ITF) ◄─────┘
+                                   │ LineHit
+                                   ▼
+                    Aggregator ◄─► Refinement ─► Symbol
 ```
 
-1. **ScanPlan** — scanlines for the pass image. Spacing is `max(2, dim / d)` px:
+1. **ScanPlan** — scanlines for the pass image, ordered center-out so early hits come quickly. The spacing is computed from the image extent perpendicular to each direction, capped at 48 / 24 / 12 px (Fast / Balanced / Exhaustive), and multiplied by 1.5 for non-axis directions. The cap keeps small symbols in large photos reachable.
 
-   | Effort | Horizontal + vertical | Diagonals |
-   |---|---|---|
-   | Fast | d = 32 | none |
-   | Balanced | d = 64 | ±45°, d = 32 |
-   | Exhaustive | d = 128 | every 15°, d = 64 |
+   | Effort | Directions |
+   |---|---|
+   | Fast | horizontal, vertical |
+   | Balanced | 8 (every 22.5°) |
+   | Exhaustive | 12 (every 15°) |
 
-   Scanlines are generated in an order that spreads them across the image (center first), so early hits come quickly.
-2. **Profile** — samples along the scanline at 1 px steps: direct row/column reads when axis-aligned, bilinear interpolation otherwise. When `pass().inverted`, values become `255 - v`, so decoders always see dark bars.
-3. **Edges** — central difference `d[i] = p[i+1] - p[i-1]` after [1 2 1] smoothing. An edge is a local extremum of `d` with `|d| ≥ max(min_edge, k · local_range)`, where `local_range` is the max-min of the profile in a sliding window; this is the step that tolerates uneven lighting. Sub-pixel position comes from a parabolic fit over the three samples around the extremum. Signs must alternate; for consecutive same-sign extrema, the stronger one is kept. A falling edge (light→dark) starts a bar.
-4. **Runs** — widths between consecutive edges (f32), the bar/space flag of the first run and the edge positions along the line. Decoders receive a `Runs` slice and never allocate.
-5. **LinearDecoder** (family-internal trait, static dispatch): `fn decode(&self, runs: &Runs, opts: &ScanOptions, out: &mut Vec<LineHit>)`. Each decoder:
-   - looks for its start (or stop, for reverse reading) pattern;
-   - checks the quiet zone against the estimated module width;
-   - matches each character by normalizing its runs to the character's total module count and comparing to the specification patterns. The best match must beat the second best by a margin, otherwise the line is rejected;
-   - validates check digits, stop pattern and length rules.
-   `LineHit { symbology, text, addon, start, end, module }` holds the segment endpoints in pass-image coordinates.
-6. **Aggregator** — per pass, hits are grouped by (symbology, text) when their segment centers are closer than the segment length and their directions differ by less than 10°. A group becomes a `Symbol` when it has at least `min_line_agreement` hits. If two groups of the same family overlap spatially with different text, the one with fewer hits is dropped when the other has at least twice as many; otherwise both are dropped (NFR-1). The quad is built from the endpoint extents along and across the mean direction, then mapped to original-frame coordinates with `FrameContext::scale`.
+2. **Profile** — samples along the scanline at 1 px steps: direct reads when axis-aligned (vertical lines in one row-major sweep), bilinear interpolation otherwise.
+3. **Edges** — central difference of the profile. An edge is a local extremum with `|d| ≥ max(min_edge, 0.12 · local_range, noise term)`, where the noise is estimated on flat blocks only and the threshold is capped at 0.3 · range. Signs must alternate; for consecutive same-sign extrema, the stronger one is kept. Each edge is then moved to the half-level crossing between the neighbouring extremes, which gives sub-pixel positions and corrects print gain. A [1 2 1]-smoothed variant runs as well in Balanced and Exhaustive (it is the only variant in Fast) for noisy lines; unsmoothed is the default because smoothing merges 1.5–2 px bars.
+4. **Runs** — widths between consecutive edges, edge positions, and the polarity of the first run. Decoders read both polarities by swapping the bar/space roles. They never allocate.
+5. **LinearDecoder** (family-internal trait, static dispatch through a tuple of decoders): `decode(&self, runs, opts, out: &mut Vec<LineHit>)`. Each decoder tries both reading directions:
+   - finds its start (or reversed stop) pattern;
+   - checks quiet zones against the estimated module width;
+   - matches characters by normalizing runs to the character's module count, with print-gain bias and module-width drift (≤ 1.8×) estimated from guard patterns;
+   - accepts a character only when its best match beats the second best by a margin; at most one weak character is allowed when a check digit protects it;
+   - validates check characters, stop pattern and length rules.
 
-EAN/UPC specifics: EAN-13 encodes its first digit in the L/G parity of the left half. An EAN-13 with leading 0 is reported as UPC-A (12 digits) when UPC-A is enabled, and as EAN-13 otherwise. UPC-E is expanded to UPC-A only for check digit validation; the reported data is the 8-digit UPC-E. Add-ons are searched after the end guard (gap of 7–12 modules, start pattern 1011). EAN-2 parity comes from the value mod 4, EAN-5 parity from its weighted checksum. `EanAddonPolicy` decides acceptance.
+   `LineHit` holds the symbology, text, add-on, polarity, positions along the line and module width; the reader maps positions to image points.
+6. **Aggregator** — groups hits by (symbology, text, polarity) with single-link proximity: center distance below the longer segment, any direction, so lines at different angles confirm each other. A group becomes a `Symbol` with at least `min_line_agreement` lines (ITF: at least 3).
+   - **Conflicts:** if two groups of the same family overlap (segment and rectangle overlap) with different text, the one with fewer lines survives only when the other has at least twice as many; otherwise both are dropped (NFR-1). This also removes partial reads such as a UPC-E inside an EAN-13 or 12 digits of an ITF-14.
+   - **Refinement:** a group that is still short of agreement gets parallel lines on both sides (at most 24 per side, stopping after 3 misses, at most 48 seeds per pass). Adjacent lines see nearly the same pixels, so a group backed by a single line of the sparse plan needs `min_line_agreement + 1` lines.
+   - **Coordinates:** the quad comes from the endpoint extents along and across the mean direction, mapped to original-frame coordinates with `FrameContext::scale`.
+
+EAN/UPC specifics: EAN-13 encodes its first digit in the L/G parity of the left half. An EAN-13 with leading 0 is reported as UPC-A (12 digits) when UPC-A is enabled, and as EAN-13 otherwise. UPC-E is expanded to UPC-A only for check digit validation; the reported data is the 8-digit UPC-E. Add-ons are searched after the end guard (gap of 5–14 modules, start pattern 1011) and need their own line agreement. Minimum quiet zones are 4.5 / 5.5 / 6.5 modules for EAN-13 and UPC-A / EAN-8 / UPC-E. A symbol whose end guard cannot be verified is never accepted, even when the digits and check digit would be. EAN-2 parity comes from the value mod 4, EAN-5 parity from its weighted checksum. `EanAddonPolicy` decides acceptance.
 
 ### 3.2 QR (`breader-qr`)
 
