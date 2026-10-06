@@ -1,35 +1,32 @@
 //! Linear (1D) symbology reader.
 
-use breader_core::{FrameContext, Symbol, Symbology, SymbologyReader, SymbologySet};
+#![forbid(unsafe_code)]
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct LinearReader;
+mod aggregate;
+mod decoder;
+mod ean;
+mod edges;
+mod plan;
+mod profile;
+mod reader;
+#[cfg(test)]
+mod robustness;
+mod runs;
+#[cfg(test)]
+mod testutil;
 
-impl SymbologyReader for LinearReader {
-    fn name(&self) -> &'static str {
-        "linear"
-    }
-
-    fn symbologies(&self) -> SymbologySet {
-        [
-            Symbology::Ean13,
-            Symbology::Ean8,
-            Symbology::UpcA,
-            Symbology::UpcE,
-            Symbology::Code128,
-            Symbology::Code39,
-            Symbology::Itf,
-        ]
-        .into_iter()
-        .collect()
-    }
-
-    fn scan(&self, _ctx: &mut FrameContext<'_>, _out: &mut Vec<Symbol>) {}
-}
+pub use aggregate::{Aggregator, PlacedHit, Settings};
+pub use decoder::{LineHit, LinearDecoder};
+pub use ean::EanDecoder;
+pub use edges::{Edge, EdgeDetector, EdgeParams, Edges};
+pub use plan::{ScanPlan, Scanline};
+pub use reader::LinearReader;
+pub use runs::Runs;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use breader_core::{Symbology, SymbologyReader};
 
     #[test]
     fn symbology_set() {
@@ -38,5 +35,6 @@ mod tests {
         assert!(!set.contains(Symbology::Qr));
         assert!(set.contains(Symbology::Itf));
         assert_eq!(LinearReader.name(), "linear");
+        assert!(!LinearReader.uses_binary());
     }
 }
