@@ -46,6 +46,11 @@ pub enum Reject {
 pub trait SymbologyReader: Send + Sync {
     fn name(&self) -> &'static str;
     fn symbologies(&self) -> SymbologySet;
+    /// Readers working on grayscale return `false`; the pipeline then skips
+    /// passes that differ from an earlier one only by binarizer.
+    fn uses_binary(&self) -> bool {
+        true
+    }
     /// Called once per pass. Must only push symbols that passed validation.
     fn scan(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>);
 }

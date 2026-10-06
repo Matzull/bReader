@@ -14,7 +14,7 @@ pub use breader_core::{
 
 pub mod modules {
     pub use breader_content::{ContentClassifier, Dedup};
-    pub use breader_imgproc::OtsuBinarizer;
+    pub use breader_imgproc::{Downscale, LocalBinarizer, OtsuBinarizer};
     #[cfg(feature = "linear")]
     pub use breader_linear::LinearReader;
     #[cfg(feature = "qr")]
@@ -22,7 +22,10 @@ pub mod modules {
 }
 
 pub fn default_pipeline() -> Pipeline {
-    let builder = Pipeline::builder().binarizer(modules::OtsuBinarizer);
+    let builder = Pipeline::builder()
+        .binarizer(modules::LocalBinarizer::default())
+        .binarizer(modules::OtsuBinarizer)
+        .preprocessor(modules::Downscale::new(2));
     #[cfg(feature = "qr")]
     let builder = builder.reader(modules::QrReader);
     #[cfg(feature = "linear")]

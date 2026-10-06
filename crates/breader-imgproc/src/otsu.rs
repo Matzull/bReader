@@ -1,5 +1,7 @@
 use breader_core::{Binarizer, BitMatrix, ImageView};
 
+use crate::pack::pack_row;
+
 /// Global Otsu threshold; pixels below the threshold are dark.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OtsuBinarizer;
@@ -43,10 +45,11 @@ impl Binarizer for OtsuBinarizer {
         }
         let total = (src.width() * src.height()) as u64;
         let threshold = otsu_threshold(&hist, total);
+        if out.width() != src.width() || out.height() != src.height() {
+            out.resize(src.width(), src.height());
+        }
         for y in 0..src.height() {
-            for (x, &v) in src.row(y).iter().enumerate() {
-                out.set(x, y, v < threshold);
-            }
+            pack_row(src.row(y), |_| threshold, out.row_words_mut(y));
         }
     }
 }

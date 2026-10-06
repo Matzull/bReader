@@ -155,13 +155,21 @@ impl Pipeline {
             .filter(|r| r.symbologies().intersects(options.symbologies))
             .collect();
 
+        let mut gray_done: Vec<(Option<usize>, bool)> = Vec::new();
         for pass in self.passes(options) {
             if options.time_budget.is_some_and(|b| start.elapsed() >= b) {
                 break;
             }
             ctx.set_pass(pass);
+            let gray_key = (pass.preprocessor, pass.inverted);
+            let gray_new = !gray_done.contains(&gray_key);
+            if gray_new {
+                gray_done.push(gray_key);
+            }
             for reader in &readers {
-                reader.scan(&mut ctx, &mut symbols);
+                if reader.uses_binary() || gray_new {
+                    reader.scan(&mut ctx, &mut symbols);
+                }
             }
             symbols.retain(|s| options.symbologies.contains(s.symbology));
             if options.max_symbols != 0 && symbols.len() >= options.max_symbols {
@@ -221,6 +229,39 @@ mod tests {
                 });
             }
         }
+    }
+
+    struct GrayCounter(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    impl SymbologyReader for GrayCounter {
+        fn name(&self) -> &'static str {
+            "gray"
+        }
+        fn symbologies(&self) -> SymbologySet {
+            SymbologySet::EMPTY.with(Symbology::Ean13)
+        }
+        fn uses_binary(&self) -> bool {
+            false
+        }
+        fn scan(&self, _ctx: &mut FrameContext<'_>, _out: &mut Vec<Symbol>) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn gray_reader_skips_binarizer_only_passes() {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .binarizer(Threshold)
+            .binarizer(Threshold)
+            .reader(GrayCounter(calls.clone()))
+            .build()
+            .unwrap();
+        let pixels = [0u8; 4];
+        let img = ImageView::from_packed(&pixels, 2, 2).unwrap();
+        let options = ScanOptions::with_effort(Effort::Exhaustive);
+        assert_eq!(pipeline.passes(&options).len(), 4);
+        pipeline.scan(img, &options, &mut Scratch::new());
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 2);
     }
 
     #[test]

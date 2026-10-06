@@ -67,7 +67,7 @@ All buffers live in `Scratch`, owned by the caller and reused between frames, wh
 |---|---|---|
 | `Preprocessor` | yes | Produce an image variant (downscale, contrast normalization) |
 | `Binarizer` | yes | Luma → `BitMatrix` (dark = `true`) |
-| `SymbologyReader` | yes | One family end to end; registered in the pipeline |
+| `SymbologyReader` | yes | One family end to end; registered in the pipeline. `uses_binary()` tells the pipeline whether binarizer-only passes are relevant to it |
 | `PostProcessor` | yes | Operate on the final result list |
 | `Detector` | no (associated type) | Family-internal: produce candidates |
 | `SymbolDecoder` | no (associated type) | Family-internal: candidate → `Symbol` or `Reject` |
@@ -94,10 +94,40 @@ Validation is part of each decoder, not an optional post-step: a `SymbologyReade
 
 ### 3.1 Linear (`breader-linear`)
 
-1. Choose scanlines: horizontal and vertical sets, then additional angles for rotated symbols (Balanced/Exhaustive), with density by effort.
-2. Along each scanline, extract edges from the grayscale profile with sub-pixel positions (gradient extrema), giving a sequence of bar/space widths; polarity comes from `pass().inverted`.
-3. Each decoder scans the width sequence for its start pattern, normalizes widths to modules and matches characters by distance to the spec patterns, rejecting ambiguous matches.
-4. Results from many scanlines are clustered by (symbology, data); a cluster is emitted when it reaches `min_line_agreement` and its scanlines are geometrically consistent; its endpoints give the `Quad`.
+`LinearReader` returns `uses_binary() == false`: it reads grayscale profiles, so the pipeline runs it once per (image variant, polarity) and skips binarizer-only passes.
+
+Internal modules and data flow for one pass:
+
+```
+ScanPlan ─► Scanline ─► profile (u8, polarity-normalized) ─► Edges ─► Runs
+                                                                       │
+                              LinearDecoder × K (EAN/UPC, 128, 39, ITF) ◄┘
+                                          │ LineHit
+                                          ▼
+                                     Aggregator ─► Symbol
+```
+
+1. **ScanPlan** — scanlines for the pass image. Spacing is `max(2, dim / d)` px:
+
+   | Effort | Horizontal + vertical | Diagonals |
+   |---|---|---|
+   | Fast | d = 32 | none |
+   | Balanced | d = 64 | ±45°, d = 32 |
+   | Exhaustive | d = 128 | every 15°, d = 64 |
+
+   Scanlines are generated in an order that spreads them across the image (center first), so early hits come quickly.
+2. **Profile** — samples along the scanline at 1 px steps: direct row/column reads when axis-aligned, bilinear interpolation otherwise. When `pass().inverted`, values become `255 - v`, so decoders always see dark bars.
+3. **Edges** — central difference `d[i] = p[i+1] - p[i-1]` after [1 2 1] smoothing. An edge is a local extremum of `d` with `|d| ≥ max(min_edge, k · local_range)`, where `local_range` is the max-min of the profile in a sliding window; this is the step that tolerates uneven lighting. Sub-pixel position comes from a parabolic fit over the three samples around the extremum. Signs must alternate; for consecutive same-sign extrema, the stronger one is kept. A falling edge (light→dark) starts a bar.
+4. **Runs** — widths between consecutive edges (f32), the bar/space flag of the first run and the edge positions along the line. Decoders receive a `Runs` slice and never allocate.
+5. **LinearDecoder** (family-internal trait, static dispatch): `fn decode(&self, runs: &Runs, opts: &ScanOptions, out: &mut Vec<LineHit>)`. Each decoder:
+   - looks for its start (or stop, for reverse reading) pattern;
+   - checks the quiet zone against the estimated module width;
+   - matches each character by normalizing its runs to the character's total module count and comparing to the specification patterns. The best match must beat the second best by a margin, otherwise the line is rejected;
+   - validates check digits, stop pattern and length rules.
+   `LineHit { symbology, text, addon, start, end, module }` holds the segment endpoints in pass-image coordinates.
+6. **Aggregator** — per pass, hits are grouped by (symbology, text) when their segment centers are closer than the segment length and their directions differ by less than 10°. A group becomes a `Symbol` when it has at least `min_line_agreement` hits. If two groups of the same family overlap spatially with different text, the one with fewer hits is dropped when the other has at least twice as many; otherwise both are dropped (NFR-1). The quad is built from the endpoint extents along and across the mean direction, then mapped to original-frame coordinates with `FrameContext::scale`.
+
+EAN/UPC specifics: EAN-13 encodes its first digit in the L/G parity of the left half. An EAN-13 with leading 0 is reported as UPC-A (12 digits) when UPC-A is enabled, and as EAN-13 otherwise. UPC-E is expanded to UPC-A only for check digit validation; the reported data is the 8-digit UPC-E. Add-ons are searched after the end guard (gap of 7–12 modules, start pattern 1011). EAN-2 parity comes from the value mod 4, EAN-5 parity from its weighted checksum. `EanAddonPolicy` decides acceptance.
 
 ### 3.2 QR (`breader-qr`)
 

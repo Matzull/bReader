@@ -1,10 +1,16 @@
-use std::path::Path;
+use breader::{Effort, ImageView, Reader, ScanOptions, Symbology};
+use image::GrayImage;
 
-use breader::{Effort, Reader, ScanOptions, Symbology};
+#[cfg(feature = "baselines")]
+pub use crate::baselines::{RqrrEngine, RxingEngine};
+
+/// One decoded symbol: reported symbology and payload bytes.
+pub type Decoded = (Symbology, Vec<u8>);
 
 pub trait Engine {
     fn name(&self) -> &str;
-    fn scan_file(&mut self, path: &Path) -> Result<Vec<(Symbology, Vec<u8>)>, String>;
+    /// Decodes an already loaded grayscale image; this call is what gets timed.
+    fn decode(&mut self, img: &GrayImage) -> Result<Vec<Decoded>, String>;
 }
 
 #[derive(Debug)]
@@ -25,8 +31,11 @@ impl Engine for BreaderEngine {
         "breader"
     }
 
-    fn scan_file(&mut self, path: &Path) -> Result<Vec<(Symbology, Vec<u8>)>, String> {
-        let symbols = self.reader.scan_file(path).map_err(|e| e.to_string())?;
+    fn decode(&mut self, img: &GrayImage) -> Result<Vec<Decoded>, String> {
+        let view =
+            ImageView::from_packed(img.as_raw(), img.width() as usize, img.height() as usize)
+                .map_err(|e| e.to_string())?;
+        let symbols = self.reader.scan(view);
         Ok(symbols.into_iter().map(|s| (s.symbology, s.data)).collect())
     }
 }

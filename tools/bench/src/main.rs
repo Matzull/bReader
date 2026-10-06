@@ -1,27 +1,43 @@
+#[cfg(feature = "baselines")]
+mod baselines;
 mod engine;
 mod groundtruth;
+mod matching;
+mod report;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use breader::Effort;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use engine::{BreaderEngine, Engine};
 use groundtruth::Expected;
+use matching::Stats;
 
-const USAGE: &str =
-    "usage: bench <dataset-dir> [--effort fast|balanced|exhaustive] [--json out.json]";
+const USAGE: &str = "usage: bench <dataset-dir> [--engine breader|rxing|rqrr|all] \
+[--effort fast|balanced|exhaustive] [--json out.json]";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EngineSel {
+    Breader,
+    Rxing,
+    Rqrr,
+    All,
+}
 
 struct Args {
     dataset: PathBuf,
+    engine: EngineSel,
     effort: Effort,
     json: Option<PathBuf>,
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut dataset = None;
+    let mut engine = EngineSel::Breader;
     let mut effort = Effort::Balanced;
     let mut json = None;
     let mut args = args;
@@ -35,6 +51,15 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
                     other => return Err(format!("invalid --effort value {other:?}")),
                 };
             }
+            "--engine" => {
+                engine = match args.next().as_deref() {
+                    Some("breader") => EngineSel::Breader,
+                    Some("rxing") => EngineSel::Rxing,
+                    Some("rqrr") => EngineSel::Rqrr,
+                    Some("all") => EngineSel::All,
+                    other => return Err(format!("invalid --engine value {other:?}")),
+                };
+            }
             "--json" => json = Some(args.next().ok_or("--json needs a path")?.into()),
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             _ if dataset.is_none() => dataset = Some(PathBuf::from(arg)),
@@ -43,9 +68,33 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     }
     Ok(Args {
         dataset: dataset.ok_or("missing <dataset-dir>")?,
+        engine,
         effort,
         json,
     })
+}
+
+fn build_engines(sel: EngineSel, effort: Effort) -> Result<Vec<Box<dyn Engine>>, String> {
+    let mut engines: Vec<Box<dyn Engine>> = Vec::new();
+    if matches!(sel, EngineSel::Breader | EngineSel::All) {
+        engines.push(Box::new(BreaderEngine::new(effort)));
+    }
+    #[cfg(feature = "baselines")]
+    {
+        if matches!(sel, EngineSel::Rxing | EngineSel::All) {
+            engines.push(Box::new(engine::RxingEngine));
+        }
+        if matches!(sel, EngineSel::Rqrr | EngineSel::All) {
+            engines.push(Box::new(engine::RqrrEngine));
+        }
+    }
+    #[cfg(not(feature = "baselines"))]
+    if matches!(sel, EngineSel::Rxing | EngineSel::Rqrr) {
+        return Err(
+            "rxing and rqrr need the `baselines` cargo feature (--features baselines)".into(),
+        );
+    }
+    Ok(engines)
 }
 
 fn find_annotation_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -65,69 +114,79 @@ fn find_annotation_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-#[derive(Default)]
-struct Stats {
-    images: usize,
-    errors: usize,
-    expected: usize,
-    unsupported: usize,
-    correct: usize,
-    false_positives: usize,
-    latencies: Vec<Duration>,
+struct Dataset {
+    name: String,
+    images: Vec<(PathBuf, Vec<Expected>)>,
 }
 
-fn run_image(engine: &mut dyn Engine, path: &Path, expected: &[Expected], stats: &mut Stats) {
-    let start = Instant::now();
-    let result = engine.scan_file(path);
-    stats.latencies.push(start.elapsed());
-    stats.images += 1;
-
-    let found = result.unwrap_or_else(|e| {
-        eprintln!("{}: {e}", path.display());
-        stats.errors += 1;
-        Vec::new()
-    });
-    let mut used = vec![false; found.len()];
-
-    for exp in expected {
-        let Some(sym) = exp.symbology else {
-            stats.unsupported += 1;
-            continue;
+fn load_datasets(root: &Path) -> Result<Vec<Dataset>, String> {
+    let mut files = Vec::new();
+    find_annotation_files(root, &mut files);
+    if files.is_empty() {
+        return Err(format!(
+            "no annotations.json found under {} (video-based-testing CSV ground truth is not supported yet)",
+            root.display()
+        ));
+    }
+    let mut datasets = Vec::new();
+    for ann_path in &files {
+        let ann = match groundtruth::load_annotations(ann_path) {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("skipping {}: {e}", ann_path.display());
+                continue;
+            }
         };
-        stats.expected += 1;
-        let hit = found
-            .iter()
-            .enumerate()
-            .find(|(i, (s, d))| !used[*i] && *s == sym && *d == exp.data);
-        if let Some((i, _)) = hit {
-            used[i] = true;
-            stats.correct += 1;
-        }
+        let base = ann_path.parent().unwrap_or(Path::new("."));
+        let name = match base.strip_prefix(root) {
+            Ok(rel) if !rel.as_os_str().is_empty() => rel.display().to_string(),
+            _ => root
+                .canonicalize()
+                .ok()
+                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .unwrap_or_else(|| root.display().to_string()),
+        };
+        let images = groundtruth::expected_by_file(&ann)
+            .into_iter()
+            .map(|(file, expected)| (base.join(file), expected))
+            .collect();
+        datasets.push(Dataset { name, images });
     }
-
-    for (i, (sym, data)) in found.iter().enumerate() {
-        if used[i] {
-            continue;
-        }
-        let known = expected
-            .iter()
-            .any(|e| e.symbology == Some(*sym) && e.data == *data);
-        if !known {
-            stats.false_positives += 1;
-        }
-    }
+    Ok(datasets)
 }
 
-fn percentile(sorted: &[Duration], p: f64) -> Duration {
-    if sorted.is_empty() {
-        return Duration::ZERO;
-    }
-    let idx = ((sorted.len() - 1) as f64 * p).round() as usize;
-    sorted[idx.min(sorted.len() - 1)]
+/// Decodes by content, not extension (some `.png` files in the datasets are JPEGs).
+fn load_gray(path: &Path) -> Result<image::GrayImage, String> {
+    let reader = image::ImageReader::open(path)
+        .and_then(|r| r.with_guessed_format())
+        .map_err(|e| e.to_string())?;
+    Ok(reader.decode().map_err(|e| e.to_string())?.into_luma8())
 }
 
-fn ms(d: Duration) -> f64 {
-    d.as_secs_f64() * 1000.0
+fn run_dataset(engine: &mut dyn Engine, ds: &Dataset) -> Stats {
+    let mut stats = Stats::default();
+    for (path, expected) in &ds.images {
+        stats.images += 1;
+        let gray = match load_gray(path) {
+            Ok(img) => img,
+            Err(e) => {
+                eprintln!("{}: {e}", path.display());
+                stats.errors += 1;
+                matching::score(&[], expected, &mut stats);
+                continue;
+            }
+        };
+        let start = Instant::now();
+        let result = engine.decode(&gray);
+        stats.latencies.push(start.elapsed());
+        let found = result.unwrap_or_else(|e| {
+            eprintln!("{}: {e}", path.display());
+            stats.errors += 1;
+            Vec::new()
+        });
+        matching::score(&found, expected, &mut stats);
+    }
+    stats
 }
 
 fn main() -> ExitCode {
@@ -138,70 +197,45 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-
-    let mut files = Vec::new();
-    find_annotation_files(&args.dataset, &mut files);
-    if files.is_empty() {
-        eprintln!(
-            "no annotations.json found under {} (video-based-testing CSV ground truth is not supported yet)",
-            args.dataset.display()
-        );
-        return ExitCode::FAILURE;
-    }
-
-    let mut engine = BreaderEngine::new(args.effort);
-    let mut stats = Stats::default();
-
-    for ann_path in &files {
-        let ann = match groundtruth::load_annotations(ann_path) {
-            Ok(a) => a,
-            Err(e) => {
-                eprintln!("skipping {}: {e}", ann_path.display());
-                continue;
-            }
-        };
-        let base = ann_path.parent().unwrap_or(Path::new("."));
-        for (file, expected) in &groundtruth::expected_by_file(&ann) {
-            run_image(&mut engine, &base.join(file), expected, &mut stats);
+    let mut engines = match build_engines(args.engine, args.effort) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("error: {e}\n{USAGE}");
+            return ExitCode::from(2);
         }
-    }
-
-    stats.latencies.sort();
-    let rate = if stats.expected == 0 {
-        0.0
-    } else {
-        stats.correct as f64 / stats.expected as f64
     };
-    let (p50, p95, max) = (
-        ms(percentile(&stats.latencies, 0.5)),
-        ms(percentile(&stats.latencies, 0.95)),
-        ms(stats.latencies.last().copied().unwrap_or_default()),
-    );
+    let datasets = match load_datasets(&args.dataset) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
-    println!("engine:           {}", engine.name());
-    println!("images:           {}", stats.images);
-    println!("scan errors:      {}", stats.errors);
-    println!("expected codes:   {}", stats.expected);
-    println!("unsupported:      {} (excluded)", stats.unsupported);
-    println!("decoded correctly:{:>4}", stats.correct);
-    println!("false positives:  {}", stats.false_positives);
-    println!("read rate:        {:.2}%", rate * 100.0);
-    println!("latency ms:       p50 {p50:.2}  p95 {p95:.2}  max {max:.2}");
-
-    if let Some(path) = args.json {
-        let report = json!({
+    let mut reports: Vec<Value> = Vec::new();
+    for engine in &mut engines {
+        let mut total = Stats::default();
+        let mut per_dataset: BTreeMap<String, Value> = BTreeMap::new();
+        for ds in &datasets {
+            let stats = run_dataset(engine.as_mut(), ds);
+            report::print_table(engine.name(), &ds.name, &stats);
+            per_dataset.insert(ds.name.clone(), report::stats_json(&stats));
+            total.merge(&stats);
+        }
+        if datasets.len() > 1 {
+            report::print_table(engine.name(), "ALL DATASETS", &total);
+        }
+        reports.push(json!({
             "engine": engine.name(),
             "effort": format!("{:?}", args.effort),
-            "images": stats.images,
-            "scan_errors": stats.errors,
-            "expected": stats.expected,
-            "unsupported": stats.unsupported,
-            "correct": stats.correct,
-            "false_positives": stats.false_positives,
-            "read_rate": rate,
-            "latency_ms": { "p50": p50, "p95": p95, "max": max },
-        });
-        let text = serde_json::to_string_pretty(&report).unwrap_or_default();
+            "datasets": per_dataset,
+            "total": report::stats_json(&total),
+        }));
+    }
+
+    if let Some(path) = args.json {
+        let doc = json!({ "dataset_root": args.dataset.display().to_string(), "engines": reports });
+        let text = serde_json::to_string_pretty(&doc).unwrap_or_default();
         if let Err(e) = std::fs::write(&path, text) {
             eprintln!("cannot write {}: {e}", path.display());
             return ExitCode::FAILURE;
