@@ -1,0 +1,19 @@
+[package]
+name = "breader-py"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+
+[lib]
+name = "breader"
+crate-type = ["cdylib"]
+
+[dependencies]
+breader = { path = "../breader", features = ["image"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[workspace]

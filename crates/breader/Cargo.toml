@@ -1,0 +1,24 @@
+[package]
+name = "breader"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["qr", "linear"]
+qr = ["dep:breader-qr"]
+linear = ["dep:breader-linear"]
+image = ["dep:image"]
+rayon = []
+
+[dependencies]
+breader-core.workspace = true
+breader-imgproc.workspace = true
+breader-content.workspace = true
+breader-qr = { workspace = true, optional = true }
+breader-linear = { workspace = true, optional = true }
+image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg"] }
+
+[lints]
+workspace = true
