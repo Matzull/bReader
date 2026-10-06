@@ -50,7 +50,8 @@ def map_symbology(name):
 
 def canonical(sym, data):
     try:
-        data = data.decode("utf-8").strip().encode("utf-8")
+        text = data.decode("utf-8").strip().replace("{GS}", "\x1d")
+        data = text.removeprefix("\x1d").encode("utf-8")
     except UnicodeDecodeError:
         data = data.strip()
     if sym == "UPC-A" and len(data) == 12 and data.isdigit():

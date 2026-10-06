@@ -1,9 +1,9 @@
 //! EAN-13, EAN-8, UPC-A (as EAN-13 with a leading zero), UPC-E and the
 //! EAN-2 / EAN-5 supplements, following ISO/IEC 15420.
 
-use breader_core::{EanAddonPolicy, ScanOptions, Symbology};
+use breader_core::{EanAddonPolicy, Symbology};
 
-use crate::decoder::{LineHit, LinearDecoder};
+use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::runs::Runs;
 
 /// L-code of each digit, 1 = bar. G-code is its complement read backwards,
@@ -414,7 +414,7 @@ fn parity_mask(m: &[DigitMatch]) -> u8 {
 }
 
 /// GS1 mod-10: the last digit is the check digit.
-fn check_digit_ok(digits: &[u8]) -> bool {
+pub(crate) fn check_digit_ok(digits: &[u8]) -> bool {
     let Some((&check, body)) = digits.split_last() else {
         return false;
     };
@@ -467,7 +467,7 @@ impl EanDecoder {
         read: &Read,
         symbology: Symbology,
         text: Vec<u8>,
-        opts: &ScanOptions,
+        opts: &LineOptions,
     ) -> LineHit {
         let addon = if opts.ean_addon == EanAddonPolicy::Ignore {
             None
@@ -482,10 +482,17 @@ impl EanDecoder {
             end: runs.end(j + layout.total - 1),
             module: read.cal.module,
             quality: (read.margin_sum / read.digits as f32 / 2.0).clamp(0.0, 1.0),
+            aim: if symbology == Symbology::Ean8 {
+                *b"]E4"
+            } else {
+                *b"]E0"
+            },
+            checksum_verified: true,
+            inverted: false,
         }
     }
 
-    fn ean13(runs: &Runs, j: usize, opts: &ScanOptions) -> Option<LineHit> {
+    fn ean13(runs: &Runs, j: usize, opts: &LineOptions) -> Option<LineHit> {
         let upca = opts.symbologies.contains(Symbology::UpcA);
         let ean13 = opts.symbologies.contains(Symbology::Ean13);
         if !upca && !ean13 {
@@ -514,7 +521,7 @@ impl EanDecoder {
         Some(Self::hit(runs, j, &EAN13, &read, symbology, text, opts))
     }
 
-    fn ean8(runs: &Runs, j: usize, opts: &ScanOptions) -> Option<LineHit> {
+    fn ean8(runs: &Runs, j: usize, opts: &LineOptions) -> Option<LineHit> {
         if !opts.symbologies.contains(Symbology::Ean8) {
             return None;
         }
@@ -541,7 +548,7 @@ impl EanDecoder {
         ))
     }
 
-    fn upce(runs: &Runs, j: usize, opts: &ScanOptions) -> Option<LineHit> {
+    fn upce(runs: &Runs, j: usize, opts: &LineOptions) -> Option<LineHit> {
         if !opts.symbologies.contains(Symbology::UpcE) {
             return None;
         }
@@ -582,7 +589,7 @@ impl EanDecoder {
 }
 
 impl LinearDecoder for EanDecoder {
-    fn decode(&self, runs: &Runs, opts: &ScanOptions, out: &mut Vec<LineHit>) {
+    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) {
         let set = opts.symbologies;
         let want13 = set.contains(Symbology::Ean13) || set.contains(Symbology::UpcA);
         let want8 = set.contains(Symbology::Ean8);
@@ -675,7 +682,7 @@ mod tests {
     use super::*;
     use crate::edges::{EdgeDetector, EdgeParams, Edges};
     use crate::testutil::*;
-    use breader_core::SymbologySet;
+    use breader_core::{ScanOptions, SymbologySet};
 
     fn runs_of(profile: &[u8]) -> Runs {
         runs_with(profile, &EdgeParams::fine())
@@ -690,7 +697,7 @@ mod tests {
     }
 
     /// Decodes in both reading directions, as the reader does.
-    fn decode_with(profile: &[u8], opts: &ScanOptions) -> Vec<LineHit> {
+    fn decode_with(profile: &[u8], opts: &LineOptions) -> Vec<LineHit> {
         let runs = runs_of(profile);
         let mut rev = Runs::default();
         Runs::reverse_from(&runs, &mut rev);
@@ -700,11 +707,11 @@ mod tests {
         out
     }
 
-    fn opts() -> ScanOptions {
-        ScanOptions {
+    fn opts() -> LineOptions {
+        LineOptions::from(&ScanOptions {
             ean_addon: EanAddonPolicy::Optional,
             ..ScanOptions::default()
-        }
+        })
     }
 
     fn decode(profile: &[u8]) -> Vec<LineHit> {

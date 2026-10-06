@@ -88,7 +88,7 @@ impl<'a> FrameContext<'a> {
         }
     }
 
-    pub fn options(&self) -> &ScanOptions {
+    pub fn options(&self) -> &'a ScanOptions {
         self.options
     }
 

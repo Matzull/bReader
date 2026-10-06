@@ -51,6 +51,11 @@ pub trait SymbologyReader: Send + Sync {
     fn uses_binary(&self) -> bool {
         true
     }
+    /// Readers that decode both polarities themselves return `true`; the
+    /// pipeline then never calls them on inverted passes.
+    fn handles_inversion(&self) -> bool {
+        false
+    }
     /// Called once per pass. Must only push symbols that passed validation.
     fn scan(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>);
 }

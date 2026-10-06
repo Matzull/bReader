@@ -35,6 +35,7 @@ impl Scanline {
         Point::new(self.from.x + dx * t, self.from.y + dy * t)
     }
 
+    #[cfg(test)]
     pub fn is_axis_aligned(&self) -> bool {
         self.from.y == self.to.y || self.from.x == self.to.x
     }

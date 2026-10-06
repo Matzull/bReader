@@ -45,7 +45,14 @@ impl Runs {
         out.trail = src.lead;
     }
 
+    /// Swaps the roles of bars and spaces: the same edges, read as a symbol
+    /// of light bars on a dark background.
+    pub fn flip_roles(&mut self) {
+        self.first_is_bar = !self.first_is_bar;
+    }
+
     /// Builds runs from explicit widths; used by tests and synthetic inputs.
+    #[cfg(test)]
     pub fn from_widths(first_is_bar: bool, widths: &[f32], lead: f32, trail: f32) -> Self {
         let mut edges = Vec::with_capacity(widths.len() + 1);
         let mut x = lead;
@@ -172,6 +179,21 @@ mod tests {
         assert!(rev.start(0) > rev.end(0));
         assert_eq!(rev.start(0), src.end(3));
         assert_eq!(rev.end(3), src.start(0));
+    }
+
+    #[test]
+    fn flipped_roles_swap_bars_and_quiet_zones() {
+        let mut r = Runs::from_widths(true, &[2.0, 3.0, 4.0], 7.0, 11.0);
+        r.flip_roles();
+        assert!(!r.is_bar(0) && r.is_bar(1) && !r.is_bar(2));
+        assert_eq!(r.space_before(0), 0.0);
+        assert_eq!(r.space_before(1), 2.0);
+        assert_eq!(r.space_after(1), 4.0);
+        let mut rev = Runs::default();
+        Runs::reverse_from(&r, &mut rev);
+        assert!(!rev.is_bar(0) && rev.is_bar(1));
+        r.flip_roles();
+        assert!(r.is_bar(0));
     }
 
     #[test]

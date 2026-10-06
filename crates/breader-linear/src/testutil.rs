@@ -343,3 +343,177 @@ pub fn invert_image(img: &mut ImageBuffer) {
         *v = 255 - *v;
     }
 }
+
+/// Modules (true = bar) of a run-length string such as "211412": digits are
+/// widths, starting with a bar.
+pub fn runs_to_modules(widths: &[usize]) -> Vec<bool> {
+    let mut m = Vec::new();
+    for (i, &w) in widths.iter().enumerate() {
+        m.extend(std::iter::repeat_n(i % 2 == 0, w));
+    }
+    m
+}
+
+fn digit_widths(s: &str) -> Vec<usize> {
+    s.bytes().map(|b| usize::from(b - b'0')).collect()
+}
+
+/// Code 128 symbol for `values` (start code first) with the mod-103 check
+/// appended, stop and termination bar included.
+pub fn code128_modules(values: &[u8]) -> Vec<bool> {
+    let mut all = values.to_vec();
+    all.push(code128_check(values));
+    code128_modules_raw(&all)
+}
+
+pub fn code128_check(values: &[u8]) -> u8 {
+    let sum: u32 = values
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| u32::from(v) * (i.max(1) as u32))
+        .sum();
+    (sum % 103) as u8
+}
+
+/// Like [`code128_modules`] but `values` already contains the check character.
+pub fn code128_modules_raw(values: &[u8]) -> Vec<bool> {
+    let mut widths = Vec::new();
+    for &v in values {
+        widths.extend(digit_widths(crate::code128::PATTERNS[usize::from(v)]));
+    }
+    widths.extend(digit_widths(crate::code128::PATTERNS[106]));
+    widths.push(2);
+    runs_to_modules(&widths)
+}
+
+/// Code 128 character value of an ASCII character in set B.
+pub fn b(c: char) -> u8 {
+    c as u8 - 32
+}
+
+/// Narrow/wide strings of Code 39, bar first, transcribed from the symbology
+/// specification (independent of the table the decoder builds).
+pub const CODE39_TABLE: [(char, &str); 44] = [
+    ('0', "nnnwwnwnn"),
+    ('1', "wnnwnnnnw"),
+    ('2', "nnwwnnnnw"),
+    ('3', "wnwwnnnnn"),
+    ('4', "nnnwwnnnw"),
+    ('5', "wnnwwnnnn"),
+    ('6', "nnwwwnnnn"),
+    ('7', "nnnwnnwnw"),
+    ('8', "wnnwnnwnn"),
+    ('9', "nnwwnnwnn"),
+    ('A', "wnnnnwnnw"),
+    ('B', "nnwnnwnnw"),
+    ('C', "wnwnnwnnn"),
+    ('D', "nnnnwwnnw"),
+    ('E', "wnnnwwnnn"),
+    ('F', "nnwnwwnnn"),
+    ('G', "nnnnnwwnw"),
+    ('H', "wnnnnwwnn"),
+    ('I', "nnwnnwwnn"),
+    ('J', "nnnnwwwnn"),
+    ('K', "wnnnnnnww"),
+    ('L', "nnwnnnnww"),
+    ('M', "wnwnnnnwn"),
+    ('N', "nnnnwnnww"),
+    ('O', "wnnnwnnwn"),
+    ('P', "nnwnwnnwn"),
+    ('Q', "nnnnnnwww"),
+    ('R', "wnnnnnwwn"),
+    ('S', "nnwnnnwwn"),
+    ('T', "nnnnwnwwn"),
+    ('U', "wwnnnnnnw"),
+    ('V', "nwwnnnnnw"),
+    ('W', "wwwnnnnnn"),
+    ('X', "nwnnwnnnw"),
+    ('Y', "wwnnwnnnn"),
+    ('Z', "nwwnwnnnn"),
+    ('-', "nwnnnnwnw"),
+    ('.', "wwnnnnwnn"),
+    (' ', "nwwnnnwnn"),
+    ('*', "nwnnwnwnn"),
+    ('$', "nwnwnwnnn"),
+    ('/', "nwnwnnnwn"),
+    ('+', "nwnnnwnwn"),
+    ('%', "nnnwnwnwn"),
+];
+
+/// Code 39 symbol of `body` between start and stop characters. Wide elements
+/// are `wide` modules, narrow ones one module, characters are `gap` apart.
+pub fn code39_modules(body: &str, wide: usize, gap: usize) -> Vec<bool> {
+    let mut widths = Vec::new();
+    let text = format!("*{body}*");
+    for (i, ch) in text.chars().enumerate() {
+        if i > 0 {
+            widths.push(gap);
+        }
+        let (_, p) = CODE39_TABLE.iter().find(|(c, _)| *c == ch).unwrap();
+        widths.extend(p.bytes().map(|b| if b == b'w' { wide } else { 1 }));
+    }
+    runs_to_modules(&widths)
+}
+
+const ITF_DIGITS: [&str; 10] = [
+    "nnwwn", "wnnnw", "nwnnw", "wwnnn", "nnwnw", "wnwnn", "nwwnn", "nnnww", "wnnwn", "nwnwn",
+];
+
+/// Interleaved 2 of 5 symbol with start and stop; wide elements are `wide`
+/// modules.
+pub fn itf_modules(digits: &str, wide: usize) -> Vec<bool> {
+    assert!(digits.len().is_multiple_of(2));
+    let w = |c: u8| if c == b'w' { wide } else { 1 };
+    let mut widths = vec![1, 1, 1, 1];
+    let d = digits.as_bytes();
+    for pair in d.chunks(2) {
+        let a = ITF_DIGITS[usize::from(pair[0] - b'0')].as_bytes();
+        let s = ITF_DIGITS[usize::from(pair[1] - b'0')].as_bytes();
+        for i in 0..5 {
+            widths.push(w(a[i]));
+            widths.push(w(s[i]));
+        }
+    }
+    widths.extend([wide, 1, 1]);
+    runs_to_modules(&widths)
+}
+
+/// ITF-14 payload: 13 digits plus the GS1 check digit.
+pub fn with_gs1_check(body: &str) -> String {
+    format!("{body}{}", check_digit(body))
+}
+
+/// Edge detection and decoding as the reader does it: both reading
+/// directions, both polarities. Hits of light-on-dark have `inverted` set.
+pub fn decode_all<D: crate::decoder::LinearDecoder>(
+    decoder: &D,
+    profile: &[u8],
+    opts: &crate::decoder::LineOptions,
+) -> Vec<crate::decoder::LineHit> {
+    use crate::edges::{EdgeDetector, EdgeParams, Edges};
+    use crate::runs::Runs;
+    let mut edges = Edges::default();
+    EdgeDetector::default().detect(profile, &EdgeParams::fine(), &mut edges);
+    let mut runs = Runs::default();
+    Runs::from_edges(&edges, &mut runs);
+    let mut rev = Runs::default();
+    Runs::reverse_from(&runs, &mut rev);
+    let mut out = Vec::new();
+    decoder.decode(&runs, opts, &mut out);
+    decoder.decode(&rev, opts, &mut out);
+    let dark = out.len();
+    runs.flip_roles();
+    rev.flip_roles();
+    decoder.decode(&runs, opts, &mut out);
+    decoder.decode(&rev, opts, &mut out);
+    for h in &mut out[dark..] {
+        h.inverted = true;
+    }
+    out
+}
+
+pub fn line_options(f: impl FnOnce(&mut breader_core::ScanOptions)) -> crate::decoder::LineOptions {
+    let mut o = breader_core::ScanOptions::default();
+    f(&mut o);
+    crate::decoder::LineOptions::from(&o)
+}

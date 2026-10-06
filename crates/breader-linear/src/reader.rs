@@ -1,20 +1,22 @@
 use breader_core::{
-    Effort, FrameContext, ImageView, Point, ScanOptions, Symbol, Symbology, SymbologyReader,
-    SymbologySet,
+    Effort, FrameContext, ImageView, Point, Symbol, Symbology, SymbologyReader, SymbologySet,
 };
 
 use crate::aggregate::{Aggregator, PlacedHit, Settings};
-use crate::decoder::{LineHit, LinearDecoder};
+use crate::code39::Code39Decoder;
+use crate::code128::Code128Decoder;
+use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::ean::EanDecoder;
 use crate::edges::{EdgeDetector, EdgeParams, Edges};
+use crate::itf::ItfDecoder;
 use crate::plan::{ScanPlan, Scanline, clip_line};
 use crate::profile;
 use crate::runs::Runs;
 
 /// Decoders tried on every scanline, composed statically.
-type Decoders = (EanDecoder,);
+type Decoders = (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
 
-const DECODERS: Decoders = (EanDecoder,);
+const DECODERS: Decoders = (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
 
 /// Decode state shared by all scanlines of one `scan` call.
 #[derive(Debug, Default)]
@@ -58,10 +60,9 @@ const REFINE_MAX_SEEDS: usize = 48;
 /// Quiet zone, in modules, kept on each side of a refinement line.
 const REFINE_MARGIN: f32 = 14.0;
 
-/// Dimensions and polarity of the pass image.
+/// Dimensions of the pass image.
 #[derive(Debug, Clone, Copy)]
 struct PassImage {
-    inverted: bool,
     width: usize,
     height: usize,
 }
@@ -71,7 +72,7 @@ fn scan_profile<D: LinearDecoder>(
     profile: &[u8],
     line: &Scanline,
     index: u32,
-    opts: &ScanOptions,
+    opts: &LineOptions,
     stage: &mut Stage,
 ) {
     for params in &stage.edge_params {
@@ -82,8 +83,20 @@ fn scan_profile<D: LinearDecoder>(
         }
         Runs::reverse_from(&stage.runs, &mut stage.reversed);
         stage.hits.clear();
-        decoders.decode(&stage.runs, opts, &mut stage.hits);
-        decoders.decode(&stage.reversed, opts, &mut stage.hits);
+        if opts.normal {
+            decoders.decode(&stage.runs, opts, &mut stage.hits);
+            decoders.decode(&stage.reversed, opts, &mut stage.hits);
+        }
+        if opts.invert {
+            let dark_symbols = stage.hits.len();
+            stage.runs.flip_roles();
+            stage.reversed.flip_roles();
+            decoders.decode(&stage.runs, opts, &mut stage.hits);
+            decoders.decode(&stage.reversed, opts, &mut stage.hits);
+            for hit in &mut stage.hits[dark_symbols..] {
+                hit.inverted = true;
+            }
+        }
         for hit in stage.hits.drain(..) {
             stage.aggregator.push(PlacedHit {
                 symbology: hit.symbology,
@@ -94,6 +107,9 @@ fn scan_profile<D: LinearDecoder>(
                 line: index,
                 module: hit.module,
                 quality: hit.quality,
+                aim: hit.aim,
+                checksum_verified: hit.checksum_verified,
+                inverted: hit.inverted,
             });
         }
     }
@@ -106,7 +122,7 @@ fn refine<D: LinearDecoder>(
     img: &ImageView<'_>,
     seed: &PlacedHit,
     pass: PassImage,
-    opts: &ScanOptions,
+    opts: &LineOptions,
     work: &mut Work,
     next_index: &mut u32,
 ) {
@@ -119,6 +135,11 @@ fn refine<D: LinearDecoder>(
         (seed.to.y - seed.from.y) / len,
     );
     let (nx, ny) = (-uy, ux);
+    let opts = &LineOptions {
+        normal: !seed.inverted,
+        invert: seed.inverted,
+        ..*opts
+    };
     let step = seed.module.round().clamp(2.0, 6.0);
     let pad = REFINE_MARGIN * seed.module;
     let axis_aligned = uy.abs() < 1e-4 || ux.abs() < 1e-4;
@@ -134,7 +155,7 @@ fn refine<D: LinearDecoder>(
             let Some(line) = clip_line(a, b, pass.width, pass.height, axis_aligned) else {
                 break;
             };
-            profile::sample(img, &line, pass.inverted, &mut work.profile);
+            profile::sample(img, &line, false, &mut work.profile);
             let before = work.stage.aggregator.len();
             scan_profile(
                 decoders,
@@ -161,9 +182,11 @@ fn refine<D: LinearDecoder>(
 /// binarized image.
 ///
 /// One `scan` call covers one pass: the scan plan gives the lines, each line
-/// is sampled (negated in inverted passes) and decoded in both reading
-/// directions, lone hits are confirmed with extra parallel lines, and the
-/// aggregator turns agreeing hits into symbols.
+/// is sampled once and decoded in both reading directions and both polarities
+/// from the same edges (light bars on dark are the same runs with the roles
+/// of bars and spaces swapped), lone hits are confirmed with extra parallel
+/// lines, and the aggregator turns agreeing hits into symbols. The reader
+/// handles inversion itself, so the pipeline never calls it on inverted passes.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LinearReader;
 
@@ -190,24 +213,29 @@ impl SymbologyReader for LinearReader {
         false
     }
 
+    fn handles_inversion(&self) -> bool {
+        true
+    }
+
     fn scan(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
-        let opts = ctx.options().clone();
-        if !opts.symbologies.intersects(self.symbologies()) {
+        if ctx.pass().inverted || !ctx.options().symbologies.intersects(self.symbologies()) {
             return;
         }
-        let inverted = ctx.pass().inverted;
+        let opts = LineOptions::from(ctx.options());
+        let effort = ctx.options().effort;
+        let min_line_agreement = ctx.options().min_line_agreement;
+        let addon = ctx.options().ean_addon;
         let scale = ctx.scale();
         let img = ctx.image();
-        let plan = ScanPlan::new(img.width(), img.height(), opts.effort);
+        let plan = ScanPlan::new(img.width(), img.height(), effort);
         let pass = PassImage {
-            inverted,
             width: img.width(),
             height: img.height(),
         };
         let mut work = Work::default();
         work.stage
             .edge_params
-            .extend_from_slice(edge_variants(opts.effort));
+            .extend_from_slice(edge_variants(effort));
         plan.lines(&mut work.lines);
 
         let columns: Vec<usize> = work
@@ -216,7 +244,7 @@ impl SymbologyReader for LinearReader {
             .filter(|l| l.from.x == l.to.x)
             .map(|l| l.from.x as usize)
             .collect();
-        profile::sample_columns(&img, &columns, inverted, &mut work.columns);
+        profile::sample_columns(&img, &columns, false, &mut work.columns);
 
         let lines = std::mem::take(&mut work.lines);
         let mut column = 0;
@@ -227,7 +255,7 @@ impl SymbologyReader for LinearReader {
                 column += 1;
                 scan_profile(&DECODERS, profile, line, i as u32, &opts, &mut work.stage);
             } else {
-                profile::sample(&img, line, inverted, &mut work.profile);
+                profile::sample(&img, line, false, &mut work.profile);
                 scan_profile(
                     &DECODERS,
                     &work.profile,
@@ -240,29 +268,27 @@ impl SymbologyReader for LinearReader {
         }
         let plan_lines = lines.len() as u32;
         let settings = Settings {
-            min_agreement: opts.min_line_agreement,
+            min_agreement: min_line_agreement,
             plan_lines,
-            addon: opts.ean_addon,
+            addon,
             across_pad: plan.spacing(0.0).min(plan.spacing(90.0)) / 2.0,
             scale,
         };
         let mut next_index = plan_lines;
-        if opts.min_line_agreement > 1 {
-            let mut seeds = std::mem::take(&mut work.seeds);
-            work.stage.aggregator.seeds(&settings, &mut seeds);
-            for seed in seeds.iter().take(REFINE_MAX_SEEDS) {
-                refine(
-                    &DECODERS,
-                    &img,
-                    seed,
-                    pass,
-                    &opts,
-                    &mut work,
-                    &mut next_index,
-                );
-            }
-            work.seeds = seeds;
+        let mut seeds = std::mem::take(&mut work.seeds);
+        work.stage.aggregator.seeds(&settings, &mut seeds);
+        for seed in seeds.iter().take(REFINE_MAX_SEEDS) {
+            refine(
+                &DECODERS,
+                &img,
+                seed,
+                pass,
+                &opts,
+                &mut work,
+                &mut next_index,
+            );
         }
+        work.seeds = seeds;
         work.stage.aggregator.finish(&settings, out);
     }
 }
@@ -273,7 +299,7 @@ mod tests {
     use crate::testutil::*;
     use breader_core::{
         Binarizer, EanAddonPolicy, FrameContext, ImageBuffer, ImageView, LinearMeta, Pass,
-        Preprocessor, Scratch, SymbolMeta, SymbologySet,
+        Preprocessor, ScanOptions, Scratch, SymbolMeta, SymbologySet,
     };
 
     const TEXT: &str = "5901234123457";
@@ -404,23 +430,58 @@ mod tests {
     }
 
     #[test]
-    fn inverted_symbols_are_read_only_in_the_inverted_pass() {
+    fn inverted_symbols_are_read_in_every_effort_without_an_inverted_pass() {
         let mut img = picture(&ean13_modules(TEXT), 15.0);
         invert_image(&mut img);
-        let opts = ScanOptions::default();
-        let mut pass = Pass {
+        for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+            let found = scan(&img, &ScanOptions::with_effort(effort));
+            assert_eq!(found.len(), 1, "{effort:?}");
+            assert_eq!(found[0].data, TEXT.as_bytes());
+            assert!(found[0].quad.contains(Point::new(350.0, 260.0)));
+        }
+        let off = ScanOptions {
+            try_invert: Some(false),
+            ..ScanOptions::default()
+        };
+        assert!(scan(&img, &off).is_empty());
+        let normal = picture(&ean13_modules(TEXT), 15.0);
+        assert_eq!(scan(&normal, &off).len(), 1);
+    }
+
+    #[test]
+    fn inverted_passes_are_left_to_the_reader() {
+        assert!(LinearReader.handles_inversion());
+        let img = picture(&ean13_modules(TEXT), 0.0);
+        let pass = Pass {
             preprocessor: None,
             binarizer: 0,
-            inverted: false,
+            inverted: true,
         };
-        assert!(scan_pass(&img, &opts, pass, &[]).is_empty());
-        pass.inverted = true;
-        let found = scan_pass(&img, &opts, pass, &[]);
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].data, TEXT.as_bytes());
+        assert!(scan_pass(&img, &ScanOptions::default(), pass, &[]).is_empty());
+    }
 
-        let normal = picture(&ean13_modules(TEXT), 15.0);
-        assert!(scan_pass(&normal, &opts, pass, &[]).is_empty());
+    #[test]
+    fn dark_and_light_symbols_in_one_image_are_both_read() {
+        let mut img = blank(1000, 400, 225);
+        for (cx, text) in [(250.0, "5901234123457"), (750.0, "4006381333931")] {
+            let p = Placement {
+                module_px: 2.6,
+                height_px: 100.0,
+                center: (cx, 200.0),
+                angle_deg: 0.0,
+            };
+            draw_symbol(&mut img, &ean13_modules(text), p, 30);
+        }
+        for y in 0..400 {
+            img.row_mut(y)[500..].iter_mut().for_each(|v| *v = 255 - *v);
+        }
+        let found = scan(&img, &ScanOptions::default());
+        let mut texts: Vec<_> = found.iter().map(|s| s.data.clone()).collect();
+        texts.sort();
+        assert_eq!(
+            texts,
+            [b"4006381333931".to_vec(), b"5901234123457".to_vec()]
+        );
     }
 
     #[test]
@@ -549,6 +610,187 @@ mod tests {
             draw_symbol(&mut img, &ean13_modules(TEXT), p, 30);
         }
         assert_eq!(scan(&img, &ScanOptions::default()).len(), 2);
+    }
+
+    fn wide_picture(modules: &[bool], module_px: f32, angle_deg: f32) -> ImageBuffer {
+        let mut img = blank(900, 600, 230);
+        let p = Placement {
+            module_px,
+            height_px: 120.0,
+            center: (450.0, 300.0),
+            angle_deg,
+        };
+        draw_symbol(&mut img, modules, p, 30);
+        img
+    }
+
+    fn code128_picture(values: &[u8], angle_deg: f32) -> ImageBuffer {
+        wide_picture(&code128_modules(values), 2.6, angle_deg)
+    }
+
+    #[test]
+    fn code128_reads_in_every_orientation_effort_and_polarity() {
+        let mut values = vec![104];
+        values.extend("Breader-128".chars().map(b));
+        for angle in [0.0, 90.0, 180.0, 270.0, 17.0, 133.0, 241.0] {
+            for invert in [false, true] {
+                let mut img = code128_picture(&values, angle);
+                if invert {
+                    invert_image(&mut img);
+                }
+                for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+                    if effort == Effort::Fast && angle % 90.0 != 0.0 {
+                        continue; // Fast scans only horizontal and vertical lines
+                    }
+                    let found = scan(&img, &ScanOptions::with_effort(effort));
+                    assert_eq!(found.len(), 1, "angle {angle} invert {invert} {effort:?}");
+                    let s = &found[0];
+                    assert_eq!(s.symbology, Symbology::Code128);
+                    assert_eq!(s.data, b"Breader-128");
+                    assert_eq!(s.text.as_deref(), Some("Breader-128"));
+                    assert_eq!(&s.aim_id, b"]C0");
+                    assert!(linear_meta(s).checksum_verified);
+                    assert!(s.quad.contains(Point::new(450.0, 300.0)));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn gs1_128_and_extended_latin1() {
+        let gs1 = [
+            105,
+            102,
+            1,
+            12,
+            34,
+            56,
+            78,
+            90,
+            12,
+            31,
+            100,
+            102,
+            b('1'),
+            b('2'),
+        ];
+        let found = scan(&code128_picture(&gs1, 0.0), &ScanOptions::default());
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].data, b"0112345678901231\x1d12");
+        assert_eq!(&found[0].aim_id, b"]C1");
+
+        let latin = [104, b('c'), b('a'), b('f'), 100, b('i')];
+        let found = scan(&code128_picture(&latin, 0.0), &ScanOptions::default());
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].data, [b'c', b'a', b'f', 0xe9]);
+        assert_eq!(found[0].text.as_deref(), Some("caf\u{e9}"));
+    }
+
+    #[test]
+    fn code39_reads_with_options() {
+        let img = wide_picture(&code39_modules("LABEL-39", 3, 1), 2.4, 12.0);
+        let found = scan(&img, &ScanOptions::default());
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].symbology, Symbology::Code39);
+        assert_eq!(found[0].data, b"LABEL-39");
+        assert_eq!(&found[0].aim_id, b"]A0");
+        let mut inverted = img.clone();
+        invert_image(&mut inverted);
+        assert_eq!(
+            scan(&inverted, &ScanOptions::with_effort(Effort::Fast)).len(),
+            1
+        );
+
+        let full = ScanOptions {
+            code39: breader_core::Code39Options {
+                full_ascii: true,
+                ..Default::default()
+            },
+            ..ScanOptions::default()
+        };
+        let img = wide_picture(&code39_modules("+A+B+C", 3, 1), 2.4, 0.0);
+        let found = scan(&img, &full);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].data, b"abc");
+        assert_eq!(&found[0].aim_id, b"]A4");
+        assert_eq!(scan(&img, &ScanOptions::default())[0].data, b"+A+B+C");
+    }
+
+    #[test]
+    fn itf14_needs_its_length_and_check_digit() {
+        let text = with_gs1_check("0614141999996");
+        let img = wide_picture(&itf_modules(&text, 3), 2.6, 7.0);
+        let found = scan(&img, &ScanOptions::default());
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].symbology, Symbology::Itf);
+        assert_eq!(found[0].data, text.as_bytes());
+        assert_eq!(&found[0].aim_id, b"]I1");
+        assert!(linear_meta(&found[0]).lines_agreeing >= 3);
+
+        let only12 = ScanOptions {
+            itf: breader_core::ItfOptions {
+                allowed_lengths: vec![12],
+                min_length: 6,
+            },
+            ..ScanOptions::default()
+        };
+        assert!(scan(&img, &only12).is_empty(), "no partial reads");
+        let any = ScanOptions {
+            itf: breader_core::ItfOptions {
+                allowed_lengths: vec![],
+                min_length: 6,
+            },
+            ..ScanOptions::default()
+        };
+        let found = scan(&img, &any);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].data.len(), 14);
+
+        let bad = format!("{}{}", &text[..13], (text.as_bytes()[13] - b'0' + 1) % 10);
+        let img = wide_picture(&itf_modules(&bad, 3), 2.6, 7.0);
+        assert!(scan(&img, &any).is_empty());
+    }
+
+    #[test]
+    fn mixed_symbologies_in_one_image() {
+        let mut img = blank(1000, 760, 228);
+        let place = |cx, cy, angle_deg| Placement {
+            module_px: 2.6,
+            height_px: 100.0,
+            center: (cx, cy),
+            angle_deg,
+        };
+        let c128 = code128_modules(&[104, b('M'), b('i'), b('x'), b('1')]);
+        let itf = itf_modules(&with_gs1_check("1234567890123"), 3);
+        draw_symbol(&mut img, &ean13_modules(TEXT), place(260.0, 150.0, 0.0), 30);
+        draw_symbol(&mut img, &c128, place(740.0, 150.0, 0.0), 30);
+        draw_symbol(
+            &mut img,
+            &code39_modules("MIXED", 3, 1),
+            place(260.0, 420.0, 0.0),
+            30,
+        );
+        draw_symbol(&mut img, &itf, place(740.0, 420.0, 0.0), 30);
+        let mut names: Vec<String> = scan(&img, &ScanOptions::default())
+            .iter()
+            .map(|s| {
+                format!(
+                    "{}:{}",
+                    s.symbology.name(),
+                    String::from_utf8_lossy(&s.data)
+                )
+            })
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "Code 128:Mix1",
+                "Code 39:MIXED",
+                "EAN-13:5901234123457",
+                "ITF:12345678901231"
+            ]
+        );
     }
 
     #[test]

@@ -3,9 +3,13 @@
 #![forbid(unsafe_code)]
 
 mod aggregate;
+mod code128;
+mod code39;
+mod common;
 mod decoder;
 mod ean;
 mod edges;
+mod itf;
 mod plan;
 mod profile;
 mod reader;
@@ -15,13 +19,7 @@ mod runs;
 #[cfg(test)]
 mod testutil;
 
-pub use aggregate::{Aggregator, PlacedHit, Settings};
-pub use decoder::{LineHit, LinearDecoder};
-pub use ean::EanDecoder;
-pub use edges::{Edge, EdgeDetector, EdgeParams, Edges};
-pub use plan::{ScanPlan, Scanline};
 pub use reader::LinearReader;
-pub use runs::Runs;
 
 #[cfg(test)]
 mod tests {

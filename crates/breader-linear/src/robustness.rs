@@ -5,9 +5,12 @@ use breader_core::{
     SymbologyReader,
 };
 
-use crate::decoder::LinearDecoder;
+use crate::code39::Code39Decoder;
+use crate::code128::Code128Decoder;
+use crate::decoder::{LineOptions, LinearDecoder};
 use crate::ean::EanDecoder;
 use crate::edges::{EdgeDetector, EdgeParams, Edges};
+use crate::itf::ItfDecoder;
 use crate::reader::LinearReader;
 use crate::runs::Runs;
 use crate::testutil::Rng;
@@ -21,19 +24,34 @@ fn all_params() -> [EdgeParams; 4] {
     ]
 }
 
-fn options() -> ScanOptions {
-    ScanOptions {
+const ALL: (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder) =
+    (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
+
+/// The most permissive configuration: every length of ITF, Code 39 without a
+/// minimum length, and optional add-ons.
+fn options() -> LineOptions {
+    let mut o = ScanOptions {
         ean_addon: breader_core::EanAddonPolicy::Optional,
         ..ScanOptions::default()
-    }
+    };
+    o.itf.allowed_lengths.clear();
+    o.itf.min_length = 2;
+    o.code39.min_length = 1;
+    LineOptions::from(&o)
 }
 
-fn decode_everything(runs: &Runs, opts: &ScanOptions) -> usize {
+fn decode_everything(runs: &Runs, opts: &LineOptions) -> usize {
     let mut rev = Runs::default();
     Runs::reverse_from(runs, &mut rev);
     let mut out = Vec::new();
-    EanDecoder.decode(runs, opts, &mut out);
-    EanDecoder.decode(&rev, opts, &mut out);
+    ALL.decode(runs, opts, &mut out);
+    ALL.decode(&rev, opts, &mut out);
+    // Light bars on a dark background: same runs, roles swapped.
+    let (mut a, mut b) = (runs.clone(), rev);
+    a.flip_roles();
+    b.flip_roles();
+    ALL.decode(&a, opts, &mut out);
+    ALL.decode(&b, opts, &mut out);
     out.len()
 }
 
@@ -187,6 +205,82 @@ fn random_digit(rng: &mut Rng, m: f32) -> [f32; 4] {
             ];
         }
     }
+}
+
+fn run_decode<D: LinearDecoder>(
+    d: &D,
+    runs: &Runs,
+    opts: &LineOptions,
+) -> Vec<crate::decoder::LineHit> {
+    let mut out = Vec::new();
+    d.decode(runs, opts, &mut out);
+    out
+}
+
+fn to_runs(modules: &[bool], px: f32) -> Runs {
+    let mut widths = Vec::new();
+    let mut i = 0;
+    while i < modules.len() {
+        let start = i;
+        while i < modules.len() && modules[i] == modules[start] {
+            i += 1;
+        }
+        widths.push((i - start) as f32 * px);
+    }
+    Runs::from_widths(modules[0], &widths, 20.0 * px, 20.0 * px)
+}
+
+/// Valid structure, random content: whatever is accepted must be exactly what
+/// was drawn, and random Code 128 characters rarely pass the checksum.
+#[test]
+fn structured_random_symbols_never_decode_to_something_else() {
+    use crate::testutil::{code39_modules, code128_modules_raw, itf_modules};
+    let mut rng = Rng(0xfeed_f00d);
+    let opts = options();
+    let (mut c128_hits, mut c39_hits, mut itf_hits) = (0, 0, 0);
+    for _ in 0..3000 {
+        let px = 1.5 + rng.unit() * 3.0;
+        let n = 1 + rng.below(12) as usize;
+        let mut v = vec![103 + rng.below(3) as u8];
+        v.extend((0..n + 1).map(|_| rng.below(103) as u8));
+        let modules = code128_modules_raw(&v);
+        let hits = run_decode(&Code128Decoder, &to_runs(&modules, px), &opts);
+        for h in &hits {
+            assert_eq!(h.symbology, breader_core::Symbology::Code128);
+        }
+        c128_hits += hits.len();
+
+        const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+        let text: String = (0..1 + rng.below(10))
+            .map(|_| char::from(CHARS[rng.below(43) as usize]))
+            .collect();
+        let hits = run_decode(
+            &Code39Decoder,
+            &to_runs(&code39_modules(&text, 2 + rng.below(2) as usize, 1), px),
+            &opts,
+        );
+        assert!(
+            hits.iter().all(|h| h.text == text.as_bytes()),
+            "{text}: {hits:?}"
+        );
+        c39_hits += hits.len();
+
+        let pairs = 1 + rng.below(8) as usize;
+        let digits = rng.digits(2 * pairs);
+        let hits = run_decode(
+            &ItfDecoder,
+            &to_runs(&itf_modules(&digits, 2 + rng.below(2) as usize), px),
+            &opts,
+        );
+        assert!(
+            hits.iter().all(|h| h.text == digits.as_bytes()),
+            "{digits}: {hits:?}"
+        );
+        itf_hits += hits.len();
+    }
+    // Random check characters pass one time in 103.
+    assert!(c128_hits < 120, "{c128_hits}");
+    assert!(c39_hits > 2000 && itf_hits > 2000, "{c39_hits} {itf_hits}");
 }
 
 struct Half;

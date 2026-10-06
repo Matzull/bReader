@@ -49,11 +49,15 @@ impl Stats {
     }
 }
 
-/// Canonical comparison key: whitespace trimmed, UPC-A folded into EAN-13 with a leading 0.
+/// Canonical comparison key: whitespace trimmed, UPC-A folded into EAN-13 with a leading 0,
+/// the dataset's `{GS}` notation turned into ASCII 29 and a leading GS1 FNC1 separator dropped.
 /// Valid UTF-8 is compared as trimmed text, anything else as raw bytes.
 pub fn canonical(sym: Symbology, data: &[u8]) -> (Symbology, Vec<u8>) {
     let trimmed: Vec<u8> = match std::str::from_utf8(data) {
-        Ok(s) => s.trim().as_bytes().to_vec(),
+        Ok(s) => {
+            let s = s.trim().replace("{GS}", "\u{1d}");
+            s.strip_prefix('\u{1d}').unwrap_or(&s).as_bytes().to_vec()
+        }
         Err(_) => data.trim_ascii().to_vec(),
     };
     if sym == Symbology::UpcA && trimmed.len() == 12 && trimmed.iter().all(u8::is_ascii_digit) {
@@ -180,5 +184,12 @@ mod tests {
         score(&[], &[e], &mut st);
         assert_eq!(st.unsupported, 1);
         assert_eq!(st.totals().expected, 0);
+    }
+
+    #[test]
+    fn gs_notation_matches_fnc1() {
+        let gt = canonical(Symbology::Code128, b"{GS}7829{GS}2798");
+        let read = canonical(Symbology::Code128, b"7829\x1d2798");
+        assert_eq!(gt, read);
     }
 }

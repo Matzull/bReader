@@ -167,6 +167,9 @@ impl Pipeline {
                 gray_done.push(gray_key);
             }
             for reader in &readers {
+                if reader.handles_inversion() && pass.inverted {
+                    continue;
+                }
                 if reader.uses_binary() || gray_new {
                     reader.scan(&mut ctx, &mut symbols);
                 }
@@ -262,6 +265,37 @@ mod tests {
         assert_eq!(pipeline.passes(&options).len(), 4);
         pipeline.scan(img, &options, &mut Scratch::new());
         assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 2);
+    }
+
+    struct BothPolarities(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    impl SymbologyReader for BothPolarities {
+        fn name(&self) -> &'static str {
+            "both"
+        }
+        fn symbologies(&self) -> SymbologySet {
+            SymbologySet::EMPTY.with(Symbology::Ean13)
+        }
+        fn handles_inversion(&self) -> bool {
+            true
+        }
+        fn scan(&self, ctx: &mut FrameContext<'_>, _out: &mut Vec<Symbol>) {
+            assert!(!ctx.pass().inverted);
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn inversion_handling_reader_skips_inverted_passes() {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .binarizer(Threshold)
+            .reader(BothPolarities(calls.clone()))
+            .build()
+            .unwrap();
+        let pixels = [0u8; 4];
+        let img = ImageView::from_packed(&pixels, 2, 2).unwrap();
+        pipeline.scan(img, &ScanOptions::default(), &mut Scratch::new());
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
     }
 
     #[test]

@@ -4,7 +4,7 @@ use breader_core::{
 
 /// A hit placed in pass-image coordinates.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PlacedHit {
+pub(crate) struct PlacedHit {
     pub symbology: Symbology,
     pub text: Vec<u8>,
     pub addon: Option<Vec<u8>>,
@@ -16,6 +16,11 @@ pub struct PlacedHit {
     /// Estimated module width in pixels of the scanned image.
     pub module: f32,
     pub quality: f32,
+    pub aim: [u8; 3],
+    pub checksum_verified: bool,
+    /// Light bars on a dark background. Hits of different polarity never
+    /// read the same symbol.
+    pub inverted: bool,
 }
 
 impl PlacedHit {
@@ -28,7 +33,9 @@ impl PlacedHit {
     }
 
     fn same_symbol(&self, other: &Self) -> bool {
-        self.symbology == other.symbology && self.text == other.text
+        self.symbology == other.symbology
+            && self.inverted == other.inverted
+            && self.text == other.text
     }
 }
 
@@ -38,11 +45,14 @@ fn mid(a: Point, b: Point) -> Point {
 
 /// Segments closer than this many pixels count as touching.
 const TOUCH: f32 = 1.0;
+/// ITF has no check digit in general and any even digit string is a valid
+/// payload, so it always needs this many agreeing lines.
+const ITF_MIN_AGREEMENT: u16 = 3;
 /// Upper bound on hits kept per pass, a guard against pathological input.
 const MAX_HITS: usize = 4096;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Settings {
+pub(crate) struct Settings {
     pub min_agreement: u16,
     /// Lines with an index below this belong to the sparse scan plan; higher
     /// ones were added around a lone hit. Lines next to each other see almost
@@ -102,17 +112,12 @@ impl Frame {
 
 /// Collects the hits of one pass and turns agreeing ones into symbols.
 #[derive(Debug, Clone, Default)]
-pub struct Aggregator {
+pub(crate) struct Aggregator {
     hits: Vec<PlacedHit>,
     groups: Vec<Group>,
 }
 
 impl Aggregator {
-    pub fn clear(&mut self) {
-        self.hits.clear();
-        self.groups.clear();
-    }
-
     pub fn push(&mut self, hit: PlacedHit) {
         if self.hits.len() < MAX_HITS {
             self.hits.push(hit);
@@ -121,10 +126,6 @@ impl Aggregator {
 
     pub fn len(&self) -> usize {
         self.hits.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.hits.is_empty()
     }
 
     /// Hits added since the aggregator held `since` hits that read the same
@@ -150,7 +151,10 @@ impl Aggregator {
     }
 
     fn required(&self, members: &[usize], settings: &Settings) -> u16 {
-        let min = settings.min_agreement.max(1);
+        let mut min = settings.min_agreement.max(1);
+        if self.hits[members[0]].symbology == Symbology::Itf {
+            min = min.max(ITF_MIN_AGREEMENT);
+        }
         let sparse: Vec<usize> = members
             .iter()
             .copied()
@@ -324,15 +328,15 @@ impl Aggregator {
         ]);
         let quality =
             c.members.iter().map(|&m| self.hits[m].quality).sum::<f32>() / c.members.len() as f32;
-        let aim_id = match (first.symbology, &c.addon) {
-            (_, Some(_)) => *b"]E3",
-            (Symbology::Ean8, None) => *b"]E4",
-            _ => *b"]E0",
+        let aim_id = if c.addon.is_some() {
+            *b"]E3"
+        } else {
+            first.aim
         };
         Symbol {
             symbology: first.symbology,
             data: first.text.clone(),
-            text: String::from_utf8(first.text.clone()).ok(),
+            text: Some(first.text.iter().map(|&b| char::from(b)).collect()),
             content: Content::Unparsed,
             orientation_deg: quad.orientation_deg(),
             quad,
@@ -342,7 +346,7 @@ impl Aggregator {
                     .addon
                     .as_ref()
                     .and_then(|a| String::from_utf8(a.clone()).ok()),
-                checksum_verified: true,
+                checksum_verified: first.checksum_verified,
                 lines_agreeing: c.lines,
             }),
             quality: quality.clamp(0.0, 1.0),
@@ -406,6 +410,13 @@ mod tests {
             line,
             module: 3.0,
             quality: 0.5,
+            aim: if sym == Symbology::Ean8 {
+                *b"]E4"
+            } else {
+                *b"]E0"
+            },
+            checksum_verified: true,
+            inverted: false,
         }
     }
 
@@ -472,6 +483,81 @@ mod tests {
         assert_eq!(seeds.len(), 1, "still short of the required lines");
         agg.seeds(&sparse(10), &mut seeds);
         assert!(seeds.is_empty());
+    }
+
+    #[test]
+    fn hits_of_different_polarity_never_agree() {
+        let t = "5901234123457";
+        let mut flipped = hit(Symbology::Ean13, t, 20.0, 0.0, 100.0, 1);
+        flipped.inverted = true;
+        let normal = hit(Symbology::Ean13, t, 10.0, 0.0, 100.0, 0);
+        assert!(run(vec![normal.clone(), flipped.clone()], &settings(2)).is_empty());
+        // A third dark line makes two agreeing ones; the light line adds nothing.
+        let mut both = vec![normal.clone(), flipped.clone()];
+        both.push(hit(Symbology::Ean13, t, 14.0, 0.0, 100.0, 2));
+        let out = run(both, &settings(2));
+        assert_eq!(out.len(), 1);
+        let SymbolMeta::Linear(meta) = &out[0].meta else {
+            panic!("linear meta expected");
+        };
+        assert_eq!(meta.lines_agreeing, 2);
+        // Equal support on both polarities over the same spot: a conflict.
+        let mut tie = vec![normal.clone()];
+        flipped.from.y = 12.0;
+        flipped.to.y = 12.0;
+        tie.push(flipped);
+        tie.push(hit(Symbology::Ean13, t, 14.0, 0.0, 100.0, 2));
+        let mut light = hit(Symbology::Ean13, t, 13.0, 0.0, 100.0, 3);
+        light.inverted = true;
+        tie.push(light);
+        assert!(run(tie, &settings(2)).is_empty());
+    }
+
+    #[test]
+    fn itf_needs_three_lines_whatever_the_setting() {
+        let t = "12345678901231";
+        let lines = |n: u32| {
+            (0..n)
+                .map(|i| hit(Symbology::Itf, t, 10.0 + 3.0 * i as f32, 0.0, 100.0, i))
+                .collect::<Vec<_>>()
+        };
+        assert!(run(lines(2), &settings(1)).is_empty());
+        assert_eq!(run(lines(3), &settings(1)).len(), 1);
+        assert_eq!(run(lines(3), &settings(2)).len(), 1);
+        assert!(run(lines(3), &settings(4)).is_empty());
+    }
+
+    #[test]
+    fn a_partial_read_inside_a_bigger_symbol_is_never_emitted() {
+        let full = "12345678901231";
+        let partial = "345678901231";
+        let build = |n_full: u32, n_part: u32, sym: Symbology, a: &str, b: &str| {
+            let mut v = Vec::new();
+            for i in 0..n_full {
+                v.push(hit(sym, a, 10.0 + 3.0 * i as f32, 0.0, 100.0, i));
+            }
+            for i in 0..n_part {
+                v.push(hit(sym, b, 10.0 + 3.0 * i as f32, 15.0, 90.0, 50 + i));
+            }
+            v
+        };
+        let itf = |f, p| build(f, p, Symbology::Itf, full, partial);
+        // Equal support: both dropped. Clear majority: only the full one.
+        assert!(run(itf(4, 4), &settings(2)).is_empty());
+        assert!(run(itf(6, 4), &settings(2)).is_empty());
+        let out = run(itf(8, 3), &settings(2));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].data, full.as_bytes());
+        // Fewer lines than needed: the partial read is simply not reported.
+        let out = run(itf(4, 2), &settings(2));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].data, full.as_bytes());
+
+        let c39 = |f, p| build(f, p, Symbology::Code39, "ABC123XYZ", "123X");
+        assert!(run(c39(3, 3), &settings(2)).is_empty());
+        let out = run(c39(6, 2), &settings(2));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].data, b"ABC123XYZ");
     }
 
     #[test]

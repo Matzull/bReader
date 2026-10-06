@@ -20,10 +20,12 @@ impl Edges {
         &self.items
     }
 
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
@@ -71,6 +73,7 @@ impl EdgeParams {
     }
 
     /// The same variant without edge relocation.
+    #[cfg(test)]
     pub const fn raw(mut self) -> Self {
         self.refine = false;
         self
