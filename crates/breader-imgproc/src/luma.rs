@@ -1,3 +1,4 @@
+use crate::simd::luma4_row;
 use breader_core::{Error, ImageBuffer, ImageView, PixelFormat};
 
 fn validate(
@@ -28,8 +29,9 @@ fn validate(
 }
 
 #[inline]
+// Weights sum to 256 and the maximum total is 65408, so u16 is exact.
 fn luma_bt601(r: u8, g: u8, b: u8) -> u8 {
-    ((77 * u32::from(r) + 150 * u32::from(g) + 29 * u32::from(b) + 128) >> 8) as u8
+    ((77 * u16::from(r) + 150 * u16::from(g) + 29 * u16::from(b) + 128) >> 8) as u8
 }
 
 /// Converts the first plane of `data` into a tightly packed luma image.
@@ -55,16 +57,10 @@ pub fn to_luma(
                 }
             }
             PixelFormat::Rgba8 => {
-                let src = &data[start..start + width * 4];
-                for (o, px) in out.iter_mut().zip(src.chunks_exact(4)) {
-                    *o = luma_bt601(px[0], px[1], px[2]);
-                }
+                luma4_row(&data[start..start + width * 4], out, 77, 29);
             }
             PixelFormat::Bgra8 => {
-                let src = &data[start..start + width * 4];
-                for (o, px) in out.iter_mut().zip(src.chunks_exact(4)) {
-                    *o = luma_bt601(px[2], px[1], px[0]);
-                }
+                luma4_row(&data[start..start + width * 4], out, 29, 77);
             }
             _ => out.copy_from_slice(&data[start..start + width]),
         }

@@ -42,20 +42,36 @@ impl Preprocessor for Downscale {
             return;
         }
         dst.resize(ow, oh);
-        let area = (f * f) as u32;
-        let half = area / 2;
-        let mut acc = vec![0u32; ow];
-        for oy in 0..oh {
-            acc.fill(0);
-            for dy in 0..f {
-                let row = &src.row(oy * f + dy)[..ow * f];
-                for (a, px) in acc.iter_mut().zip(row.chunks_exact(f)) {
-                    *a += px.iter().map(|&v| u32::from(v)).sum::<u32>();
-                }
+        match f {
+            2 => reduce::<2>(src, dst, ow, oh),
+            3 => reduce::<3>(src, dst, ow, oh),
+            _ => reduce::<4>(src, dst, ow, oh),
+        }
+    }
+}
+
+/// Sums the `F` rows of each output row vertically in `u16` (at most
+/// 4 * 255), then reduces `F` neighbouring sums with rounding. The constant
+/// factor lets the compiler turn the division into shifts or multiplies.
+fn reduce<const F: usize>(src: ImageView<'_>, dst: &mut ImageBuffer, ow: usize, oh: usize) {
+    let area = (F * F) as u32;
+    let half = area / 2;
+    let mut vsum = vec![0u16; ow * F];
+    for oy in 0..oh {
+        let width = ow * F;
+        let first = &src.row(oy * F)[..width];
+        for (s, &v) in vsum.iter_mut().zip(first) {
+            *s = u16::from(v);
+        }
+        for dy in 1..F {
+            let row = &src.row(oy * F + dy)[..width];
+            for (s, &v) in vsum.iter_mut().zip(row) {
+                *s += u16::from(v);
             }
-            for (o, &a) in dst.row_mut(oy).iter_mut().zip(&acc) {
-                *o = ((a + half) / area) as u8;
-            }
+        }
+        for (o, group) in dst.row_mut(oy).iter_mut().zip(vsum.chunks_exact(F)) {
+            let sum: u32 = group.iter().map(|&v| u32::from(v)).sum();
+            *o = ((sum + half) / area) as u8;
         }
     }
 }

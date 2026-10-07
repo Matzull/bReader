@@ -5,6 +5,7 @@ mod local;
 mod luma;
 mod otsu;
 mod pack;
+mod simd;
 
 pub use downscale::Downscale;
 pub use local::LocalBinarizer;

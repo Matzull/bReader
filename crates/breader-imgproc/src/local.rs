@@ -73,6 +73,9 @@ impl LocalBinarizer {
     fn tile_thresholds(&self, src: ImageView<'_>, block: usize, tw: usize, th: usize) -> Vec<u8> {
         let (w, h) = (src.width(), src.height());
         let mut thresholds = vec![0u8; tw * th];
+        let mut col_min = vec![0u8; w];
+        let mut col_max = vec![0u8; w];
+        let mut col_sum = vec![0u16; w];
         let mut mins = vec![0u8; tw];
         let mut maxs = vec![0u8; tw];
         let mut sums = vec![0u64; tw];
@@ -81,19 +84,38 @@ impl LocalBinarizer {
             maxs.fill(0);
             sums.fill(0);
             let y_end = ((ty + 1) * block).min(h);
-            for y in ty * block..y_end {
-                let row = src.row(y);
-                for (tx, chunk) in row.chunks(block).enumerate() {
-                    let mut lo = mins[tx];
-                    let mut hi = maxs[tx];
-                    let mut sum = 0u64;
-                    for &v in chunk {
-                        lo = lo.min(v);
-                        hi = hi.max(v);
-                        sum += u64::from(v);
+            // Bands of at most 256 rows keep the `u16` column sums exact.
+            for band_start in (ty * block..y_end).step_by(256) {
+                let band_end = (band_start + 256).min(y_end);
+                // Vertical pass: per-column statistics over the band rows.
+                let first = src.row(band_start);
+                col_min.copy_from_slice(first);
+                col_max.copy_from_slice(first);
+                for (s, &v) in col_sum.iter_mut().zip(first) {
+                    *s = u16::from(v);
+                }
+                for y in band_start + 1..band_end {
+                    let row = src.row(y);
+                    for (((lo, hi), s), &v) in col_min
+                        .iter_mut()
+                        .zip(col_max.iter_mut())
+                        .zip(col_sum.iter_mut())
+                        .zip(row)
+                    {
+                        *lo = (*lo).min(v);
+                        *hi = (*hi).max(v);
+                        *s += u16::from(v);
                     }
-                    mins[tx] = lo;
-                    maxs[tx] = hi;
+                }
+                // Horizontal pass: reduce each tile's columns.
+                let stats = col_min
+                    .chunks(block)
+                    .zip(col_max.chunks(block))
+                    .zip(col_sum.chunks(block));
+                for (tx, ((lo, hi), sum)) in stats.enumerate() {
+                    let (lo, hi, sum) = reduce_columns(lo, hi, sum);
+                    mins[tx] = mins[tx].min(lo);
+                    maxs[tx] = maxs[tx].max(hi);
                     sums[tx] += sum;
                 }
             }
@@ -128,6 +150,26 @@ impl LocalBinarizer {
         }
         thresholds
     }
+}
+
+/// Min, max and sum over one tile's column statistics.
+#[inline]
+fn reduce_columns(lo: &[u8], hi: &[u8], sum: &[u16]) -> (u8, u8, u64) {
+    if let (Ok(lo), Ok(hi), Ok(sum)) = (
+        <&[u8; 8]>::try_from(lo),
+        <&[u8; 8]>::try_from(hi),
+        <&[u16; 8]>::try_from(sum),
+    ) {
+        let min = lo.iter().fold(u8::MAX, |a, &b| a.min(b));
+        let max = hi.iter().fold(0, |a, &b| a.max(b));
+        let total = sum.iter().map(|&s| u32::from(s)).sum::<u32>();
+        return (min, max, u64::from(total));
+    }
+    (
+        lo.iter().copied().min().unwrap_or(u8::MAX),
+        hi.iter().copied().max().unwrap_or(0),
+        sum.iter().map(|&s| u64::from(s)).sum(),
+    )
 }
 
 fn summed_area(grid: &[u8], tw: usize, th: usize) -> Vec<u64> {
