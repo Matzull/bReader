@@ -51,8 +51,7 @@ impl Runs {
         self.first_is_bar = !self.first_is_bar;
     }
 
-    /// Builds runs from explicit widths; used by tests and synthetic inputs.
-    #[cfg(test)]
+    /// Builds runs from explicit widths; used by tests and fuzzing.
     pub fn from_widths(first_is_bar: bool, widths: &[f32], lead: f32, trail: f32) -> Self {
         let mut edges = Vec::with_capacity(widths.len() + 1);
         let mut x = lead;

@@ -9,6 +9,8 @@ mod common;
 mod decoder;
 mod ean;
 mod edges;
+#[doc(hidden)]
+pub mod fuzzing;
 mod itf;
 mod plan;
 mod profile;

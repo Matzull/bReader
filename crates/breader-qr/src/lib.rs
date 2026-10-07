@@ -6,6 +6,8 @@ mod alignment;
 mod check;
 mod decode;
 mod detect;
+#[doc(hidden)]
+pub mod fuzzing;
 mod plane;
 mod reader;
 mod sample;

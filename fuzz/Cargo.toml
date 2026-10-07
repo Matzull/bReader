@@ -1,0 +1,78 @@
+[package]
+name = "breader-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+breader = { path = "../crates/breader" }
+breader-core = { path = "../crates/breader-core" }
+breader-content = { path = "../crates/breader-content" }
+breader-ecc = { path = "../crates/breader-ecc" }
+breader-linear = { path = "../crates/breader-linear" }
+breader-qr = { path = "../crates/breader-qr" }
+
+[workspace]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "pipeline"
+path = "fuzz_targets/pipeline.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "qr_grid"
+path = "fuzz_targets/qr_grid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "linear_runs"
+path = "fuzz_targets/linear_runs.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "linear_profile"
+path = "fuzz_targets/linear_profile.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "gs1_parse"
+path = "fuzz_targets/gs1_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "charset_decode"
+path = "fuzz_targets/charset_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rs_decode"
+path = "fuzz_targets/rs_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "content_pipeline"
+path = "fuzz_targets/content_pipeline.rs"
+test = false
+doc = false
+bench = false
