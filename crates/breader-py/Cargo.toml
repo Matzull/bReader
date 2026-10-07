@@ -6,7 +6,7 @@ rust-version = "1.94"
 publish = false
 
 [lib]
-name = "breader"
+name = "_breader"
 crate-type = ["cdylib"]
 
 [dependencies]

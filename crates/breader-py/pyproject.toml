@@ -5,9 +5,25 @@ build-backend = "maturin"
 [project]
 name = "breader"
 version = "0.1.0"
-description = "Barcode and QR code reader"
+description = "Fast, dependency-free barcode and QR code reader written in Rust"
+readme = "README.md"
 requires-python = ">=3.9"
-classifiers = ["Programming Language :: Rust"]
+keywords = ["barcode", "qr", "qrcode", "ean", "code128", "gs1"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Multimedia :: Graphics :: Capture",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "numpy", "pillow", "segno"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "breader._breader"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

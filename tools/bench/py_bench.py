@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""zxing-cpp baseline with the same matching, normalization, timing and report format as the Rust bench.
+"""Python-side bench for breader (PyO3 bindings) and zxing-cpp.
 
-usage: zxingcpp_bench.py <dataset-dir> [--json out.json] [--no-overrides]
+Same matching, normalization, timing and report format as the Rust bench. Images are preloaded
+as grayscale numpy arrays; the timed section is the engine call only.
+
+usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|both] [--effort fast|balanced|exhaustive]
+                   [--json out.json] [--no-overrides]
 """
 import json
 import sys
@@ -9,8 +13,16 @@ import time
 from pathlib import Path
 
 import numpy as np
-import zxingcpp
 from PIL import Image
+
+try:
+    import zxingcpp
+except ImportError:
+    zxingcpp = None
+try:
+    import breader
+except ImportError:
+    breader = None
 
 SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF"]
 
@@ -28,19 +40,54 @@ ALIASES = {
     "INTERLEAVED2OF5": "ITF",
 }
 
-ZX_FORMATS = {
-    zxingcpp.BarcodeFormat.QRCode: "QR Code",
-    zxingcpp.BarcodeFormat.EAN13: "EAN-13",
-    zxingcpp.BarcodeFormat.EAN8: "EAN-8",
-    zxingcpp.BarcodeFormat.UPCA: "UPC-A",
-    zxingcpp.BarcodeFormat.UPCE: "UPC-E",
-    zxingcpp.BarcodeFormat.Code128: "Code 128",
-    zxingcpp.BarcodeFormat.Code39: "Code 39",
-    zxingcpp.BarcodeFormat.Code39Ext: "Code 39",
-    zxingcpp.BarcodeFormat.Code39Std: "Code 39",
-    zxingcpp.BarcodeFormat.ITF: "ITF",
-    zxingcpp.BarcodeFormat.ITF14: "ITF",
+BR_FORMATS = {
+    "qr": "QR Code",
+    "ean13": "EAN-13",
+    "ean8": "EAN-8",
+    "upca": "UPC-A",
+    "upce": "UPC-E",
+    "code128": "Code 128",
+    "code39": "Code 39",
+    "itf": "ITF",
 }
+
+
+class ZxingEngine:
+    name = "zxing-cpp (python)"
+
+    def __init__(self):
+        if zxingcpp is None:
+            sys.exit("zxingcpp is not installed")
+        bf = zxingcpp.BarcodeFormat
+        self.formats = {
+            bf.QRCode: "QR Code",
+            bf.EAN13: "EAN-13",
+            bf.EAN8: "EAN-8",
+            bf.UPCA: "UPC-A",
+            bf.UPCE: "UPC-E",
+            bf.Code128: "Code 128",
+            bf.Code39: "Code 39",
+            bf.Code39Ext: "Code 39",
+            bf.Code39Std: "Code 39",
+            bf.ITF: "ITF",
+            bf.ITF14: "ITF",
+        }
+
+    def read(self, gray):
+        return [
+            (self.formats[r.format], bytes(r.bytes)) for r in zxingcpp.read_barcodes(gray) if r.format in self.formats
+        ]
+
+
+class BreaderEngine:
+    def __init__(self, effort):
+        if breader is None:
+            sys.exit("breader is not installed (maturin develop --release in crates/breader-py)")
+        self.name = f"breader (python, {effort})"
+        self.reader = breader.Reader(effort)
+
+    def read(self, gray):
+        return [(BR_FORMATS[s.symbology], s.data) for s in self.reader.scan(gray) if s.symbology in BR_FORMATS]
 
 
 def map_symbology(name):
@@ -260,7 +307,7 @@ def dataset_name(root, base):
     return str(rel) if str(rel) != "." else root.resolve().name
 
 
-def run_dataset(base, ann):
+def run_dataset(base, ann, engine):
     expected_by_file = {}
     for img in ann["images"]:
         expected_by_file.setdefault(img["file"], []).extend(
@@ -279,19 +326,17 @@ def run_dataset(base, ann):
             continue
         t0 = time.perf_counter()
         try:
-            results = zxingcpp.read_barcodes(gray)
+            found = engine.read(gray)
         except Exception as e:
             print(f"{base / file}: {e}", file=sys.stderr)
             stats.errors += 1
-            results = []
+            found = []
         stats.latencies.append((time.perf_counter() - t0) * 1000.0)
-        found = []
-        for r in results:
-            sym = ZX_FORMATS.get(r.format)
-            if sym:
-                found.append((sym, bytes(r.bytes)))
         score(found, expected, stats)
     return stats
+
+
+USAGE = "usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|both] [--effort E] [--json out.json] [--no-overrides]"
 
 
 def main(argv):
@@ -299,24 +344,34 @@ def main(argv):
     out_json = None
     root = None
     use_overrides = True
+    which = "both"
+    effort = "balanced"
     while args:
         a = args.pop(0)
         if a == "--json":
             out_json = args.pop(0)
+        elif a == "--engine":
+            which = args.pop(0)
+        elif a == "--effort":
+            effort = args.pop(0)
         elif a == "--no-overrides":
             use_overrides = False
         elif root is None:
             root = Path(a)
         else:
-            sys.exit("usage: zxingcpp_bench.py <dataset-dir> [--json out.json] [--no-overrides]")
-    if root is None:
-        sys.exit("usage: zxingcpp_bench.py <dataset-dir> [--json out.json] [--no-overrides]")
+            sys.exit(USAGE)
+    if root is None or which not in ("breader", "zxingcpp", "both"):
+        sys.exit(USAGE)
+    engines = []
+    if which in ("breader", "both"):
+        engines.append(BreaderEngine(effort))
+    if which in ("zxingcpp", "both"):
+        engines.append(ZxingEngine())
     files = find_annotations(root)
     if not files:
         sys.exit(f"no annotations.json found under {root}")
-    total = Stats()
-    per_dataset = {}
-    name = "zxing-cpp"
+    totals = {e.name: Stats() for e in engines}
+    per_dataset = {e.name: {} for e in engines}
     overrides = load_overrides()
     for f in files:
         ann = json.loads(f.read_text())
@@ -329,16 +384,22 @@ def main(argv):
             if n:
                 print(f"{ds}: applied {n} GT override(s)", file=sys.stderr)
         print(f"{ds}: removed {dedup_annotations(ann)} duplicate GT entries", file=sys.stderr)
-        stats = run_dataset(f.parent, ann)
-        print_table(name, ds, stats)
-        per_dataset[ds] = stats_json(stats)
-        total.merge(stats)
-    if len(per_dataset) > 1:
-        print_table(name, "ALL DATASETS", total)
+        for e in engines:
+            stats = run_dataset(f.parent, ann, e)
+            print_table(e.name, ds, stats)
+            per_dataset[e.name][ds] = stats_json(stats)
+            totals[e.name].merge(stats)
+    if len(files) > 1:
+        for e in engines:
+            print_table(e.name, "ALL DATASETS", totals[e.name])
     if out_json:
         doc = {
             "dataset_root": str(root),
-            "engines": [{"engine": name, "effort": "default", "datasets": per_dataset, "total": stats_json(total)}],
+            "engines": [
+                {"engine": e.name, "effort": effort if e.name.startswith("breader") else "default",
+                 "datasets": per_dataset[e.name], "total": stats_json(totals[e.name])}
+                for e in engines
+            ],
         }
         Path(out_json).write_text(json.dumps(doc, indent=2))
 
