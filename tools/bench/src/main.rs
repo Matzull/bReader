@@ -8,13 +8,14 @@ use std::time::Instant;
 use breader::{Effort, Escalation};
 use serde_json::{Value, json};
 
+use benchlib::gate::{Baseline, Counts, Groups};
 use benchlib::{engine, groundtruth, matching};
 use engine::{BreaderEngine, Engine};
 use groundtruth::Expected;
 use matching::Stats;
 
 const USAGE: &str = "usage: bench <dataset-dir> [--engine breader|rxing|rqrr|all] \
-[--effort fast|balanced|exhaustive] [--escalation all|found|stable] [--json out.json] [--no-overrides]";
+[--effort fast|balanced|exhaustive] [--escalation all|found|stable] [--json out.json] [--no-overrides] [--check baseline.json | --write-baseline baseline.json]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EngineSel {
@@ -31,6 +32,8 @@ struct Args {
     escalation: Option<Escalation>,
     json: Option<PathBuf>,
     overrides: bool,
+    check: Option<PathBuf>,
+    write_baseline: Option<PathBuf>,
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -40,6 +43,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut escalation = None;
     let mut json = None;
     let mut overrides = true;
+    let mut check = None;
+    let mut write_baseline = None;
     let mut args = args;
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -70,10 +75,23 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
             }
             "--json" => json = Some(args.next().ok_or("--json needs a path")?.into()),
             "--no-overrides" => overrides = false,
+            "--check" => check = Some(args.next().ok_or("--check needs a path")?.into()),
+            "--write-baseline" => {
+                write_baseline = Some(args.next().ok_or("--write-baseline needs a path")?.into());
+            }
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             _ if dataset.is_none() => dataset = Some(PathBuf::from(arg)),
             _ => return Err("multiple dataset directories given".into()),
         }
+    }
+    if check.is_some() && write_baseline.is_some() {
+        return Err("--check and --write-baseline are mutually exclusive".into());
+    }
+    if (check.is_some() || write_baseline.is_some()) && engine != EngineSel::Breader {
+        return Err("--check/--write-baseline only work with --engine breader".into());
+    }
+    if (check.is_some() || write_baseline.is_some()) && (escalation.is_some() || !overrides) {
+        return Err("--check/--write-baseline need the default escalation and GT overrides".into());
     }
     Ok(Args {
         dataset: dataset.ok_or("missing <dataset-dir>")?,
@@ -82,6 +100,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
         escalation,
         json,
         overrides,
+        check,
+        write_baseline,
     })
 }
 
@@ -218,6 +238,69 @@ fn run_dataset(engine: &mut dyn Engine, ds: &Dataset) -> Stats {
     stats
 }
 
+fn gate_groups(per_dataset: &[(String, Stats)]) -> Groups {
+    per_dataset
+        .iter()
+        .map(|(name, stats)| {
+            let items = stats
+                .per_symbology
+                .iter()
+                .map(|(sym, s)| {
+                    (
+                        (*sym).to_string(),
+                        Counts {
+                            expected: s.expected,
+                            read: s.read,
+                            false_positives: s.false_positives,
+                        },
+                    )
+                })
+                .collect();
+            (name.clone(), items)
+        })
+        .collect()
+}
+
+fn effort_name(effort: Effort) -> String {
+    format!("{effort:?}").to_lowercase()
+}
+
+fn run_gate(args: &Args, groups: &Groups) -> ExitCode {
+    let effort = effort_name(args.effort);
+    if let Some(path) = &args.write_baseline {
+        let result = Baseline::validate_for_write(groups)
+            .and_then(|()| Baseline::new(Some(&effort), groups.clone()).save(path));
+        return match result {
+            Ok(()) => {
+                println!("baseline written to {}", path.display());
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    if let Some(path) = &args.check {
+        return match Baseline::load(path) {
+            Ok(b) => {
+                let outcome = b.check(Some(&effort), groups);
+                outcome.print();
+                if outcome.passed() {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
     let args = match parse_args(std::env::args().skip(1)) {
         Ok(a) => a,
@@ -242,14 +325,20 @@ fn main() -> ExitCode {
     };
 
     let mut reports: Vec<Value> = Vec::new();
+    let mut gate_groups_slot: Option<Groups> = None;
     for engine in &mut engines {
         let mut total = Stats::default();
         let mut per_dataset: BTreeMap<String, Value> = BTreeMap::new();
+        let mut all_stats: Vec<(String, Stats)> = Vec::new();
         for ds in &datasets {
             let stats = run_dataset(engine.as_mut(), ds);
             report::print_table(engine.name(), &ds.name, &stats);
             per_dataset.insert(ds.name.clone(), report::stats_json(&stats));
             total.merge(&stats);
+            all_stats.push((ds.name.clone(), stats));
+        }
+        if engine.name() == "breader" {
+            gate_groups_slot = Some(gate_groups(&all_stats));
         }
         if datasets.len() > 1 {
             report::print_table(engine.name(), "ALL DATASETS", &total);
@@ -262,13 +351,16 @@ fn main() -> ExitCode {
         }));
     }
 
-    if let Some(path) = args.json {
+    if let Some(path) = &args.json {
         let doc = json!({ "dataset_root": args.dataset.display().to_string(), "engines": reports });
         let text = serde_json::to_string_pretty(&doc).unwrap_or_default();
-        if let Err(e) = std::fs::write(&path, text) {
+        if let Err(e) = std::fs::write(path, text) {
             eprintln!("cannot write {}: {e}", path.display());
             return ExitCode::FAILURE;
         }
+    }
+    if let Some(groups) = &gate_groups_slot {
+        return run_gate(&args, groups);
     }
     ExitCode::SUCCESS
 }

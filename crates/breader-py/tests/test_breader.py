@@ -15,6 +15,7 @@ from conftest import render_qr
 
 URL = "https://example.com/breader?x=1"
 ROOT = Path(__file__).resolve().parents[3]
+SYNTH_DIR = Path(os.environ.get("BREADER_SYNTH_DIR", ROOT / "data" / "synth"))
 
 
 # ---------- blank images ----------
@@ -332,9 +333,9 @@ def test_shared_reader_from_threads(qr_image):
 def test_synth_clean_matches_rust_bench():
     from PIL import Image
 
-    base = ROOT / "data" / "synth" / "clean"
+    base = SYNTH_DIR / "clean"
     if not (base / "annotations.json").exists():
-        pytest.skip("data/synth not generated")
+        pytest.skip("synthetic dataset not generated (set BREADER_SYNTH_DIR)")
     ann = json.loads((base / "annotations.json").read_text())
     r = Reader()
     read = expected = fp = 0
@@ -347,5 +348,5 @@ def test_synth_clean_matches_rust_bench():
                 read += 1
                 found.remove(w)
         fp += len(found)
-    # Rust bench (cargo run -r -p bench -- data/synth/clean): 20/20, 0 false positives.
+    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1, 20 images): 20/20, 0 false positives.
     assert (read, expected, fp) == (20, 20, 0)

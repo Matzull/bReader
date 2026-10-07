@@ -1,0 +1,340 @@
+{
+  "version": 1,
+  "effort": "balanced",
+  "groups": {
+    "blur": {
+      "Code 128": {
+        "expected": 7,
+        "read": 5,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 6,
+        "read": 2,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 7,
+        "read": 3,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 6,
+        "read": 1,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 20,
+        "read": 20,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 7,
+        "read": 6,
+        "false_positives": 0
+      }
+    },
+    "clean": {
+      "Code 128": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 20,
+        "read": 20,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      }
+    },
+    "illumination": {
+      "Code 128": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 20,
+        "read": 20,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      }
+    },
+    "inverted": {
+      "Code 128": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 20,
+        "read": 20,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      }
+    },
+    "low-res": {
+      "Code 128": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 20,
+        "read": 20,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      }
+    },
+    "multi": {
+      "Code 128": {
+        "expected": 26,
+        "read": 26,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 17,
+        "read": 17,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 40,
+        "read": 39,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 32,
+        "read": 32,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 29,
+        "read": 28,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 25,
+        "read": 24,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 45,
+        "read": 45,
+        "false_positives": 0
+      }
+    },
+    "negative": {},
+    "noise": {
+      "Code 128": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 20,
+        "read": 20,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      }
+    },
+    "perspective": {
+      "Code 128": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 7,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 20,
+        "read": 18,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      }
+    },
+    "rotated": {
+      "Code 128": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 20,
+        "read": 20,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      }
+    }
+  }
+}

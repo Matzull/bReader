@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "effort": "balanced",
+  "groups": {
+    "challenging-images": {
+      "Code 128": {
+        "expected": 60,
+        "read": 34,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 18,
+        "read": 17,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 4,
+        "read": 0,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 234,
+        "read": 225,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 74,
+        "read": 70,
+        "false_positives": 0
+      }
+    }
+  }
+}

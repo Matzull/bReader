@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
+use benchlib::gate::{Baseline, Counts, Groups};
 use benchlib::matching::canonical;
 use breader::{
     Effort, FrameUpdate, Reader, ScanOptions, Symbol, TrackEvent, Tracker, TrackerConfig,
@@ -19,7 +20,7 @@ use metrics::{Acc, Key, Report};
 
 const USAGE: &str = "usage: video-bench <dataset-dir> [--engines tracker,fast,balanced] \
 [--filter substr] [--max-frames N] [--json out.json] [--verbose] \
-[--strips N] [--overlap F] [--lost N] [--margin F] [--roi-effort E] [--global-effort E] [--full-effort E]";
+[--check baseline.json | --write-baseline baseline.json] [--strips N] [--overlap F] [--lost N] [--margin F] [--roi-effort E] [--global-effort E] [--full-effort E]";
 
 struct Args {
     dataset: PathBuf,
@@ -28,6 +29,8 @@ struct Args {
     max_frames: Option<u64>,
     json: Option<PathBuf>,
     verbose: bool,
+    check: Option<PathBuf>,
+    write_baseline: Option<PathBuf>,
     config: TrackerConfig,
 }
 
@@ -54,6 +57,8 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
         max_frames: None,
         json: None,
         verbose: false,
+        check: None,
+        write_baseline: None,
         config: TrackerConfig::default(),
     };
     let mut dataset = None;
@@ -74,6 +79,10 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--max-frames" => a.max_frames = Some(num(args.next(), "--max-frames")?),
             "--json" => a.json = args.next().map(PathBuf::from),
             "--verbose" => a.verbose = true,
+            "--check" => a.check = Some(args.next().ok_or("--check needs a path")?.into()),
+            "--write-baseline" => {
+                a.write_baseline = Some(args.next().ok_or("--write-baseline needs a path")?.into());
+            }
             "--strips" => a.config.strips = num(args.next(), "--strips")?,
             "--overlap" => a.config.strip_overlap = num(args.next(), "--overlap")?,
             "--lost" => a.config.lost_after = num(args.next(), "--lost")?,
@@ -86,6 +95,16 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
         }
     }
     a.dataset = dataset.ok_or("missing dataset directory")?;
+    if a.check.is_some() && a.write_baseline.is_some() {
+        return Err("--check and --write-baseline are mutually exclusive".into());
+    }
+    if (a.check.is_some() || a.write_baseline.is_some())
+        && (a.filter.is_some() || a.max_frames.is_some())
+    {
+        return Err(
+            "--check/--write-baseline cannot be combined with --filter or --max-frames".into(),
+        );
+    }
     Ok(a)
 }
 
@@ -175,7 +194,37 @@ fn find_videos(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-fn run() -> Result<(), String> {
+fn gate_groups(reports: &[Report]) -> Groups {
+    let mut groups = Groups::new();
+    for r in reports {
+        groups.entry(r.video.clone()).or_default().insert(
+            r.engine.clone(),
+            Counts {
+                expected: r.expected,
+                read: r.read,
+                false_positives: r.false_positives.len(),
+            },
+        );
+    }
+    groups
+}
+
+/// Returns whether the gate passed (always true when no gate flag is given).
+fn run_gate(args: &Args, reports: &[Report]) -> Result<bool, String> {
+    let groups = gate_groups(reports);
+    if let Some(path) = &args.write_baseline {
+        Baseline::validate_for_write(&groups)?;
+        Baseline::new(None, groups).save(path)?;
+        println!("baseline written to {}", path.display());
+    } else if let Some(path) = &args.check {
+        let outcome = Baseline::load(path)?.check(None, &groups);
+        outcome.print();
+        return Ok(outcome.passed());
+    }
+    Ok(true)
+}
+
+fn run() -> Result<bool, String> {
     let args = parse_args(std::env::args().skip(1)).map_err(|e| format!("{e}\n{USAGE}"))?;
     let videos = find_videos(&args.dataset);
     if videos.is_empty() {
@@ -214,20 +263,21 @@ fn run() -> Result<(), String> {
         }
     }
     metrics::print_table(&reports, args.verbose);
-    if let Some(p) = args.json {
+    if let Some(p) = &args.json {
         let v: Value = json!(reports.iter().map(Report::to_json).collect::<Vec<_>>());
         std::fs::write(
-            &p,
+            p,
             serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?,
         )
         .map_err(|e| format!("{}: {e}", p.display()))?;
     }
-    Ok(())
+    run_gate(&args, &reports)
 }
 
 fn main() -> ExitCode {
     match run() {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
         Err(e) => {
             eprintln!("{e}");
             ExitCode::FAILURE

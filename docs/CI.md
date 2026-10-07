@@ -1,0 +1,74 @@
+# Continuous integration
+
+Workflows live in `.github/workflows/`. All use `contents: read` only.
+
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| `ci.yml` | push, pull request | `lint`: fmt, clippy (`--workspace --all-targets --all-features -D warnings`), cargo-deny. `test`: `cargo test --workspace` and with `--features breader/rayon` on ubuntu x86_64, ubuntu arm64, macOS arm64, Windows. `regression`: synthetic bench gate. `python-wheels` / `python-test`: abi3 wheels (linux x86_64 and aarch64, macOS arm64, Windows x64) and pytest against the installed wheel. |
+| `datasets.yml` | weekly (Mon 05:00 UTC), manual | Restores `data/dynamsoft` from a cache keyed on the upstream commit (fetches on a miss), installs ffmpeg, and runs the bench gate on `challenging-images` plus the video-bench gate. |
+| `fuzz.yml` | nightly (03:00 UTC), manual | Nightly toolchain, runs every target from `cargo fuzz list` for 300 s (manual runs can change it), caches `fuzz/corpus`, uploads `fuzz/artifacts` when something crashes. |
+
+The Dynamsoft datasets have no stated license, so they are only fetched by the scheduled or manual job, never on every push.
+
+## The regression gate
+
+`bench` and `video-bench` compare a run with a versioned baseline in `tools/bench/baselines/`:
+
+| File | Dataset | Command |
+| --- | --- | --- |
+| `synth-seed1-{fast,balanced,exhaustive}.json` | `data/synth` (`synth data/synth`, seed 1, 20 per class) | `bench data/synth --effort E` |
+| `synth-seed2024-{...}.json` | `data/synth-2024` (60 per class, seed 2024) | `bench data/synth-2024 --effort E` |
+| `dynamsoft-challenging-{...}.json` | `data/dynamsoft/challenging-images` | `bench data/dynamsoft/challenging-images --effort E` |
+| `dynamsoft-video.json` | `data/dynamsoft/video-based-testing` | `video-bench data/dynamsoft/video-based-testing` |
+
+A baseline stores, per dataset (or video) and per symbology (or engine), the expected count, the read count and the false positives. The effort is part of the key: a baseline only applies to the effort it was recorded at.
+
+`--check` exits with code 1, and prints a diff, when:
+
+- a read count is lower than the baseline,
+- any false positive appears,
+- the expected count differs (the dataset changed), or a baseline entry is missing from the run.
+
+Higher read counts and entries not yet in the baseline only print a notice. Latency is reported but never gated.
+
+### Run it locally
+
+```sh
+tools/check-regression.sh              # synthetic sets, generated into data/ when missing
+tools/fetch-datasets.sh                # once, needs git
+tools/check-regression.sh --dynamsoft  # also challenging-images and videos (needs ffmpeg)
+```
+
+Or one at a time:
+
+```sh
+cargo run -r -p bench -- data/synth --effort balanced --check tools/bench/baselines/synth-seed1-balanced.json
+```
+
+`--check` and `--write-baseline` need `--engine breader`, the default escalation and the GT overrides.
+
+### Update a baseline
+
+After an intended improvement (the check prints a notice), or an accepted change of the datasets:
+
+```sh
+cargo run -r -p bench -- data/synth --effort balanced --write-baseline tools/bench/baselines/synth-seed1-balanced.json
+cargo run -r -p video-bench -- data/dynamsoft/video-based-testing --write-baseline tools/bench/baselines/dynamsoft-video.json
+```
+
+Do this for all three efforts, review the diff of the JSON files and commit it with the change that caused it. Writing is refused when the run has false positives. A drop in reads should be fixed, not recorded.
+
+`data/` is gitignored; CI regenerates the synthetic sets (`synth` is deterministic for a given seed and count).
+
+## ARM runners
+
+`ubuntu-24.04-arm` hosted runners are not available for private repositories on every plan. If the `test (ubuntu-24.04-arm)` job cannot start, keep the entry and either enable the runners for the organisation, or replace the job's steps with cross compilation under QEMU:
+
+```sh
+cargo install cross --locked
+cross test --workspace --target aarch64-unknown-linux-gnu
+```
+
+## Python tests
+
+`crates/breader-py/tests` run against the installed wheel. The synthetic-dataset test reads `$BREADER_SYNTH_DIR` (default `<repo>/data/synth`) and is skipped when the directory is missing. CI generates it on Linux only, because rendering uses floating-point trigonometry whose last bits are not guaranteed identical across platforms.

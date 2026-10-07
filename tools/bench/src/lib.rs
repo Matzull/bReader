@@ -3,5 +3,6 @@
 #[cfg(feature = "baselines")]
 pub mod baselines;
 pub mod engine;
+pub mod gate;
 pub mod groundtruth;
 pub mod matching;

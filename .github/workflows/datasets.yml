@@ -1,0 +1,40 @@
+name: Datasets
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dynamsoft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Resolve the upstream dataset commit
+        id: upstream
+        run: |
+          sha=$(git ls-remote https://github.com/Dynamsoft/datasets-from-dynamsoft HEAD | cut -f1)
+          test -n "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Cache data/dynamsoft
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: data/dynamsoft
+          key: dynamsoft-${{ steps.upstream.outputs.sha }}
+      - name: Fetch datasets
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: tools/fetch-datasets.sh
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Dynamsoft regression gate
+        run: tools/check-regression.sh --dynamsoft

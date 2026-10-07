@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "groups": {
+    "EAN_13-distance": {
+      "balanced": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 1,
+        "read": 0,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      }
+    },
+    "EAN_13-motion-blur": {
+      "balanced": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      }
+    },
+    "batch_EAN13_1080p": {
+      "balanced": {
+        "expected": 28,
+        "read": 21,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 28,
+        "read": 3,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 28,
+        "read": 21,
+        "false_positives": 0
+      }
+    },
+    "batch_code39_1080p": {
+      "balanced": {
+        "expected": 32,
+        "read": 11,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 32,
+        "read": 9,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 32,
+        "read": 13,
+        "false_positives": 0
+      }
+    },
+    "batch_dark_environment_1d_1080p": {
+      "balanced": {
+        "expected": 8,
+        "read": 0,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 8,
+        "read": 0,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 8,
+        "read": 0,
+        "false_positives": 0
+      }
+    },
+    "batch_datamatrix_1080p": {
+      "balanced": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      }
+    },
+    "batch_inverted_datamatrix_1080p": {
+      "balanced": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      }
+    },
+    "batch_rotated_small_pdf417_1080p": {
+      "balanced": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 0,
+        "read": 0,
+        "false_positives": 0
+      }
+    },
+    "damaged_qrcode_1080p": {
+      "balanced": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      }
+    },
+    "reflective_surface_qrcode_1080p": {
+      "balanced": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      }
+    },
+    "rotated_vertical_ITF_1080p": {
+      "balanced": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      }
+    },
+    "wide_to_close_datamatrix_1080p": {
+      "balanced": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "fast": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "tracker": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      }
+    }
+  }
+}
