@@ -2,6 +2,7 @@
 
 use crate::alignment::alignment_centers;
 use breader_core::{BitMatrix, EcLevel};
+use std::sync::OnceLock;
 
 pub(crate) const fn dimension(version: u8) -> usize {
     17 + 4 * version as usize
@@ -177,7 +178,18 @@ pub(crate) fn function_mask(version: u8) -> BitMatrix {
 }
 
 /// Coordinates (x, y) of data modules in codeword placement order.
-pub(crate) fn data_positions(version: u8) -> Vec<(usize, usize)> {
+pub(crate) fn data_positions(version: u8) -> &'static [(usize, usize)] {
+    static CACHE: [OnceLock<Vec<(usize, usize)>>; 40] = [const { OnceLock::new() }; 40];
+    match usize::from(version)
+        .checked_sub(1)
+        .and_then(|i| CACHE.get(i))
+    {
+        Some(cell) => cell.get_or_init(|| build_data_positions(version)),
+        None => &[],
+    }
+}
+
+fn build_data_positions(version: u8) -> Vec<(usize, usize)> {
     let d = dimension(version);
     let func = function_mask(version);
     let mut out = Vec::with_capacity(raw_data_modules(version));

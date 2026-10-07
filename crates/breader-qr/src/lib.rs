@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod alignment;
+mod check;
 mod decode;
 mod detect;
 mod reader;

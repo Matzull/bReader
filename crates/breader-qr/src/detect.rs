@@ -7,6 +7,7 @@ use breader_core::{BitMatrix, Point};
 const FINDER_UNITS: [f32; 5] = [1.0, 1.0, 3.0, 1.0, 1.0];
 /// Hard cap on stored finder hits per pass.
 const ROW_TOL: f32 = 0.65;
+const ROW_TOL_PERCENT: u32 = 65;
 const MAX_FINDERS: usize = 1024;
 
 /// A confirmed finder pattern, in pass-image coordinates.
@@ -43,6 +44,8 @@ pub(crate) struct FinderSearch {
     pub finders: Vec<Finder>,
     pub triplets: Vec<Triplet>,
     order: Vec<usize>,
+    recent: Vec<usize>,
+    max_module: f32,
     links: Vec<Link>,
     incident: Vec<(usize, f32, u16)>,
 }
@@ -58,6 +61,20 @@ fn fits(runs: &[f32; 5], units: &[f32; 5], tol: f32) -> bool {
     runs.iter().zip(units).all(|(r, w)| {
         let t = if *w > 1.5 { tol * 2.0 } else { tol };
         (r - w * u).abs() <= t * u
+    })
+}
+
+/// Integer form of [`fits`] for the finder ratio: each run within `tol_pct`
+/// percent of a unit of its expected width (the center run twice as lenient).
+fn finder_ratio(runs: &[u32; 5], tol_pct: u32) -> bool {
+    let total: u32 = runs.iter().sum();
+    if total == 0 {
+        return false;
+    }
+    const UNITS: [u32; 5] = [1, 1, 3, 1, 1];
+    runs.iter().zip(UNITS).all(|(&r, w)| {
+        let t = if w > 1 { tol_pct * 2 } else { tol_pct };
+        (7 * r).abs_diff(w * total) * 100 <= t * total
     })
 }
 
@@ -131,12 +148,6 @@ fn line_check(m: &BitMatrix, x: i32, y: i32, d: (i32, i32), limit: u32) -> Optio
     })
 }
 
-/// Scale factor between the chord through a square's center at `angle`
-/// (radians, relative to the square's axes) and its side length.
-fn chord_factor(angle: f32) -> f32 {
-    angle.cos().abs().max(angle.sin().abs())
-}
-
 fn confirm_finder(m: &BitMatrix, hx: f32, y: usize, h_total: f32) -> Option<(Point, [f32; 3])> {
     let limit = (h_total * 1.5) as u32 + 2;
     let (mut cx, mut cy) = (hx, y as f32 + 0.5);
@@ -173,9 +184,14 @@ impl FinderSearch {
     /// Scans every `row_step`-th row of the binary image for finder patterns.
     pub fn find_finders(&mut self, m: &BitMatrix, row_step: usize) {
         self.finders.clear();
+        self.recent.clear();
+        self.max_module = 0.0;
         let step = row_step.max(1);
         let mut y = step / 2;
         while y < m.height() {
+            // Finders far above the current row can no longer be matched.
+            let (fs, reach) = (&self.finders, 3.5 * self.max_module + 2.0);
+            self.recent.retain(|&i| fs[i].pos.y + reach >= y as f32);
             self.scan_row(m, y);
             y += step;
         }
@@ -183,8 +199,10 @@ impl FinderSearch {
 
     fn scan_row(&mut self, m: &BitMatrix, y: usize) {
         let width = m.width();
-        let mut edges = std::mem::take(&mut self.edges);
-        edges.clear();
+        // Run boundaries: 0, every color change, width.
+        let mut bounds = std::mem::take(&mut self.edges);
+        bounds.clear();
+        bounds.push(0);
         let words = m.row_words(y);
         let mut prev = words.first().map_or(0, |w| w & 1);
         for (wi, &wd) in words.iter().enumerate() {
@@ -195,50 +213,34 @@ impl FinderSearch {
                 if pos >= width {
                     break;
                 }
-                edges.push(pos as u32);
+                bounds.push(pos as u32);
                 t &= t - 1;
             }
         }
-        let n_runs = edges.len() + 1;
-        let bound = |k: usize| -> u32 {
-            if k == 0 {
-                0
-            } else if k <= edges.len() {
-                edges[k - 1]
-            } else {
-                width as u32
-            }
-        };
-        let mut i = usize::from(!m.get(0, y));
-        while i + 4 < n_runs {
-            let b = [
-                bound(i),
-                bound(i + 1),
-                bound(i + 2),
-                bound(i + 3),
-                bound(i + 4),
-                bound(i + 5),
-            ];
+        bounds.push(width as u32);
+        // Run k spans bounds[k]..bounds[k + 1]; run 0 is dark when pixel 0 is.
+        let first = usize::from(!m.get(0, y));
+        for b in bounds.windows(6).skip(first).step_by(2) {
             let runs = [
-                (b[1] - b[0]) as f32,
-                (b[2] - b[1]) as f32,
-                (b[3] - b[2]) as f32,
-                (b[4] - b[3]) as f32,
-                (b[5] - b[4]) as f32,
+                b[1] - b[0],
+                b[2] - b[1],
+                b[3] - b[2],
+                b[4] - b[3],
+                b[5] - b[4],
             ];
-            if fits(&runs, &FINDER_UNITS, ROW_TOL) {
+            if finder_ratio(&runs, ROW_TOL_PERCENT) {
                 let hx = (b[2] + b[3]) as f32 / 2.0;
                 let h_total = (b[5] - b[0]) as f32;
                 self.add_hit(m, hx, y, h_total);
             }
-            i += 2;
         }
-        self.edges = edges;
+        self.edges = bounds;
     }
 
     fn add_hit(&mut self, m: &BitMatrix, hx: f32, y: usize, h_total: f32) {
         let yf = y as f32 + 0.5;
-        for f in &mut self.finders {
+        for &i in &self.recent {
+            let f = &mut self.finders[i];
             if (hx - f.pos.x).abs() < f.module * 2.5 && (yf - f.pos.y).abs() < f.module * 2.5 {
                 f.count += 1;
                 return;
@@ -251,7 +253,8 @@ impl FinderSearch {
             return;
         };
         let reach = chords.iter().copied().fold(f32::MAX, f32::min) / 7.0 * 3.5;
-        for f in &mut self.finders {
+        for &i in &self.recent {
+            let f = &mut self.finders[i];
             if f.pos.distance(pos) < reach.max(f.module * 3.5) {
                 let n = f.count as f32;
                 f.pos = Point::new(
@@ -263,12 +266,16 @@ impl FinderSearch {
                 }
                 f.module = f.chords.iter().copied().fold(f32::MAX, f32::min) / 7.0;
                 f.count += 1;
+                self.max_module = self.max_module.max(f.module);
                 return;
             }
         }
+        let module = chords.iter().copied().fold(f32::MAX, f32::min) / 7.0;
+        self.max_module = self.max_module.max(module);
+        self.recent.push(self.finders.len());
         self.finders.push(Finder {
             pos,
-            module: chords.iter().copied().fold(f32::MAX, f32::min) / 7.0,
+            module,
             chords,
             count: 1,
         });
@@ -416,7 +423,7 @@ fn timing_end_ok(m: &BitMatrix, from: Point, u: Point, perp: Point, module: f32)
         (6.0, false),
         (7.0, true),
     ];
-    let mut ok = 0;
+    let mut misses = 0;
     for (off, dark) in EXPECT {
         let mut votes = 0;
         for jitter in [2.7f32, 3.0, 3.3] {
@@ -426,9 +433,14 @@ fn timing_end_ok(m: &BitMatrix, from: Point, u: Point, perp: Point, module: f32)
             );
             votes += usize::from(pixel_dark(m, p));
         }
-        ok += usize::from((votes >= 2) == dark);
+        if (votes >= 2) != dark {
+            misses += 1;
+            if misses > 2 {
+                return false;
+            }
+        }
     }
-    ok >= 4
+    true
 }
 
 /// Verifies the timing pattern between two finders by walking the line along
@@ -449,8 +461,8 @@ fn link(
         return None;
     }
     // The line between two finders of one symbol is a symbol axis.
-    let theta = (b.pos.y - a.pos.y).atan2(b.pos.x - a.pos.x);
-    let (ma, mb) = (module_at(a, theta), module_at(b, theta));
+    let (ux, uy) = ((b.pos.x - a.pos.x) / dist, (b.pos.y - a.pos.y) / dist);
+    let (ma, mb) = (module_along(a, ux, uy), module_along(b, ux, uy));
     if ma <= 0.0 || mb <= 0.0 || ma.max(mb) / ma.min(mb) > if relaxed { 3.2 } else { 1.9 } {
         return None;
     }
@@ -467,10 +479,10 @@ fn link(
         side: 0,
     };
     if module < 1.3 {
-        return Some(unchecked);
+        return None;
     }
     const MAX_STEPS: usize = 1024;
-    let u = Point::new((b.pos.x - a.pos.x) / dist, (b.pos.y - a.pos.y) / dist);
+    let u = Point::new(ux, uy);
     let steps = ((dist / (0.25 * module).max(0.6)).ceil() as usize).clamp(8, MAX_STEPS - 1);
     let mut best = Link {
         score: 0.0,
@@ -488,12 +500,26 @@ fn link(
         }
         let p0 = Point::new(a.pos.x + perp.x * 3.0 * ma, a.pos.y + perp.y * 3.0 * ma);
         let p1 = Point::new(b.pos.x + perp.x * 3.0 * mb, b.pos.y + perp.y * 3.0 * mb);
-        for (k, c) in colors[..=steps].iter_mut().enumerate() {
-            let t = k as f32 / steps as f32;
-            *c = pixel_dark(
-                m,
-                Point::new(p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t),
-            );
+        let inside = |p: Point| {
+            p.x >= 0.0 && p.y >= 0.0 && p.x < m.width() as f32 && p.y < m.height() as f32
+        };
+        let (dx, dy) = ((p1.x - p0.x) / steps as f32, (p1.y - p0.y) / steps as f32);
+        if inside(p0) && inside(p1) {
+            // Both ends inside: so is every sample between them (the clamp
+            // only absorbs rounding at the far end).
+            let (xmax, ymax) = (m.width() - 1, m.height() - 1);
+            for (k, c) in colors[..=steps].iter_mut().enumerate() {
+                let kf = k as f32;
+                *c = m.get(
+                    ((p0.x + dx * kf) as usize).min(xmax),
+                    ((p0.y + dy * kf) as usize).min(ymax),
+                );
+            }
+        } else {
+            for (k, c) in colors[..=steps].iter_mut().enumerate() {
+                let kf = k as f32;
+                *c = pixel_dark(m, Point::new(p0.x + dx * kf, p0.y + dy * kf));
+            }
         }
         // Majority filter against single-sample glitches.
         let raw = colors;
@@ -576,8 +602,13 @@ fn link(
 }
 
 fn module_at(f: &Finder, theta: f32) -> f32 {
-    let fh = chord_factor(theta);
-    let fd = chord_factor(theta - std::f32::consts::FRAC_PI_4);
+    module_along(f, theta.cos(), theta.sin())
+}
+
+/// Module size from the finder's chords seen along the unit direction (ux, uy).
+fn module_along(f: &Finder, ux: f32, uy: f32) -> f32 {
+    let fh = ux.abs().max(uy.abs());
+    let fd = (ux + uy).abs().max((uy - ux).abs()) * std::f32::consts::FRAC_1_SQRT_2;
     (f.chords[0] * fh + f.chords[1] * fh + f.chords[2] * fd) / 21.0
 }
 
@@ -710,6 +741,29 @@ fn verify_alignment(m: &BitMatrix, c: Point, ex: Point, ey: Point) -> usize {
     bad
 }
 
+/// Columns `p` in `(x0, x1)` where pixel `p` differs from pixel `p - 1`.
+fn window_edges(m: &BitMatrix, y: usize, x0: usize, x1: usize, out: &mut Vec<u32>) {
+    let words = m.row_words(y);
+    let first = x0 / 64;
+    let last = (x1.saturating_sub(1)) / 64;
+    let mut prev = if first == 0 {
+        words.first().map_or(0, |w| w & 1)
+    } else {
+        words[first - 1] >> 63
+    };
+    for (wi, &wd) in words.iter().enumerate().take(last + 1).skip(first) {
+        let mut t = wd ^ ((wd << 1) | prev);
+        prev = wd >> 63;
+        while t != 0 {
+            let pos = wi * 64 + t.trailing_zeros() as usize;
+            t &= t - 1;
+            if pos > x0 && pos < x1 {
+                out.push(pos as u32);
+            }
+        }
+    }
+}
+
 /// Looks for an alignment pattern center near `pred` (within `radius`
 /// pixels). `ex`/`ey` are the module axes in pixels.
 pub(crate) fn find_alignment(
@@ -731,16 +785,11 @@ pub(crate) fn find_alignment(
     // (sum x, sum y, hits)
     let mut cands = [(0.0f32, 0.0f32, 0u32); 32];
     let mut nc = 0;
-    for y in y0..y1 {
+    // The center cell is a full module tall: a few rows per module suffice.
+    let row_step = ((module / 3.0) as usize).max(1);
+    for y in (y0..y1).step_by(row_step) {
         scratch.clear();
-        let mut prev = m.get(x0, y);
-        for x in x0 + 1..x1 {
-            let cur = m.get(x, y);
-            if cur != prev {
-                scratch.push(x as u32);
-                prev = cur;
-            }
-        }
+        window_edges(m, y, x0, x1, scratch);
         let first_dark = m.get(x0, y);
         let n_runs = scratch.len() + 1;
         let bound = |k: usize| -> u32 {

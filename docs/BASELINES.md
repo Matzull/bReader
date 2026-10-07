@@ -60,6 +60,15 @@ Totals before this cleanup (same engines, first measurement): 458 expected symbo
 
 No engine produced false positives on the `negative` class. Most false positives are partial ITF reads (12 of 14 digits) and spurious UPC-E/EAN-8 inside other 1D symbols. breader requires agreement between several scanlines, a strict length list for ITF and a check for overlapping conflicts, which are aimed at these cases.
 
+## breader (Balanced, commit after QR optimization, 2026-10-07)
+
+| Dataset | Read rate | QR | False positives | Latency p50 / p95 / max |
+|---|---|---|---|---|
+| challenging-images | 348/392 = 88.8 % | 225/234 | 0 | 22.8 / 217.7 / 305.5 |
+| synth (seed 1) | 223/228 = 97.8 % | 65/65 | 0 | 14.3 / 39.5 / 84.8 |
+
+Timings on this machine vary up to 2x between runs; compare engines in the same session.
+
 ## Proposed v1 targets (pending confirmation)
 
 | Metric | Target |

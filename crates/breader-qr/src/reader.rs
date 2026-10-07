@@ -8,21 +8,30 @@ use breader_core::{
 use crate::decode::{DecodedQr, decode_grid, read_version};
 use crate::detect::{FinderSearch, Triplet, candidate_dims, find_alignment};
 use crate::sample::{
-    Homography, Mapper, fourth_point, module_axes, module_size, pattern_cells, predict_alignment,
-    refine_finder, sample_grid, transform,
+    Homography, Mapper, finders_plausible, fourth_point, module_axes, module_size, pattern_cells,
+    predict_alignment, refine_finder, sample_grid, timing_plausible, transform,
 };
 use crate::spec::{dimension, version_for_dimension};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QrReader;
 
+/// Finder size ratio above which a failed alignment search is repeated in a
+/// much wider window (strong perspective moves the pattern far).
+const WIDE_SEARCH_RATIO: f32 = 1.2;
+/// Failed alignment searches after which a fit without any found pattern
+/// is abandoned.
+const MAX_MISSES: usize = 2;
+
 /// Per-effort search limits.
 #[derive(Debug, Clone, Copy)]
 struct Params {
     row_step: usize,
     max_finders: usize,
-    /// Triplets that may fail to decode before the pass gives up.
+    /// Detected triplets that may fail to decode before the pass gives up.
     max_failures: usize,
+    /// Same for triplets whose third finder was inferred from a timing pattern.
+    max_recovered_failures: usize,
 }
 
 impl Params {
@@ -31,17 +40,20 @@ impl Params {
             breader_core::Effort::Fast => Self {
                 row_step: 3,
                 max_finders: 320,
-                max_failures: 8,
+                max_failures: 3,
+                max_recovered_failures: 4,
             },
             breader_core::Effort::Balanced => Self {
                 row_step: 2,
                 max_finders: 320,
-                max_failures: 16,
+                max_failures: 4,
+                max_recovered_failures: 6,
             },
             breader_core::Effort::Exhaustive => Self {
                 row_step: 1,
                 max_finders: 640,
-                max_failures: 32,
+                max_failures: 24,
+                max_recovered_failures: 24,
             },
         }
     }
@@ -55,6 +67,8 @@ struct Work {
     runs: Vec<u32>,
     pts: Vec<(Point, Point)>,
     cells: Vec<(Point, bool)>,
+    /// Grids that passed the plausibility checks since the last `try_triplet`.
+    plausible: u32,
 }
 
 struct Found {
@@ -76,6 +90,7 @@ impl Work {
     /// Decodes a triplet; failures are retried once with finder centers
     /// refined against the finder template.
     fn try_triplet(&mut self, bin: &BitMatrix, t: &Triplet) -> Option<Found> {
+        self.plausible = 0;
         if let Some(f) = self.try_refined(bin, t) {
             return Some(f);
         }
@@ -86,7 +101,7 @@ impl Work {
             parallel: true,
             ..*t
         };
-        if fourth_point(t).distance(fourth_point(&plain)) > 0.7 * module {
+        if self.plausible > 0 && fourth_point(t).distance(fourth_point(&plain)) > 0.7 * module {
             return self.try_refined(bin, &plain);
         }
         None
@@ -97,6 +112,10 @@ impl Work {
             && let Some(f) = self.try_dims(bin, t)
         {
             return Some(f);
+        }
+        // Refining finder centers only helps when a grid looked plausible.
+        if !t.synthetic && self.plausible == 0 {
+            return None;
         }
         let module = (t.tl.module + t.tr.module + t.bl.module) / 3.0;
         if module < 1.8 {
@@ -141,9 +160,18 @@ impl Work {
             }
             tried[ntried] = dim;
             ntried += 1;
+            // Cheap plausibility tests (timing patterns for small symbols, finder
+            // blocks for all) come before the far costlier alignment search.
+            let implausible = transform(t, dim, None, Point::default()).is_some_and(|h| {
+                (dim != t.dim_hint && dim < 45 && !timing_plausible(bin, &h, dim))
+                    || !finders_plausible(bin, &h, dim)
+            });
             let mut first = true;
             let mut refined = false;
             for variant in [Variant::Refined, Variant::Corner, Variant::Affine] {
+                if implausible {
+                    break;
+                }
                 if refined && variant != Variant::Refined {
                     // A fit over every found pattern supersedes the cruder guesses.
                     break;
@@ -169,6 +197,7 @@ impl Work {
                 if !sample_grid(bin, &h, dim, m, &mut self.grid) {
                     continue;
                 }
+                self.plausible += 1;
                 if first
                     && dim >= 45
                     && let Some(v) = read_version(&self.grid)
@@ -239,6 +268,7 @@ impl Work {
             if !sample_grid(bin, &h, dim, m, &mut self.grid) {
                 continue;
             }
+            self.plausible += 1;
             if let Ok(decoded) = decode_grid(&self.grid)
                 && version_for_dimension(dim) == Some(decoded.version)
             {
@@ -253,9 +283,16 @@ impl Work {
         let module = (t.tl.module + t.tr.module + t.bl.module) / 3.0;
         let axes = module_axes(t, dim);
         let near = module * (4.0 + dim as f32 / 16.0);
+        let first = find_alignment(bin, &mut self.runs, pred, axes, near);
         // Strong perspective moves the pattern far from the affine prediction.
-        find_alignment(bin, &mut self.runs, pred, axes, near)
-            .or_else(|| find_alignment(bin, &mut self.runs, pred, axes, near * 3.0))
+        let mods = [t.tl.module, t.tr.module, t.bl.module];
+        let mx = mods.iter().copied().fold(0.0, f32::max);
+        let mn = mods.iter().copied().fold(f32::MAX, f32::min);
+        let wide = mx >= mn * WIDE_SEARCH_RATIO;
+        first.or_else(|| {
+            wide.then(|| find_alignment(bin, &mut self.runs, pred, axes, near * 3.0))
+                .flatten()
+        })
     }
 
     /// Grows a homography from the finders by locating alignment patterns
@@ -278,6 +315,7 @@ impl Work {
         );
         let mut model = Homography::fit(&self.pts)?;
         let mut real = 0usize;
+        let mut misses = 0usize;
         loop {
             let known = if real == 0 { 3 } else { self.pts.len() };
             let mut best: Option<(usize, f32)> = None;
@@ -310,6 +348,10 @@ impl Work {
             let module = (ex.x.hypot(ex.y) + ey.x.hypot(ey.y)) / 2.0;
             let radius = module * if real == 0 { 4.5 } else { 3.0 };
             let Some(found) = find_alignment(bin, &mut self.runs, pred, (ex, ey), radius) else {
+                misses += 1;
+                if real == 0 && misses >= MAX_MISSES {
+                    break;
+                }
                 continue;
             };
             if real == 0 {
@@ -395,11 +437,20 @@ impl SymbologyReader for QrReader {
         work.search
             .select_triplets(bin, params.max_finders, params.row_step);
         let mut failures = 0;
+        let mut syn_failures = 0;
         let mut successes = 0;
         let mut ti = 0;
-        while ti < work.search.triplets.len() && failures < params.max_failures + 3 * successes {
+        while ti < work.search.triplets.len() {
             let t = work.search.triplets[ti];
             ti += 1;
+            let spent = if t.synthetic {
+                syn_failures >= params.max_recovered_failures + 3 * successes
+            } else {
+                failures >= params.max_failures + 3 * successes
+            };
+            if spent {
+                continue;
+            }
             let inside = [t.tl, t.tr, t.bl].iter().any(|f| {
                 let p = Point::new(f.pos.x * scale.0, f.pos.y * scale.1);
                 known.iter().any(|q| q.contains(p))
@@ -408,7 +459,11 @@ impl SymbologyReader for QrReader {
                 continue;
             }
             let Some(found) = work.try_triplet(bin, &t) else {
-                failures += 1;
+                if t.synthetic {
+                    syn_failures += 1;
+                } else {
+                    failures += 1;
+                }
                 continue;
             };
             if let Some(sym) = build_symbol(&found, scale) {

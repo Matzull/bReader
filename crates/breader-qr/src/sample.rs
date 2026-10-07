@@ -4,6 +4,7 @@ use breader_core::{BitMatrix, Perspective, Point};
 
 use crate::alignment::alignment_centers;
 
+use crate::check::{finder_mismatch, timing_mismatch};
 use crate::detect::Triplet;
 
 /// Bottom-right finder-center corner. The parallelogram point is corrected
@@ -270,8 +271,93 @@ pub(crate) fn predict_alignment(t: &Triplet, dim: usize) -> Point {
     )
 }
 
+/// Largest fraction of timing-pattern modules that may disagree.
+const TIMING_TOLERANCE: (u32, u32) = (7, 20);
+/// Most finder/separator modules (of 192) that may disagree.
+const FINDER_TOLERANCE: u32 = 48;
+
+/// Reads one module: outer `None` when the mapping fails, inner `None` when
+/// the module lies outside the image. Large modules take the majority of
+/// five sub-samples.
+fn read_module(
+    bin: &BitMatrix,
+    h: &Mapper,
+    c: usize,
+    r: usize,
+    multi: bool,
+) -> Option<Option<bool>> {
+    const OFFSETS: [(f32, f32); 4] = [(-0.25, -0.25), (0.25, -0.25), (-0.25, 0.25), (0.25, 0.25)];
+    let (w, ht) = (bin.width() as f32, bin.height() as f32);
+    let pixel = |p: Point| -> Option<bool> {
+        (p.x >= 0.0 && p.y >= 0.0 && p.x < w && p.y < ht)
+            .then(|| bin.get(p.x as usize, p.y as usize))
+    };
+    let (mx, my) = (c as f32 + 0.5, r as f32 + 0.5);
+    let p = h.map(Point::new(mx, my))?;
+    let Some(center) = pixel(p) else {
+        return Some(None);
+    };
+    if !multi {
+        return Some(Some(center));
+    }
+    let mut votes = u32::from(center);
+    for (ox, oy) in OFFSETS {
+        if let Some(q) = h.map(Point::new(mx + ox, my + oy))
+            && pixel(q) == Some(true)
+        {
+            votes += 1;
+        }
+    }
+    Some(Some(votes >= 3))
+}
+
+/// Cheap test of a dimension hypothesis: the timing patterns between the
+/// finders must alternate under the mapping.
+pub(crate) fn timing_plausible(bin: &BitMatrix, h: &Mapper, dim: usize) -> bool {
+    let multi = module_size(h, dim).is_some_and(|m| m >= 3.0);
+    let mut bad = 0u32;
+    for i in 8..dim - 8 {
+        let want = i % 2 == 0;
+        for (c, r) in [(i, 6), (6, i)] {
+            match read_module(bin, h, c, r, multi) {
+                None => return false,
+                Some(v) => bad += u32::from(v.unwrap_or(false) != want),
+            }
+        }
+    }
+    let total = 2 * (dim as u32 - 16);
+    bad * TIMING_TOLERANCE.1 <= total * TIMING_TOLERANCE.0
+}
+
+/// Cheap test of a mapping: the finder patterns and their separators must
+/// appear where the mapping puts them.
+pub(crate) fn finders_plausible(bin: &BitMatrix, h: &Mapper, dim: usize) -> bool {
+    let multi = module_size(h, dim).is_some_and(|m| m >= 3.0);
+    let mut bad = 0u32;
+    // Origin of each 8x8 block (separator included) and of its 7x7 finder.
+    for (bx, by, fx, fy) in [
+        (0, 0, 0, 0),
+        (dim - 8, 0, dim - 7, 0),
+        (0, dim - 8, 0, dim - 7),
+    ] {
+        for r in by..by + 8 {
+            for c in bx..bx + 8 {
+                let want = (fx..fx + 7).contains(&c)
+                    && (fy..fy + 7).contains(&r)
+                    && (c - fx).abs_diff(3).max((r - fy).abs_diff(3)) != 2;
+                match read_module(bin, h, c, r, multi) {
+                    None => return false,
+                    Some(v) => bad += u32::from(v.unwrap_or(false) != want),
+                }
+            }
+        }
+    }
+    bad <= FINDER_TOLERANCE
+}
+
 /// Samples `dim` x `dim` modules into `grid`. Returns false when too much of
-/// the symbol lies outside the image.
+/// the symbol lies outside the image, or when the timing patterns and finder
+/// corners of the grid are implausible (checked before the data area is read).
 pub(crate) fn sample_grid(
     bin: &BitMatrix,
     h: &Mapper,
@@ -280,45 +366,52 @@ pub(crate) fn sample_grid(
     grid: &mut BitMatrix,
 ) -> bool {
     grid.resize(dim, dim);
-    let (w, ht) = (bin.width() as f32, bin.height() as f32);
-    let pixel = |p: Point| -> Option<bool> {
-        (p.x >= 0.0 && p.y >= 0.0 && p.x < w && p.y < ht)
-            .then(|| bin.get(p.x as usize, p.y as usize))
-    };
     let multi = module_px >= 3.0;
-    const OFFSETS: [(f32, f32); 5] = [
-        (0.0, 0.0),
-        (-0.25, -0.25),
-        (0.25, -0.25),
-        (-0.25, 0.25),
-        (0.25, 0.25),
-    ];
+    let read = |c: usize, r: usize| read_module(bin, h, c, r, multi);
     let mut outside = 0usize;
+    let mut put = |grid: &mut BitMatrix, c: usize, r: usize| -> bool {
+        match read(c, r) {
+            None => false,
+            Some(None) => {
+                outside += 1;
+                true
+            }
+            Some(Some(dark)) => {
+                if dark {
+                    grid.set(c, r, true);
+                }
+                true
+            }
+        }
+    };
+    let early = |c: usize, r: usize| {
+        r == 6 || c == 6 || (c < 8 && (r < 8 || r >= dim - 8)) || (r < 8 && c >= dim - 8)
+    };
+    for i in 0..dim {
+        if !put(grid, i, 6) || !put(grid, 6, i) {
+            return false;
+        }
+    }
+    let (bad, total) = timing_mismatch(grid);
+    if bad * TIMING_TOLERANCE.1 > total * TIMING_TOLERANCE.0 {
+        return false;
+    }
+    for (x0, y0) in [(0, 0), (dim - 8, 0), (0, dim - 8)] {
+        for r in y0..y0 + 8 {
+            for c in x0..x0 + 8 {
+                if c != 6 && r != 6 && !put(grid, c, r) {
+                    return false;
+                }
+            }
+        }
+    }
+    if finder_mismatch(grid) > FINDER_TOLERANCE {
+        return false;
+    }
     for r in 0..dim {
         for c in 0..dim {
-            let (mx, my) = (c as f32 + 0.5, r as f32 + 0.5);
-            let Some(p) = h.map(Point::new(mx, my)) else {
+            if !early(c, r) && !put(grid, c, r) {
                 return false;
-            };
-            let Some(center) = pixel(p) else {
-                outside += 1;
-                continue;
-            };
-            let dark = if multi {
-                let mut votes = u32::from(center);
-                for (ox, oy) in &OFFSETS[1..] {
-                    if let Some(q) = h.map(Point::new(mx + ox, my + oy))
-                        && pixel(q) == Some(true)
-                    {
-                        votes += 1;
-                    }
-                }
-                votes >= 3
-            } else {
-                center
-            };
-            if dark {
-                grid.set(c, r, true);
             }
         }
     }
@@ -329,8 +422,10 @@ pub(crate) fn sample_grid(
 /// finder template (7x7 pattern in a light one-module border) with the
 /// binary image, along the module axes `ex`, `ey` (pixels per module).
 pub(crate) fn refine_finder(bin: &BitMatrix, c: Point, ex: Point, ey: Point) -> Point {
-    let score = |p: Point| -> i32 {
+    // Agreement count; gives up (returning 0) once `floor` can no longer be beaten.
+    let score = |p: Point, floor: i32| -> i32 {
         let mut s = 0;
+        let mut left = 81;
         for j in -4i32..=4 {
             for i in -4i32..=4 {
                 let r = i.abs().max(j.abs());
@@ -345,11 +440,15 @@ pub(crate) fn refine_finder(bin: &BitMatrix, c: Point, ex: Point, ey: Point) -> 
                     && (q.y as usize) < bin.height()
                     && bin.get(q.x as usize, q.y as usize);
                 s += i32::from(got == want);
+                left -= 1;
+            }
+            if s + left <= floor {
+                return 0;
             }
         }
         s
     };
-    let mut best = (score(c), c);
+    let mut best = (score(c, -1), c);
     for (span, steps) in [(0.7f32, 4i32), (0.18, 3)] {
         let center = best.1;
         let step = span / steps as f32;
@@ -360,7 +459,7 @@ pub(crate) fn refine_finder(bin: &BitMatrix, c: Point, ex: Point, ey: Point) -> 
                     center.x + a * ex.x + b * ey.x,
                     center.y + a * ex.y + b * ey.y,
                 );
-                let sc = score(p);
+                let sc = score(p, best.0);
                 if sc > best.0 {
                     best = (sc, p);
                 }
