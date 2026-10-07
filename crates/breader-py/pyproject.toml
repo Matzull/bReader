@@ -7,9 +7,12 @@ name = "breader"
 version = "0.1.0"
 description = "Fast, dependency-free barcode and QR code reader written in Rust"
 readme = "README.md"
+license = { text = "AGPL-3.0-only" }
+authors = [{ name = "Marcos Alonso" }]
 requires-python = ">=3.9"
 keywords = ["barcode", "qr", "qrcode", "ean", "code128", "gs1"]
 classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Programming Language :: Rust",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: Implementation :: CPython",

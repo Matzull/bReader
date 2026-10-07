@@ -4,6 +4,7 @@ use breader_core::{Effort, ImageView, Point, ScanOptions, Symbol};
 
 use crate::Reader;
 
+/// Scheduling parameters of a [`Tracker`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TrackerConfig {
     /// The frame is split into this many horizontal strips; one strip is
@@ -17,8 +18,11 @@ pub struct TrackerConfig {
     pub lost_after: u32,
     /// Each side of a track's bounding box grows by this fraction of its size.
     pub roi_margin: f32,
+    /// Effort for scans of the regions around live tracks.
     pub roi_effort: Effort,
+    /// Effort for the whole-frame scan (skipped when `strips` is 1).
     pub global_effort: Effort,
+    /// Effort for the rolling strip scan.
     pub full_effort: Effort,
 }
 
@@ -36,26 +40,38 @@ impl Default for TrackerConfig {
     }
 }
 
+/// A symbol followed across frames. Identity is symbology + data + position.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Track {
+    /// Unique within a tracker, assigned in increasing order.
     pub id: u64,
     /// The most recent detection, in frame coordinates.
     pub symbol: Symbol,
+    /// Index of the frame where the track appeared (0-based).
     pub first_frame: u64,
+    /// Index of the most recent frame that detected it.
     pub last_frame: u64,
+    /// Number of frames that detected it.
     pub hits: u32,
 }
 
+/// A change to the set of tracks, carrying the [`Track::id`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrackEvent {
+    /// First detection of a symbol.
     New(u64),
+    /// Detected again in this frame.
     Updated(u64),
+    /// Not seen for `lost_after` frames; the track was removed.
     Lost(u64),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Result of processing one frame.
 pub struct FrameUpdate {
+    /// What changed, in the order: detections (new/updated), then losses.
     pub events: Vec<TrackEvent>,
+    /// 0-based index of the processed frame.
     pub frame_index: u64,
 }
 
@@ -80,6 +96,7 @@ struct TestStats {
 }
 
 impl Tracker {
+    /// Creates a tracker; `options.effort` is overridden by the efforts in `config`.
     pub fn new(options: ScanOptions, config: TrackerConfig) -> Self {
         let mut readers: Vec<(Effort, Reader)> = Vec::new();
         for effort in [config.roi_effort, config.global_effort, config.full_effort] {
@@ -100,6 +117,7 @@ impl Tracker {
         }
     }
 
+    /// The configuration in use.
     pub fn config(&self) -> &TrackerConfig {
         &self.config
     }
@@ -116,6 +134,9 @@ impl Tracker {
         }
     }
 
+    /// Processes the next frame: scans around live tracks, then the global
+    /// and strip scans, matches detections to tracks and ages out lost ones.
+    /// Symbol corners in tracks and events are in frame coordinates.
     pub fn process(&mut self, frame: ImageView<'_>) -> FrameUpdate {
         let frame_index = self.frame_index;
         self.frame_index += 1;

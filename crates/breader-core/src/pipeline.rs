@@ -5,6 +5,7 @@ use crate::{
     Preprocessor, ScanOptions, Scratch, Symbol, SymbologyReader,
 };
 
+/// Collects the modules of a [`Pipeline`].
 #[derive(Default)]
 pub struct PipelineBuilder {
     preprocessors: Vec<Box<dyn Preprocessor>>,
@@ -41,6 +42,7 @@ impl std::fmt::Debug for PipelineBuilder {
 }
 
 impl PipelineBuilder {
+    /// Creates an empty builder.
     pub fn new() -> Self {
         Self::default()
     }
@@ -51,21 +53,25 @@ impl PipelineBuilder {
         self
     }
 
+    /// Adds a preprocessor; used by `Balanced` (first only) and `Exhaustive` (all).
     pub fn preprocessor(mut self, p: impl Preprocessor + 'static) -> Self {
         self.preprocessors.push(Box::new(p));
         self
     }
 
+    /// Adds a symbology reader; readers run in registration order on every pass.
     pub fn reader(mut self, r: impl SymbologyReader + 'static) -> Self {
         self.readers.push(Box::new(r));
         self
     }
 
+    /// Adds a post-processor; they run in registration order after the last pass.
     pub fn post_processor(mut self, p: impl PostProcessor + 'static) -> Self {
         self.post.push(Box::new(p));
         self
     }
 
+    /// Finishes the pipeline. Fails with [`Error::NoBinarizer`] without a binarizer.
     pub fn build(self) -> Result<Pipeline, Error> {
         if self.binarizers.is_empty() {
             return Err(Error::NoBinarizer);
@@ -79,6 +85,8 @@ impl PipelineBuilder {
     }
 }
 
+/// Immutable set of modules that turns an image into symbols.
+/// It holds no per-scan state, so one pipeline can serve many threads.
 pub struct Pipeline {
     preprocessors: Vec<Box<dyn Preprocessor>>,
     binarizers: Vec<Box<dyn Binarizer>>,
@@ -98,6 +106,7 @@ impl std::fmt::Debug for Pipeline {
 }
 
 impl Pipeline {
+    /// Same as [`PipelineBuilder::new`].
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::new()
     }
@@ -133,6 +142,8 @@ impl Pipeline {
         passes
     }
 
+    /// Scans `image` and returns the symbols found, in discovery order.
+    /// `scratch` carries reusable buffers between calls.
     pub fn scan(
         &self,
         image: ImageView<'_>,

@@ -1,6 +1,51 @@
 //! Barcode and QR code reader.
+//!
+//! Supported symbologies: QR Code, EAN-13, EAN-8, UPC-A, UPC-E, Code 128,
+//! Code 39 and Interleaved 2 of 5. GS1 element strings and character sets
+//! are interpreted by the content post-processors.
+//!
+//! The entry point is [`Reader`]: configure it with [`ScanOptions`], feed it
+//! pixels and get back [`Symbol`]s. A `Reader` keeps scratch buffers between
+//! calls, so reuse one per thread. For video use [`Tracker`].
+//!
+//! # Quick start
+//!
+//! ```
+//! use breader::{Effort, PixelFormat, Reader, ScanOptions, Symbology};
+//!
+//! let mut reader = Reader::with_options(ScanOptions::with_effort(Effort::Fast));
+//!
+//! // Any supported pixel layout; here a blank 64x48 RGB frame.
+//! let (width, height) = (64, 48);
+//! let rgb = vec![255u8; width * height * 3];
+//! let symbols = reader
+//!     .scan_pixels(&rgb, PixelFormat::Rgb8, width, height, width * 3)
+//!     .expect("buffer matches the declared geometry");
+//!
+//! for symbol in &symbols {
+//!     match symbol.symbology {
+//!         Symbology::Qr => println!("QR: {:?}", symbol.text),
+//!         other => println!("{}: {:?}", other.name(), symbol.text),
+//!     }
+//! }
+//! assert!(symbols.is_empty());
+//! ```
+//!
+//! # Cargo features
+//!
+//! - `qr`, `linear` (default): the QR and 1D readers.
+//! - `image`: `Reader::scan_file` and `FileError`, decoding PNG and JPEG with the `image` crate.
+//! - `rayon`: multi-threaded kernels and scanning with identical output. Bound
+//!   the thread count by running scans inside `rayon::ThreadPool::install`.
+//!
+//! # Extending
+//!
+//! A [`Pipeline`] is assembled from [`Preprocessor`], [`Binarizer`],
+//! [`SymbologyReader`] and [`PostProcessor`] modules; pass a custom one to
+//! [`Reader::from_pipeline`].
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 use breader_imgproc::{luma_view, to_luma};
 
@@ -17,6 +62,7 @@ pub use breader_core::{
 
 pub use breader_content::{Gs1Error, charset, gs1};
 
+/// Ready-made pipeline modules, for building custom pipelines.
 pub mod modules {
     pub use breader_content::{ContentClassifier, Dedup, TextDecoder};
     pub use breader_imgproc::{Downscale, LocalBinarizer, OtsuBinarizer};
@@ -26,6 +72,9 @@ pub mod modules {
     pub use breader_qr::QrReader;
 }
 
+/// The standard pipeline for the enabled features: local and Otsu binarizers,
+/// a 2x downscale preprocessor, the QR and linear readers, then dedup, text
+/// decoding and content classification.
 pub fn default_pipeline() -> Pipeline {
     let builder = Pipeline::builder()
         .binarizer(modules::LocalBinarizer::default())
@@ -43,6 +92,9 @@ pub fn default_pipeline() -> Pipeline {
         .expect("pipeline always has a binarizer")
 }
 
+/// Scans images with a pipeline and a set of options, reusing buffers between calls.
+///
+/// Scanning needs `&mut self`; use one `Reader` per thread.
 #[derive(Debug)]
 pub struct Reader {
     pipeline: Pipeline,
@@ -52,14 +104,17 @@ pub struct Reader {
 }
 
 impl Reader {
+    /// A reader with the default pipeline and default options.
     pub fn new() -> Self {
         Self::with_options(ScanOptions::default())
     }
 
+    /// A reader with the default pipeline and the given options.
     pub fn with_options(options: ScanOptions) -> Self {
         Self::from_pipeline(default_pipeline(), options)
     }
 
+    /// A reader over a custom pipeline.
     pub fn from_pipeline(pipeline: Pipeline, options: ScanOptions) -> Self {
         Self {
             pipeline,
@@ -69,14 +124,17 @@ impl Reader {
         }
     }
 
+    /// Current options.
     pub fn options(&self) -> &ScanOptions {
         &self.options
     }
 
+    /// Mutable options; changes apply to the next scan.
     pub fn options_mut(&mut self) -> &mut ScanOptions {
         &mut self.options
     }
 
+    /// Scans a luma image and returns the symbols found.
     pub fn scan(&mut self, image: ImageView<'_>) -> Vec<Symbol> {
         self.pipeline.scan(image, &self.options, &mut self.scratch)
     }
@@ -101,6 +159,7 @@ impl Reader {
             .scan(self.luma.view(), &self.options, &mut self.scratch))
     }
 
+    /// Decodes the image file at `path` (PNG or JPEG), converts it to luma and scans it.
     #[cfg(feature = "image")]
     pub fn scan_file(
         &mut self,
@@ -119,10 +178,13 @@ impl Default for Reader {
     }
 }
 
+/// Failure of `Reader::scan_file`.
 #[cfg(feature = "image")]
 #[derive(Debug)]
 pub enum FileError {
+    /// The file could not be read or decoded.
     Image(image::ImageError),
+    /// The decoded image was rejected (e.g. zero size).
     Core(Error),
 }
 

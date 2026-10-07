@@ -1,14 +1,19 @@
+/// 2D point in pixels; x grows to the right, y downwards.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Point {
+    /// Horizontal coordinate.
     pub x: f32,
+    /// Vertical coordinate.
     pub y: f32,
 }
 
 impl Point {
+    /// Creates a point.
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
+    /// Euclidean distance to `other`.
     pub fn distance(self, other: Self) -> f32 {
         (self.x - other.x).hypot(self.y - other.y)
     }
@@ -61,6 +66,7 @@ impl Perspective {
         Self { m }
     }
 
+    /// Inverse transform, or `None` when singular.
     pub fn inverse(&self) -> Option<Self> {
         let m = &self.m;
         let c = |r0: usize, r1: usize, c0: usize, c1: usize| {
@@ -80,7 +86,7 @@ impl Perspective {
         })
     }
 
-    /// Returns `None` for points mapped to infinity.
+    /// Applies the transform. Returns `None` for points mapped to infinity.
     pub fn map(&self, p: Point) -> Option<Point> {
         let (x, y) = (f64::from(p.x), f64::from(p.y));
         let m = &self.m;
@@ -98,14 +104,17 @@ impl Perspective {
 /// as read in the symbol's own orientation.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Quad {
+    /// The four corners, in the order described on [`Quad`].
     pub corners: [Point; 4],
 }
 
 impl Quad {
+    /// Creates a quad from its corners.
     pub const fn new(corners: [Point; 4]) -> Self {
         Self { corners }
     }
 
+    /// Mean of the four corners.
     pub fn center(&self) -> Point {
         let (sx, sy) = self
             .corners
@@ -123,6 +132,7 @@ impl Quad {
             .rem_euclid(360.0)
     }
 
+    /// Whether `p` lies inside the (convex) quad; points on an edge count as inside.
     pub fn contains(&self, p: Point) -> bool {
         let mut sign = 0i8;
         for i in 0..4 {

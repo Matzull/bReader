@@ -12,7 +12,7 @@ members = [
     "tools/video-bench",
     "tools/synth",
 ]
-exclude = ["crates/breader-py"]
+exclude = ["crates/breader-py", "fuzz"]
 default-members = [
     "crates/breader-core",
     "crates/breader-imgproc",
@@ -28,6 +28,8 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
 publish = false
+license = "AGPL-3.0-only"
+authors = ["Marcos Alonso"]
 
 [workspace.dependencies]
 breader-core = { path = "crates/breader-core" }

@@ -1,3 +1,12 @@
+//! Shared types and the scanning pipeline of breader.
+//!
+//! This crate defines the data model ([`Symbol`], [`Symbology`], [`ScanOptions`]),
+//! the image and geometry primitives, the extension traits ([`Preprocessor`],
+//! [`Binarizer`], [`SymbologyReader`], [`PostProcessor`]) and the [`Pipeline`]
+//! that runs them. It contains no symbology decoders; those live in the family
+//! crates and are assembled by the `breader` facade crate.
+
+#![warn(missing_docs)]
 #![forbid(unsafe_code)]
 
 mod bitmatrix;

@@ -1,18 +1,28 @@
+/// Barcode symbologies the library can read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
 #[repr(u8)]
 pub enum Symbology {
+    /// QR Code (Model 2).
     Qr,
+    /// EAN-13.
     Ean13,
+    /// EAN-8.
     Ean8,
+    /// UPC-A.
     UpcA,
+    /// UPC-E.
     UpcE,
+    /// Code 128, including GS1-128.
     Code128,
+    /// Code 39.
     Code39,
+    /// Interleaved 2 of 5.
     Itf,
 }
 
 impl Symbology {
+    /// Every symbology, in declaration order.
     pub const ALL: &'static [Self] = &[
         Self::Qr,
         Self::Ean13,
@@ -24,10 +34,12 @@ impl Symbology {
         Self::Itf,
     ];
 
+    /// True for 1D symbologies.
     pub const fn is_linear(self) -> bool {
         !matches!(self, Self::Qr)
     }
 
+    /// Human-readable name, e.g. "EAN-13".
     pub const fn name(self) -> &'static str {
         match self {
             Self::Qr => "QR Code",
@@ -42,32 +54,40 @@ impl Symbology {
     }
 }
 
+/// Set of [`Symbology`] values stored as a bit mask.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct SymbologySet(u64);
 
 impl SymbologySet {
+    /// The empty set.
     pub const EMPTY: Self = Self(0);
 
+    /// Every symbology.
     pub fn all() -> Self {
         Symbology::ALL.iter().copied().collect()
     }
 
+    /// The set plus `s`.
     pub const fn with(self, s: Symbology) -> Self {
         Self(self.0 | 1 << s as u8)
     }
 
+    /// Whether `s` is in the set.
     pub const fn contains(self, s: Symbology) -> bool {
         self.0 & (1 << s as u8) != 0
     }
 
+    /// Whether the two sets share a member.
     pub const fn intersects(self, other: Self) -> bool {
         self.0 & other.0 != 0
     }
 
+    /// Whether the set has no members.
     pub const fn is_empty(self) -> bool {
         self.0 == 0
     }
 
+    /// Members in declaration order.
     pub fn iter(self) -> impl Iterator<Item = Symbology> {
         Symbology::ALL
             .iter()

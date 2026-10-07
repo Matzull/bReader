@@ -197,6 +197,62 @@ Post-processors, in this order: `Dedup`, `TextDecoder`, `ContentClassifier`.
 
 Further semantic parsers (vCard, Wi-Fi, GS1 Digital Link, ...) are added as `Content` variants and classifier rules.
 
+### 3.5 Data Matrix (`breader-datamatrix`, milestone M8)
+
+Scope: ECC 200 only (ECC 000–140 are obsolete).
+- **Sizes:**
+  - square symbols from 10×10 to 144×144;
+  - rectangular symbols from 8×18 to 16×48;
+  - DMRE rectangular sizes (ISO/IEC 21471).
+- **Content:** GS1 (FNC1), ECI and Structured Append (headers are parsed).
+
+Out of scope: direct part marking. The normative source is ISO/IEC 16022 and ISO/IEC 21471.
+
+**Tests:** the `datamatrix` crate (MIT/Apache) is allowed as a dev-dependency, to encode test symbols only. Clean-room: its decoder sources are never read.
+
+The structure mirrors `breader-qr`. The modules are `spec` (size table, region layout, block layout), `place` (Annex F placement), `decode` (grid to payload), `detect`, `sample` and `reader`.
+
+`DataMatrixReader` uses the binary matrix (`uses_binary() == true`) and sets `handles_inversion() == true`. It reads both polarities through a polarity view, like the QR `Plane`. A shared view type can move to `breader-core` if both readers end up needing the same one.
+
+1. **Candidates.**
+   - The binary plane is reduced by 4×4 OR-pooling for each polarity. Connected components are labeled on the reduced plane with union–find over word-packed rows.
+   - A component is kept when:
+     - its area and its bounding-box fill are plausible (the L plus the data form a dense, nearly convex blob);
+     - its size is at least 10×10 modules at 1 px/module (that is, not tiny);
+     - its aspect ratio fits the size table.
+   - The component's boundary points in full resolution give a convex hull. A minimum-area enclosing quadrilateral (rotating calipers, then a perspective-aware corner fit from the four hull extremes) gives the candidate quad.
+   - At most 32 candidates per polarity, scaled by effort, ranked by fill and convexity.
+2. **Orientation and size.**
+   - For each side of the quad, sample a line half a module inside the edge.
+   - The two adjacent solid sides (dark ≥ 85 %) form the L. Their shared corner is the symbol's bottom-left corner.
+   - The opposite sides must alternate as clock tracks (transition agreement ≥ 75 %).
+   - The transition count along each clock side gives the module count per axis. The pair is snapped to the nearest valid size in the table (square, rectangular, DMRE); the second-nearest size is also tried.
+   - A transposed (mirrored) reading is tried when decoding fails.
+3. **Sampling.**
+   - An initial homography maps the four quad corners.
+   - Refinement: the clock-track module centers are located along both clock sides (dark/light run midpoints with sub-pixel interpolation), and the homography is refit by least squares over the L corners plus the clock centers. This handles the top-right corner, which perspective distorts the most.
+   - For multi-region symbols, the alignment patterns between data regions (two-module solid and dotted lines) are skipped by the region layout, and their positions are also used as extra fit points.
+   - Modules under 3 px are sampled at their center; larger modules use a 5-point majority.
+4. **Cheap gates** (before Reed-Solomon, like the QR gates): L solidity, clock alternation and alignment-pattern agreement on the sampled grid.
+5. **Decoding.**
+   - Remove the finder, clock and alignment patterns to obtain the mapping matrix.
+   - Extract codewords with the Annex F placement, including the four corner cases.
+   - De-interleave the blocks (the 144×144 symbol has unequal blocks).
+   - Run Reed-Solomon over GF(256) with polynomial 0x12D and first root α^1, using `breader-ecc`. Every block must succeed.
+   - Decode the encodation modes:
+     - ASCII, including digit pairs, Upper Shift and padding with its 253-state randomization check;
+     - C40 and Text, with the three shift sets;
+     - X12, EDIFACT, and Base256 with its length field and 255-state derandomization;
+     - FNC1 (first or second position, or GS inside data), ECI, macros 05/06 (header and trailer applied to `data`), Structured Append (233, parsed and recorded), and Reader Programming (234).
+   - Invalid sequences reject the symbol. Data after the end of a mode must follow the spec's unlatch rules.
+6. **Results.** `data` holds the raw bytes. `segments` gives the charset (`Eci(n)` after ECI 241, otherwise `Latin1`, which is the Data Matrix default). The new `SymbolMeta::DataMatrix(DataMatrixMeta { rows, cols, errors_corrected, mirrored, structured_append })` carries the metadata. The AIM identifiers are `]d1` (default), `]d2` (FNC1 first, GS1), `]d3` (FNC1 second), and `]d4`/`]d5`/`]d6` for the same with ECI. `ContentClassifier` already treats AIM GS1 markers; `]d2` is added to its list.
+
+Evaluation sets:
+- Dynamsoft `challenging-images` (50 Data Matrix), `skewed-datamatrix` (42) and the Data Matrix videos;
+- synth Data Matrix classes (square, rectangular, DMRE, inverted, rotated, perspective, blur, low-res).
+
+Targets: read at least as many as zxing-cpp on every set, with 0 FP.
+
 ## 4. Facade (`breader`)
 
 `Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear` (default), `image`, `rayon`.

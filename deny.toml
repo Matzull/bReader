@@ -1,0 +1,49 @@
+# cargo-deny configuration. Run: cargo deny check
+# The project is AGPL-3.0-only; every dependency license below is compatible with it.
+
+[graph]
+all-features = true
+
+[licenses]
+confidence-threshold = 0.9
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "BSL-1.0",
+    "CC0-1.0",
+    # adler2 (miniz_oxide/png checksum): permissive, MIT-like.
+    "0BSD",
+    # libfuzzer-sys, pulled in only by rav1e (AVIF) through tools/bench's
+    # `image` default features. Permissive and FSF-free; not part of the library.
+    "NCSA",
+]
+
+[licenses.private]
+# Workspace crates (publish = false) are AGPL-3.0-only themselves.
+ignore = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # Both are reachable only through tools/bench (rxing baseline engine and
+    # `image` default features), never from the shipped crates.
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained; dev tool dependency only (image -> exr -> pulp)" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser unmaintained; dev tool dependency only (rxing -> imageproc -> ab_glyph)" },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

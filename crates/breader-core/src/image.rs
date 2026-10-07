@@ -5,20 +5,24 @@ use crate::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PixelFormat {
+    /// One byte per pixel.
     Luma8,
+    /// Three bytes per pixel: R, G, B.
     Rgb8,
+    /// Four bytes per pixel: R, G, B, A.
     Rgba8,
+    /// Four bytes per pixel: B, G, R, A.
     Bgra8,
     /// Y plane followed by interleaved UV; only the Y plane is read.
     Nv12,
+    /// Like [`Nv12`](Self::Nv12) with V before U; the luma plane is identical.
     Nv21,
     /// Planar Y, U, V; only the Y plane is read.
     I420,
 }
 
 impl PixelFormat {
-    /// Bytes per pixel of the plane that is read, or `None` for formats
-    /// whose luma plane is used directly.
+    /// Bytes per pixel of the plane that is read (the luma plane for YUV formats).
     pub const fn bytes_per_pixel(self) -> usize {
         match self {
             Self::Luma8 | Self::Nv12 | Self::Nv21 | Self::I420 => 1,
@@ -27,6 +31,7 @@ impl PixelFormat {
         }
     }
 
+    /// Whether the luma plane can be scanned in place without conversion.
     pub const fn has_luma_plane(self) -> bool {
         matches!(self, Self::Luma8 | Self::Nv12 | Self::Nv21 | Self::I420)
     }
@@ -42,6 +47,9 @@ pub struct ImageView<'a> {
 }
 
 impl<'a> ImageView<'a> {
+    /// Wraps `data` as a `width` x `height` image with `stride` bytes per row.
+    /// Fails when a dimension is zero, `stride < width`, or the buffer is shorter
+    /// than `stride * (height - 1) + width`.
     pub fn new(data: &'a [u8], width: usize, height: usize, stride: usize) -> Result<Self, Error> {
         if width == 0 || height == 0 {
             return Err(Error::InvalidDimensions { width, height });
@@ -64,31 +72,38 @@ impl<'a> ImageView<'a> {
         })
     }
 
+    /// Like [`new`](Self::new) with `stride == width`.
     pub fn from_packed(data: &'a [u8], width: usize, height: usize) -> Result<Self, Error> {
         Self::new(data, width, height, width)
     }
 
+    /// Width in pixels.
     pub const fn width(&self) -> usize {
         self.width
     }
 
+    /// Height in pixels.
     pub const fn height(&self) -> usize {
         self.height
     }
 
+    /// Row pitch in bytes.
     pub const fn stride(&self) -> usize {
         self.stride
     }
 
+    /// Pixels of row `y` (exactly `width` bytes). Panics when `y >= height`.
     pub fn row(&self, y: usize) -> &'a [u8] {
         let start = y * self.stride;
         &self.data[start..start + self.width]
     }
 
+    /// Pixel at column `x`, row `y`.
     pub fn get(&self, x: usize, y: usize) -> u8 {
         self.data[y * self.stride + x]
     }
 
+    /// Iterator over all rows, top to bottom.
     pub fn rows(&self) -> impl Iterator<Item = &'a [u8]> + '_ {
         (0..self.height).map(move |y| self.row(y))
     }
@@ -123,6 +138,7 @@ pub struct ImageBuffer {
 }
 
 impl ImageBuffer {
+    /// Creates a zero-filled image.
     pub fn new(width: usize, height: usize) -> Self {
         Self {
             data: vec![0; width * height],
@@ -138,23 +154,28 @@ impl ImageBuffer {
         self.data.resize(width * height, 0);
     }
 
+    /// Width in pixels.
     pub const fn width(&self) -> usize {
         self.width
     }
 
+    /// Height in pixels.
     pub const fn height(&self) -> usize {
         self.height
     }
 
+    /// All pixels, row after row, without padding.
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         &mut self.data
     }
 
+    /// Mutable pixels of row `y`.
     pub fn row_mut(&mut self, y: usize) -> &mut [u8] {
         let start = y * self.width;
         &mut self.data[start..start + self.width]
     }
 
+    /// Borrowed view with stride equal to the width.
     pub fn view(&self) -> ImageView<'_> {
         ImageView {
             data: &self.data,

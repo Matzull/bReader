@@ -1,10 +1,30 @@
 use std::fmt;
 
+/// Errors from image validation and pipeline construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    InvalidDimensions { width: usize, height: usize },
-    InvalidStride { stride: usize, min: usize },
-    BufferTooSmall { len: usize, required: usize },
+    /// Width or height is zero.
+    InvalidDimensions {
+        /// Requested width in pixels.
+        width: usize,
+        /// Requested height in pixels.
+        height: usize,
+    },
+    /// Row stride is smaller than the row length.
+    InvalidStride {
+        /// Given stride in bytes.
+        stride: usize,
+        /// Minimum acceptable stride in bytes.
+        min: usize,
+    },
+    /// The buffer does not hold the whole image.
+    BufferTooSmall {
+        /// Buffer length in bytes.
+        len: usize,
+        /// Bytes needed for the described image.
+        required: usize,
+    },
+    /// A pipeline was built without any binarizer.
     NoBinarizer,
 }
 

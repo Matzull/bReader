@@ -5,7 +5,9 @@ use crate::{Binarizer, BitMatrix, ImageBuffer, ImageView, Preprocessor, ScanOpti
 pub struct Pass {
     /// Index into the pipeline's preprocessors; `None` = original image.
     pub preprocessor: Option<usize>,
+    /// Index into the pipeline's binarizers.
     pub binarizer: usize,
+    /// Whether the binary image is polarity-flipped (light-on-dark codes).
     pub inverted: bool,
 }
 
@@ -34,6 +36,7 @@ pub struct Scratch {
 }
 
 impl Scratch {
+    /// Creates empty scratch space.
     pub fn new() -> Self {
         Self::default()
     }
@@ -66,6 +69,7 @@ impl std::fmt::Debug for FrameContext<'_> {
 }
 
 impl<'a> FrameContext<'a> {
+    /// Starts a frame over `image`; previously cached products in `scratch` are discarded.
     pub fn new(
         image: ImageView<'a>,
         options: &'a ScanOptions,
@@ -88,14 +92,17 @@ impl<'a> FrameContext<'a> {
         }
     }
 
+    /// Options of the current scan.
     pub fn options(&self) -> &'a ScanOptions {
         self.options
     }
 
+    /// The pass currently being run.
     pub fn pass(&self) -> Pass {
         self.pass
     }
 
+    /// Selects the pass whose image and binarization the accessors return.
     pub fn set_pass(&mut self, pass: Pass) {
         self.pass = pass;
     }

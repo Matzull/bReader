@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [features]
 default = ["qr", "linear"]
@@ -26,6 +27,22 @@ image = { version = "0.25", optional = true, default-features = false, features 
 
 [dev-dependencies]
 qrcode = { version = "0.14", default-features = false }
+
+[[example]]
+name = "scan_file"
+required-features = ["image"]
+
+[[example]]
+name = "scan_raw"
+required-features = ["image"]
+
+[[example]]
+name = "tracker"
+required-features = ["image"]
+
+[[example]]
+name = "options"
+required-features = ["image"]
 
 [lints]
 workspace = true

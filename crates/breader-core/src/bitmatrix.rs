@@ -9,6 +9,7 @@ pub struct BitMatrix {
 }
 
 impl BitMatrix {
+    /// Creates a cleared matrix of `width` x `height` bits.
     pub fn new(width: usize, height: usize) -> Self {
         let mut m = Self::default();
         m.resize(width, height);
@@ -24,14 +25,17 @@ impl BitMatrix {
         self.bits.resize(self.words_per_row * height, 0);
     }
 
+    /// Width in bits.
     pub const fn width(&self) -> usize {
         self.width
     }
 
+    /// Height in bits.
     pub const fn height(&self) -> usize {
         self.height
     }
 
+    /// Bit at column `x`, row `y`. Panics (or debug-asserts) when out of range.
     #[inline]
     pub fn get(&self, x: usize, y: usize) -> bool {
         debug_assert!(x < self.width && y < self.height);
@@ -39,6 +43,7 @@ impl BitMatrix {
         (w >> (x % 64)) & 1 != 0
     }
 
+    /// Sets the bit at column `x`, row `y`.
     #[inline]
     pub fn set(&mut self, x: usize, y: usize, value: bool) {
         debug_assert!(x < self.width && y < self.height);
@@ -51,11 +56,13 @@ impl BitMatrix {
         }
     }
 
+    /// Words of row `y`; bit `x % 64` of word `x / 64` is column `x`.
     pub fn row_words(&self, y: usize) -> &[u64] {
         let start = y * self.words_per_row;
         &self.bits[start..start + self.words_per_row]
     }
 
+    /// Mutable words of row `y`. Padding bits beyond `width` must stay zero.
     pub fn row_words_mut(&mut self, y: usize) -> &mut [u64] {
         let start = y * self.words_per_row;
         &mut self.bits[start..start + self.words_per_row]
@@ -84,6 +91,7 @@ impl BitMatrix {
         }
     }
 
+    /// Becomes a copy of `other`, reusing the allocation when possible.
     pub fn copy_from(&mut self, other: &Self) {
         self.width = other.width;
         self.height = other.height;
