@@ -7,3 +7,10 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false }
+
+[[bench]]
+name = "decode"
+harness = false

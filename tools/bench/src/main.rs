@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use breader::Effort;
+use breader::{Effort, Escalation};
 use serde_json::{Value, json};
 
 use engine::{BreaderEngine, Engine};
@@ -18,7 +18,7 @@ use groundtruth::Expected;
 use matching::Stats;
 
 const USAGE: &str = "usage: bench <dataset-dir> [--engine breader|rxing|rqrr|all] \
-[--effort fast|balanced|exhaustive] [--json out.json] [--no-overrides]";
+[--effort fast|balanced|exhaustive] [--escalation all|found|stable] [--json out.json] [--no-overrides]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EngineSel {
@@ -32,6 +32,7 @@ struct Args {
     dataset: PathBuf,
     engine: EngineSel,
     effort: Effort,
+    escalation: Option<Escalation>,
     json: Option<PathBuf>,
     overrides: bool,
 }
@@ -40,6 +41,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut dataset = None;
     let mut engine = EngineSel::Breader;
     let mut effort = Effort::Balanced;
+    let mut escalation = None;
     let mut json = None;
     let mut overrides = true;
     let mut args = args;
@@ -52,6 +54,14 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
                     Some("exhaustive") => Effort::Exhaustive,
                     other => return Err(format!("invalid --effort value {other:?}")),
                 };
+            }
+            "--escalation" => {
+                escalation = Some(match args.next().as_deref() {
+                    Some("all") => Escalation::All,
+                    Some("found") => Escalation::UntilFound,
+                    Some("stable") => Escalation::UntilStable,
+                    other => return Err(format!("invalid --escalation value {other:?}")),
+                });
             }
             "--engine" => {
                 engine = match args.next().as_deref() {
@@ -73,15 +83,20 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
         dataset: dataset.ok_or("missing <dataset-dir>")?,
         engine,
         effort,
+        escalation,
         json,
         overrides,
     })
 }
 
-fn build_engines(sel: EngineSel, effort: Effort) -> Result<Vec<Box<dyn Engine>>, String> {
+fn build_engines(
+    sel: EngineSel,
+    effort: Effort,
+    escalation: Option<Escalation>,
+) -> Result<Vec<Box<dyn Engine>>, String> {
     let mut engines: Vec<Box<dyn Engine>> = Vec::new();
     if matches!(sel, EngineSel::Breader | EngineSel::All) {
-        engines.push(Box::new(BreaderEngine::new(effort)));
+        engines.push(Box::new(BreaderEngine::new(effort, escalation)));
     }
     #[cfg(feature = "baselines")]
     {
@@ -215,7 +230,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut engines = match build_engines(args.engine, args.effort) {
+    let mut engines = match build_engines(args.engine, args.effort, args.escalation) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("error: {e}\n{USAGE}");

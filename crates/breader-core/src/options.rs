@@ -12,6 +12,17 @@ pub enum Effort {
     Exhaustive,
 }
 
+/// When the pipeline stops running further passes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Escalation {
+    /// Run every pass of the effort preset.
+    All,
+    /// Stop after the first pass that ends with at least one symbol.
+    UntilFound,
+    /// Stop after a pass that adds no symbol, once at least one was found.
+    UntilStable,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EanAddonPolicy {
     #[default]
@@ -61,6 +72,8 @@ pub struct ScanOptions {
     pub effort: Effort,
     /// Overrides the effort preset when set.
     pub try_invert: Option<bool>,
+    /// Overrides the effort preset when set.
+    pub escalation: Option<Escalation>,
     /// Stop after this many symbols; 0 means unlimited.
     pub max_symbols: usize,
     /// Checked between passes; a pass in progress is never interrupted.
@@ -78,6 +91,7 @@ impl Default for ScanOptions {
             symbologies: SymbologySet::all(),
             effort: Effort::default(),
             try_invert: None,
+            escalation: None,
             max_symbols: 0,
             time_budget: None,
             min_line_agreement: 2,
@@ -99,5 +113,12 @@ impl ScanOptions {
     pub fn invert_enabled(&self) -> bool {
         self.try_invert
             .unwrap_or(!matches!(self.effort, Effort::Fast))
+    }
+
+    pub fn escalation(&self) -> Escalation {
+        self.escalation.unwrap_or(match self.effort {
+            Effort::Fast => Escalation::UntilFound,
+            Effort::Balanced | Effort::Exhaustive => Escalation::All,
+        })
     }
 }

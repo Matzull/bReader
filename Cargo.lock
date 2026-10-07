@@ -207,6 +207,9 @@ version = "0.1.0"
 [[package]]
 name = "breader-ecc"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "breader-imgproc"
@@ -228,6 +231,9 @@ name = "breader-qr"
 version = "0.1.0"
 dependencies = [
  "breader-core",
+ "breader-ecc",
+ "breader-imgproc",
+ "qrcode",
 ]
 
 [[package]]

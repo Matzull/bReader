@@ -7,6 +7,11 @@ publish.workspace = true
 
 [dependencies]
 breader-core.workspace = true
+breader-ecc.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+qrcode = { version = "0.14", default-features = false }
+breader-imgproc.workspace = true

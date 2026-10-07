@@ -1,0 +1,812 @@
+//! Finder pattern search and candidate (finder triplet) selection.
+
+use std::f32::consts::SQRT_2;
+
+use breader_core::{BitMatrix, Point};
+
+const FINDER_UNITS: [f32; 5] = [1.0, 1.0, 3.0, 1.0, 1.0];
+/// Hard cap on stored finder hits per pass.
+const ROW_TOL: f32 = 0.65;
+const MAX_FINDERS: usize = 1024;
+
+/// A confirmed finder pattern, in pass-image coordinates.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Finder {
+    pub pos: Point,
+    /// Module size estimate in pixels.
+    pub module: f32,
+    /// Chord lengths through the center (horizontal, vertical, diagonal) in
+    /// pixels; the module size follows once the symbol orientation is known.
+    chords: [f32; 3],
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Triplet {
+    pub tl: Finder,
+    pub tr: Finder,
+    pub bl: Finder,
+    /// Estimated (fractional) dimension in modules.
+    pub dim: f32,
+    pub score: f32,
+    /// Dimension agreed on by both timing patterns, 0 when unknown.
+    pub dim_hint: usize,
+    /// The third finder was inferred from a timing pattern, not detected.
+    pub synthetic: bool,
+    /// Use the parallelogram for the fourth corner (no perspective correction).
+    pub parallel: bool,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct FinderSearch {
+    edges: Vec<u32>,
+    pub finders: Vec<Finder>,
+    pub triplets: Vec<Triplet>,
+    order: Vec<usize>,
+    links: Vec<Link>,
+    incident: Vec<(usize, f32, u16)>,
+}
+
+/// Run lengths must follow `units` within `tol` units (center run twice as lenient).
+fn fits(runs: &[f32; 5], units: &[f32; 5], tol: f32) -> bool {
+    let total: f32 = runs.iter().sum();
+    let usum: f32 = units.iter().sum();
+    if total.is_nan() || total <= 0.0 {
+        return false;
+    }
+    let u = total / usum;
+    runs.iter().zip(units).all(|(r, w)| {
+        let t = if *w > 1.5 { tol * 2.0 } else { tol };
+        (r - w * u).abs() <= t * u
+    })
+}
+
+fn in_bounds(m: &BitMatrix, x: i32, y: i32) -> bool {
+    x >= 0 && y >= 0 && (x as usize) < m.width() && (y as usize) < m.height()
+}
+
+/// Counts consecutive pixels of `dark` color starting at (x, y). Returns the
+/// count and whether the walk left the image or hit `limit`.
+fn count_run(
+    m: &BitMatrix,
+    mut x: i32,
+    mut y: i32,
+    d: (i32, i32),
+    dark: bool,
+    limit: u32,
+) -> (u32, i32, i32, bool) {
+    let mut n = 0;
+    loop {
+        if !in_bounds(m, x, y) || n >= limit {
+            return (n, x, y, true);
+        }
+        if m.get(x as usize, y as usize) != dark {
+            return (n, x, y, false);
+        }
+        n += 1;
+        x += d.0;
+        y += d.1;
+    }
+}
+
+struct Line {
+    runs: [f32; 5],
+    /// Center offset from the start pixel times two (steps).
+    shift2: i32,
+}
+
+/// Measures the five runs around a dark start pixel along direction `d`.
+fn line_check(m: &BitMatrix, x: i32, y: i32, d: (i32, i32), limit: u32) -> Option<Line> {
+    if !in_bounds(m, x, y) || !m.get(x as usize, y as usize) {
+        return None;
+    }
+    let nd = (-d.0, -d.1);
+    let (cp, x1, y1, e) = count_run(m, x, y, d, true, limit);
+    if e {
+        return None;
+    }
+    let (lp, x2, y2, e) = count_run(m, x1, y1, d, false, limit);
+    if e {
+        return None;
+    }
+    let (op, _, _, e) = count_run(m, x2, y2, d, true, limit);
+    if e && op >= limit {
+        return None;
+    }
+    let (cm, x1, y1, e) = count_run(m, x - d.0, y - d.1, nd, true, limit);
+    if e {
+        return None;
+    }
+    let (lm, x2, y2, e) = count_run(m, x1, y1, nd, false, limit);
+    if e {
+        return None;
+    }
+    let (om, _, _, e) = count_run(m, x2, y2, nd, true, limit);
+    if e && om >= limit {
+        return None;
+    }
+    Some(Line {
+        runs: [om, lm, cp + cm, lp, op].map(|v| v as f32),
+        shift2: cp as i32 - cm as i32,
+    })
+}
+
+/// Scale factor between the chord through a square's center at `angle`
+/// (radians, relative to the square's axes) and its side length.
+fn chord_factor(angle: f32) -> f32 {
+    angle.cos().abs().max(angle.sin().abs())
+}
+
+fn confirm_finder(m: &BitMatrix, hx: f32, y: usize, h_total: f32) -> Option<(Point, [f32; 3])> {
+    let limit = (h_total * 1.5) as u32 + 2;
+    let (mut cx, mut cy) = (hx, y as f32 + 0.5);
+    let mut chords = [h_total, 0.0, 0.0];
+    // Alternate vertical and horizontal checks so both chords pass through
+    // the refined center.
+    for round in 0..2 {
+        let v = line_check(m, cx.floor() as i32, cy.floor() as i32, (0, 1), limit)?;
+        if !fits(&v.runs, &FINDER_UNITS, ROW_TOL + 0.1) {
+            return None;
+        }
+        cy = cy.floor() + v.shift2 as f32 / 2.0;
+        chords[1] = v.runs.iter().sum();
+        let h = line_check(m, cx.floor() as i32, cy.floor() as i32, (1, 0), limit)?;
+        if !fits(&h.runs, &FINDER_UNITS, ROW_TOL + 0.1) {
+            return None;
+        }
+        cx = cx.floor() + h.shift2 as f32 / 2.0;
+        chords[0] = h.runs.iter().sum();
+        let ratio = chords[1] / chords[0];
+        if round == 1 && !(0.6..=1.7).contains(&ratio) {
+            return None;
+        }
+    }
+    let d = line_check(m, cx.floor() as i32, cy.floor() as i32, (1, 1), limit)?;
+    if !fits(&d.runs, &FINDER_UNITS, ROW_TOL + 0.3) {
+        return None;
+    }
+    chords[2] = d.runs.iter().sum::<f32>() * SQRT_2;
+    Some((Point::new(cx, cy), chords))
+}
+
+impl FinderSearch {
+    /// Scans every `row_step`-th row of the binary image for finder patterns.
+    pub fn find_finders(&mut self, m: &BitMatrix, row_step: usize) {
+        self.finders.clear();
+        let step = row_step.max(1);
+        let mut y = step / 2;
+        while y < m.height() {
+            self.scan_row(m, y);
+            y += step;
+        }
+    }
+
+    fn scan_row(&mut self, m: &BitMatrix, y: usize) {
+        let width = m.width();
+        let mut edges = std::mem::take(&mut self.edges);
+        edges.clear();
+        let words = m.row_words(y);
+        let mut prev = words.first().map_or(0, |w| w & 1);
+        for (wi, &wd) in words.iter().enumerate() {
+            let mut t = wd ^ ((wd << 1) | prev);
+            prev = wd >> 63;
+            while t != 0 {
+                let pos = wi * 64 + t.trailing_zeros() as usize;
+                if pos >= width {
+                    break;
+                }
+                edges.push(pos as u32);
+                t &= t - 1;
+            }
+        }
+        let n_runs = edges.len() + 1;
+        let bound = |k: usize| -> u32 {
+            if k == 0 {
+                0
+            } else if k <= edges.len() {
+                edges[k - 1]
+            } else {
+                width as u32
+            }
+        };
+        let mut i = usize::from(!m.get(0, y));
+        while i + 4 < n_runs {
+            let b = [
+                bound(i),
+                bound(i + 1),
+                bound(i + 2),
+                bound(i + 3),
+                bound(i + 4),
+                bound(i + 5),
+            ];
+            let runs = [
+                (b[1] - b[0]) as f32,
+                (b[2] - b[1]) as f32,
+                (b[3] - b[2]) as f32,
+                (b[4] - b[3]) as f32,
+                (b[5] - b[4]) as f32,
+            ];
+            if fits(&runs, &FINDER_UNITS, ROW_TOL) {
+                let hx = (b[2] + b[3]) as f32 / 2.0;
+                let h_total = (b[5] - b[0]) as f32;
+                self.add_hit(m, hx, y, h_total);
+            }
+            i += 2;
+        }
+        self.edges = edges;
+    }
+
+    fn add_hit(&mut self, m: &BitMatrix, hx: f32, y: usize, h_total: f32) {
+        let yf = y as f32 + 0.5;
+        for f in &mut self.finders {
+            if (hx - f.pos.x).abs() < f.module * 2.5 && (yf - f.pos.y).abs() < f.module * 2.5 {
+                f.count += 1;
+                return;
+            }
+        }
+        if self.finders.len() >= MAX_FINDERS {
+            return;
+        }
+        let Some((pos, chords)) = confirm_finder(m, hx, y, h_total) else {
+            return;
+        };
+        let reach = chords.iter().copied().fold(f32::MAX, f32::min) / 7.0 * 3.5;
+        for f in &mut self.finders {
+            if f.pos.distance(pos) < reach.max(f.module * 3.5) {
+                let n = f.count as f32;
+                f.pos = Point::new(
+                    (f.pos.x * n + pos.x) / (n + 1.0),
+                    (f.pos.y * n + pos.y) / (n + 1.0),
+                );
+                for (c, new) in f.chords.iter_mut().zip(chords) {
+                    *c = (*c * n + new) / (n + 1.0);
+                }
+                f.module = f.chords.iter().copied().fold(f32::MAX, f32::min) / 7.0;
+                f.count += 1;
+                return;
+            }
+        }
+        self.finders.push(Finder {
+            pos,
+            module: chords.iter().copied().fold(f32::MAX, f32::min) / 7.0,
+            chords,
+            count: 1,
+        });
+    }
+
+    /// Builds candidate triplets from the strongest `max_finders` finders,
+    /// best score first. Finder pairs are kept only when the timing pattern
+    /// between them alternates, so triplets are not formed across symbols.
+    pub fn select_triplets(&mut self, m: &BitMatrix, max_finders: usize, row_step: usize) {
+        self.triplets.clear();
+        let strength = |f: &Finder| f.count as f32 * row_step as f32 / (7.0 * f.module.max(0.5));
+        self.order.clear();
+        self.order.extend(0..self.finders.len());
+        let fs = &self.finders;
+        self.order
+            .sort_by(|&a, &b| strength(&fs[b]).total_cmp(&strength(&fs[a])));
+        self.order.truncate(max_finders);
+        let n = self.order.len();
+        self.links.clear();
+        // Few finders: strong perspective is worth the extra false pairs.
+        let relaxed = n <= RELAXED_MAX_FINDERS;
+        for i in 0..n {
+            for j in i + 1..n {
+                let (a, b) = (&self.finders[self.order[i]], &self.finders[self.order[j]]);
+                if let Some(l) = link(m, a, b, i, j, relaxed)
+                    && (l.score >= 0.75 || n <= UNVERIFIED_LINK_MAX_FINDERS)
+                {
+                    self.links.push(l);
+                }
+            }
+        }
+        // Per finder: its strongest links, as the corner of a triplet.
+        self.incident.clear();
+        for corner in 0..n {
+            self.incident.clear();
+            self.incident.extend(
+                self.links
+                    .iter()
+                    .filter(|l| l.a == corner || l.b == corner)
+                    .map(|l| (if l.a == corner { l.b } else { l.a }, l.score, l.dim)),
+            );
+            self.incident.sort_by(|x, y| y.1.total_cmp(&x.1));
+            self.incident.truncate(MAX_LINKS_PER_FINDER);
+            for p in 0..self.incident.len() {
+                for q in p + 1..self.incident.len() {
+                    let (ip, sp, dp) = self.incident[p];
+                    let (iq, sq, dq) = self.incident[q];
+                    let (c, a, b) = (
+                        &self.finders[self.order[corner]],
+                        &self.finders[self.order[ip]],
+                        &self.finders[self.order[iq]],
+                    );
+                    let st = strength(a) + strength(b) + strength(c);
+                    if let Some(t) = make_triplet(c, a, b, st, (sp, sq), (dp, dq), relaxed) {
+                        self.triplets.push(t);
+                    }
+                }
+            }
+        }
+        self.add_recovered_triplets(n);
+        self.triplets.sort_by(|a, b| a.score.total_cmp(&b.score));
+    }
+
+    /// A verified timing pattern between two finders locates the third one
+    /// even when it is too damaged to be detected; such triplets rank after
+    /// real ones.
+    fn add_recovered_triplets(&mut self, n: usize) {
+        for li in 0..self.links.len() {
+            let l = self.links[li];
+            if l.score < 0.75 || l.dim == 0 || l.side == 0 || l.a >= n || l.b >= n {
+                continue;
+            }
+            let (fa, fb) = (self.finders[self.order[l.a]], self.finders[self.order[l.b]]);
+            let (dx, dy) = (fb.pos.x - fa.pos.x, fb.pos.y - fa.pos.y);
+            let side = f32::from(l.side);
+            // Perpendicular of the a->b direction on the symbol side.
+            let (px, py) = (-dy * side, dx * side);
+            for (corner, other) in [(fa, fb), (fb, fa)] {
+                let c = Point::new(corner.pos.x + px, corner.pos.y + py);
+                let near = self
+                    .finders
+                    .iter()
+                    .any(|f| f.pos.distance(c) < 2.0 * corner.module.max(1.0));
+                if near {
+                    continue;
+                }
+                let synth = Finder {
+                    pos: c,
+                    count: 1,
+                    ..corner
+                };
+                if let Some(mut t) = make_triplet(
+                    &corner,
+                    &other,
+                    &synth,
+                    0.0,
+                    (l.score, l.score),
+                    (l.dim, l.dim),
+                    n <= RELAXED_MAX_FINDERS,
+                ) {
+                    t.score += 1.5;
+                    t.synthetic = true;
+                    self.triplets.push(t);
+                }
+            }
+        }
+    }
+}
+
+/// Finder pair whose connecting timing pattern was verified.
+#[derive(Debug, Clone, Copy)]
+struct Link {
+    a: usize,
+    b: usize,
+    /// Fraction of matching timing modules (0.5 when too small to check).
+    score: f32,
+    /// Dimension that matched best, 0 when unknown.
+    dim: u16,
+    /// Which side of the line the symbol body lies on (+1 / -1), 0 unknown.
+    side: i8,
+}
+
+const RELAXED_MAX_FINDERS: usize = 60;
+const MAX_LINKS_PER_FINDER: usize = 8;
+/// With few finders, pairs without a verified timing pattern stay candidates
+/// (strong perspective or blur can break the check).
+const UNVERIFIED_LINK_MAX_FINDERS: usize = 40;
+
+fn pixel_dark(m: &BitMatrix, p: Point) -> bool {
+    p.x >= 0.0
+        && p.y >= 0.0
+        && (p.x as usize) < m.width()
+        && (p.y as usize) < m.height()
+        && m.get(p.x as usize, p.y as usize)
+}
+
+/// Cheap pre-check of the first modules of a timing line next to a finder
+/// (finder edge, separator, first timing modules) at fixed offsets.
+fn timing_end_ok(m: &BitMatrix, from: Point, u: Point, perp: Point, module: f32) -> bool {
+    const EXPECT: [(f32, bool); 6] = [
+        (0.0, true),
+        (3.0, true),
+        (4.0, false),
+        (5.0, true),
+        (6.0, false),
+        (7.0, true),
+    ];
+    let mut ok = 0;
+    for (off, dark) in EXPECT {
+        let mut votes = 0;
+        for jitter in [2.7f32, 3.0, 3.3] {
+            let p = Point::new(
+                from.x + (u.x * off + perp.x * jitter) * module,
+                from.y + (u.y * off + perp.y * jitter) * module,
+            );
+            votes += usize::from(pixel_dark(m, p));
+        }
+        ok += usize::from((votes >= 2) == dark);
+    }
+    ok >= 4
+}
+
+/// Verifies the timing pattern between two finders by walking the line along
+/// it (three modules inside the symbol edge) and checking the run structure:
+/// finder edge, separator, alternating unit modules, separator, finder edge.
+/// The unit run count gives the dimension independently of the module size
+/// estimate, and tolerates the foreshortening of perspective.
+fn link(
+    m: &BitMatrix,
+    a: &Finder,
+    b: &Finder,
+    ia: usize,
+    ib: usize,
+    relaxed: bool,
+) -> Option<Link> {
+    let dist = a.pos.distance(b.pos);
+    if dist <= 0.0 {
+        return None;
+    }
+    // The line between two finders of one symbol is a symbol axis.
+    let theta = (b.pos.y - a.pos.y).atan2(b.pos.x - a.pos.x);
+    let (ma, mb) = (module_at(a, theta), module_at(b, theta));
+    if ma <= 0.0 || mb <= 0.0 || ma.max(mb) / ma.min(mb) > if relaxed { 3.2 } else { 1.9 } {
+        return None;
+    }
+    let module = (ma + mb) / 2.0;
+    let est = dist / module + 7.0;
+    if !(19.0..=185.0).contains(&est) {
+        return None;
+    }
+    let unchecked = Link {
+        a: ia,
+        b: ib,
+        score: 0.5,
+        dim: 0,
+        side: 0,
+    };
+    if module < 1.3 {
+        return Some(unchecked);
+    }
+    const MAX_STEPS: usize = 1024;
+    let u = Point::new((b.pos.x - a.pos.x) / dist, (b.pos.y - a.pos.y) / dist);
+    let steps = ((dist / (0.25 * module).max(0.6)).ceil() as usize).clamp(8, MAX_STEPS - 1);
+    let mut best = Link {
+        score: 0.0,
+        ..unchecked
+    };
+    let step_px = dist / steps as f32;
+    let mut colors = [false; MAX_STEPS];
+    let mut widths = [0.0f32; 256];
+    for side in [-1.0f32, 1.0] {
+        let perp = Point::new(-u.y * side, u.x * side);
+        if !timing_end_ok(m, a.pos, u, perp, ma)
+            || !timing_end_ok(m, b.pos, Point::new(-u.x, -u.y), perp, mb)
+        {
+            continue;
+        }
+        let p0 = Point::new(a.pos.x + perp.x * 3.0 * ma, a.pos.y + perp.y * 3.0 * ma);
+        let p1 = Point::new(b.pos.x + perp.x * 3.0 * mb, b.pos.y + perp.y * 3.0 * mb);
+        for (k, c) in colors[..=steps].iter_mut().enumerate() {
+            let t = k as f32 / steps as f32;
+            *c = pixel_dark(
+                m,
+                Point::new(p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t),
+            );
+        }
+        // Majority filter against single-sample glitches.
+        let raw = colors;
+        for k in 1..steps {
+            colors[k] =
+                usize::from(raw[k - 1]) + usize::from(raw[k]) + usize::from(raw[k + 1]) >= 2;
+        }
+        // Run lengths between the first and last dark runs.
+        let mut n_int = 0usize;
+        let mut len = 1usize;
+        let mut seen_first = false;
+        let mut overflow = false;
+        for k in 1..=steps {
+            if colors[k] == colors[k - 1] && k < steps {
+                len += 1;
+                continue;
+            }
+            if colors[k] == colors[k - 1] {
+                len += 1;
+            }
+            // A run ended at k (or the line ended).
+            let run_dark = colors[k - 1];
+            if !seen_first {
+                if !run_dark {
+                    // Must start inside the finder edge.
+                    overflow = true;
+                    break;
+                }
+                seen_first = true;
+            } else if n_int < widths.len() {
+                // Width relative to the module size expected at this spot
+                // (interpolated between the two ends: perspective).
+                let mid = (k as f32 - len as f32 / 2.0) / steps as f32;
+                let expected = (ma + (mb - ma) * mid) / step_px;
+                widths[n_int] = len as f32 / expected.max(0.1);
+                n_int += 1;
+            } else {
+                overflow = true;
+                break;
+            }
+            len = 1;
+        }
+        // The final run is the last finder edge (dark): drop it again.
+        if overflow || n_int < 6 || !colors[steps] {
+            continue;
+        }
+        let interior = &mut widths[..n_int - 1];
+        let n_unit = interior.len();
+        interior.sort_unstable_by(f32::total_cmp);
+        let median = interior[n_unit / 2];
+        let ok = interior
+            .iter()
+            .filter(|w| **w >= 0.5 * median && **w <= 1.9 * median)
+            .count();
+        let d_run = n_unit + 14;
+        let valid = d_run % 4 == 1 && (21..=177).contains(&d_run);
+        let slack = if relaxed {
+            0.5 * est + 6.0
+        } else {
+            0.25 * est + 4.0
+        };
+        let consistent = (d_run as f32 - est).abs() <= slack;
+        let mut score = ok as f32 / n_unit as f32;
+        if !consistent {
+            score *= 0.5;
+        }
+        if !valid {
+            score *= 0.85;
+        }
+        if score > best.score {
+            best = Link {
+                score,
+                dim: if valid && consistent { d_run as u16 } else { 0 },
+                side: side as i8,
+                ..unchecked
+            };
+        }
+    }
+    Some(best)
+}
+
+fn module_at(f: &Finder, theta: f32) -> f32 {
+    let fh = chord_factor(theta);
+    let fd = chord_factor(theta - std::f32::consts::FRAC_PI_4);
+    (f.chords[0] * fh + f.chords[1] * fh + f.chords[2] * fd) / 21.0
+}
+
+fn make_triplet(
+    corner: &Finder,
+    p: &Finder,
+    q: &Finder,
+    strength: f32,
+    (sp, sq): (f32, f32),
+    (dp, dq): (u16, u16),
+    relaxed: bool,
+) -> Option<Triplet> {
+    let (v1, v2) = (
+        (p.pos.x - corner.pos.x, p.pos.y - corner.pos.y),
+        (q.pos.x - corner.pos.x, q.pos.y - corner.pos.y),
+    );
+    let (l1, l2) = (v1.0.hypot(v1.1), v2.0.hypot(v2.1));
+    if l1 <= 0.0 || l2 <= 0.0 {
+        return None;
+    }
+    let leg_ratio = l1.max(l2) / l1.min(l2);
+    let cos = (v1.0 * v2.0 + v1.1 * v2.1) / (l1 * l2);
+    // Both timing patterns agreeing on the dimension tolerates strong perspective.
+    let hinted = relaxed && dp == dq && dp != 0;
+    let (max_leg, max_cos, max_mod) = if hinted {
+        (3.0, 0.8, 3.2)
+    } else {
+        (1.6, 0.5, 1.6)
+    };
+    if leg_ratio > max_leg || cos.abs() > max_cos {
+        return None;
+    }
+    let cross = v1.0 * v2.1 - v1.1 * v2.0;
+    let ((tr, str_, dtr), (bl, sbl, dbl)) = if cross > 0.0 {
+        ((p, sp, dp), (q, sq, dq))
+    } else {
+        ((q, sq, dq), (p, sp, dp))
+    };
+    let theta = (tr.pos.y - corner.pos.y).atan2(tr.pos.x - corner.pos.x);
+    let mut tl = *corner;
+    let (mut tr, mut bl) = (*tr, *bl);
+    for f in [&mut tl, &mut tr, &mut bl] {
+        f.module = module_at(f, theta);
+    }
+    let mods = [tl.module, tr.module, bl.module];
+    let mx = mods.iter().copied().fold(0.0, f32::max);
+    let mn = mods.iter().copied().fold(f32::MAX, f32::min);
+    if mn <= 0.0 || mx / mn > max_mod {
+        return None;
+    }
+    let d1 = tl.pos.distance(tr.pos) / ((tl.module + tr.module) / 2.0) + 7.0;
+    let d2 = tl.pos.distance(bl.pos) / ((tl.module + bl.module) / 2.0) + 7.0;
+    let dim = if hinted {
+        f32::from(dp)
+    } else {
+        (d1 + d2) / 2.0
+    };
+    if !hinted && (!(19.0..=185.0).contains(&dim) || (d1 - d2).abs() > 0.2 * dim) {
+        return None;
+    }
+    let score =
+        cos.abs() * 2.0 + (leg_ratio.ln()).abs() + (mx / mn).ln() + (d1 - d2).abs() / dim * 3.0
+            - 0.3 * strength.min(3.0)
+            - 2.0 * (str_ + sbl);
+    Some(Triplet {
+        tl,
+        tr,
+        bl,
+        dim,
+        score,
+        dim_hint: if dtr == dbl && dtr != 0 {
+            usize::from(dtr)
+        } else {
+            0
+        },
+        synthetic: false,
+        parallel: false,
+    })
+}
+
+/// Valid dimensions near the fractional estimate, closest first.
+pub(crate) fn candidate_dims(dim: f32) -> ([usize; 3], usize) {
+    let k = ((dim - 1.0) / 4.0).round();
+    let base = (k * 4.0 + 1.0).clamp(21.0, 177.0) as usize;
+    let other = if dim > base as f32 {
+        [base + 4, base.wrapping_sub(4)]
+    } else {
+        [base.wrapping_sub(4), base + 4]
+    };
+    let mut out = [base, 0, 0];
+    let mut n = 1;
+    for d in other {
+        if (21..=177).contains(&d) {
+            out[n] = d;
+            n += 1;
+        }
+    }
+    (out, n)
+}
+
+/// Mean unit of the inner light-dark-light runs when they look like the
+/// center of an alignment pattern; the outer dark runs only need to exist
+/// because neighbouring data modules may extend them.
+fn alignment_unit(runs: &[f32; 5], module: f32) -> bool {
+    let u = (runs[1] + runs[2] + runs[3]) / 3.0;
+    u >= module * 0.6
+        && u <= module * 1.7
+        && runs[1..4].iter().all(|r| (r - u).abs() <= 0.5 * u)
+        && runs[0] >= 0.5 * u
+        && runs[4] >= 0.5 * u
+}
+
+/// Checks the 5x5 module pattern around `c` (dark ring, light ring, dark
+/// center) along the module axes `ex`, `ey` (pixels per module).
+fn verify_alignment(m: &BitMatrix, c: Point, ex: Point, ey: Point) -> usize {
+    let mut bad = 0;
+    for j in -2i32..=2 {
+        for i in -2i32..=2 {
+            let x = c.x + i as f32 * ex.x + j as f32 * ey.x;
+            let y = c.y + i as f32 * ex.y + j as f32 * ey.y;
+            let want = i.abs().max(j.abs()) != 1;
+            let got = x >= 0.0
+                && y >= 0.0
+                && (x as usize) < m.width()
+                && (y as usize) < m.height()
+                && m.get(x as usize, y as usize);
+            bad += usize::from(got != want);
+        }
+    }
+    bad
+}
+
+/// Looks for an alignment pattern center near `pred` (within `radius`
+/// pixels). `ex`/`ey` are the module axes in pixels.
+pub(crate) fn find_alignment(
+    m: &BitMatrix,
+    scratch: &mut Vec<u32>,
+    pred: Point,
+    (ex, ey): (Point, Point),
+    radius: f32,
+) -> Option<Point> {
+    let module = (ex.x.hypot(ex.y) + ey.x.hypot(ey.y)) / 2.0;
+    let margin = module * 3.5;
+    let x0 = ((pred.x - radius - margin).floor().max(0.0)) as usize;
+    let x1 = ((pred.x + radius + margin).ceil().max(0.0) as usize).min(m.width());
+    let y0 = ((pred.y - radius).floor().max(0.0)) as usize;
+    let y1 = ((pred.y + radius).ceil().max(0.0) as usize).min(m.height());
+    if x1 <= x0 + 5 || y1 <= y0 {
+        return None;
+    }
+    // (sum x, sum y, hits)
+    let mut cands = [(0.0f32, 0.0f32, 0u32); 32];
+    let mut nc = 0;
+    for y in y0..y1 {
+        scratch.clear();
+        let mut prev = m.get(x0, y);
+        for x in x0 + 1..x1 {
+            let cur = m.get(x, y);
+            if cur != prev {
+                scratch.push(x as u32);
+                prev = cur;
+            }
+        }
+        let first_dark = m.get(x0, y);
+        let n_runs = scratch.len() + 1;
+        let bound = |k: usize| -> u32 {
+            if k == 0 {
+                x0 as u32
+            } else if k <= scratch.len() {
+                scratch[k - 1]
+            } else {
+                x1 as u32
+            }
+        };
+        let mut i = usize::from(!first_dark);
+        while i + 4 < n_runs {
+            let b = [
+                bound(i),
+                bound(i + 1),
+                bound(i + 2),
+                bound(i + 3),
+                bound(i + 4),
+                bound(i + 5),
+            ];
+            i += 2;
+            let runs = [
+                (b[1] - b[0]) as f32,
+                (b[2] - b[1]) as f32,
+                (b[3] - b[2]) as f32,
+                (b[4] - b[3]) as f32,
+                (b[5] - b[4]) as f32,
+            ];
+            if !alignment_unit(&runs, module) {
+                continue;
+            }
+            let pos = Point::new((b[2] + b[3]) as f32 / 2.0, y as f32 + 0.5);
+            if pos.distance(pred) > radius + module {
+                continue;
+            }
+            let slot = cands[..nc].iter().position(|c| {
+                let n = c.2 as f32;
+                Point::new(c.0 / n, c.1 / n).distance(pos) < module * 1.5
+            });
+            match slot {
+                Some(s) => {
+                    cands[s].0 += pos.x;
+                    cands[s].1 += pos.y;
+                    cands[s].2 += 1;
+                }
+                None if nc < cands.len() => {
+                    cands[nc] = (pos.x, pos.y, 1);
+                    nc += 1;
+                }
+                None => {}
+            }
+        }
+    }
+    let mut best: Option<(f32, Point)> = None;
+    for c in &cands[..nc] {
+        let n = c.2 as f32;
+        let p = Point::new(c.0 / n, c.1 / n);
+        let bad = verify_alignment(m, p, ex, ey);
+        if bad > 3 || p.distance(pred) > radius {
+            continue;
+        }
+        let score = bad as f32 * module * 2.0 + p.distance(pred);
+        if best.is_none_or(|b| score < b.0) {
+            best = Some((score, p));
+        }
+    }
+    best.map(|b| b.1)
+}

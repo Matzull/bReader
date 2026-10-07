@@ -1,8 +1,8 @@
 use std::time::Instant;
 
 use crate::{
-    Binarizer, Effort, Error, FrameContext, ImageView, Pass, PostProcessor, Preprocessor,
-    ScanOptions, Scratch, Symbol, SymbologyReader,
+    Binarizer, Effort, Error, Escalation, FrameContext, ImageView, Pass, PostProcessor,
+    Preprocessor, ScanOptions, Scratch, Symbol, SymbologyReader,
 };
 
 #[derive(Default)]
@@ -156,6 +156,7 @@ impl Pipeline {
             .collect();
 
         let mut gray_done: Vec<(Option<usize>, bool)> = Vec::new();
+        let mut found = 0;
         for pass in self.passes(options) {
             if options.time_budget.is_some_and(|b| start.elapsed() >= b) {
                 break;
@@ -177,6 +178,15 @@ impl Pipeline {
             symbols.retain(|s| options.symbologies.contains(s.symbology));
             if options.max_symbols != 0 && symbols.len() >= options.max_symbols {
                 symbols.truncate(options.max_symbols);
+                break;
+            }
+            let found_before = std::mem::replace(&mut found, symbols.len());
+            let stop = match options.escalation() {
+                Escalation::All => false,
+                Escalation::UntilFound => found > 0,
+                Escalation::UntilStable => found > 0 && found == found_before,
+            };
+            if stop {
                 break;
             }
         }

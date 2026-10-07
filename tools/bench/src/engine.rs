@@ -1,4 +1,4 @@
-use breader::{Effort, ImageView, Reader, ScanOptions, Symbology};
+use breader::{Effort, Escalation, ImageView, Reader, ScanOptions, Symbology};
 use image::GrayImage;
 
 #[cfg(feature = "baselines")]
@@ -19,9 +19,13 @@ pub struct BreaderEngine {
 }
 
 impl BreaderEngine {
-    pub fn new(effort: Effort) -> Self {
+    pub fn new(effort: Effort, escalation: Option<Escalation>) -> Self {
+        let options = ScanOptions {
+            escalation,
+            ..ScanOptions::with_effort(effort)
+        };
         Self {
-            reader: Reader::with_options(ScanOptions::with_effort(effort)),
+            reader: Reader::with_options(options),
         }
     }
 }

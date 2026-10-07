@@ -6,9 +6,9 @@ use breader_imgproc::{luma_view, to_luma};
 
 pub use breader_core::{
     Binarizer, BitMatrix, Code39Options, Content, Detector, EanAddonPolicy, EcLevel, Effort, Error,
-    FrameContext, Gs1Element, ImageBuffer, ImageView, ItfOptions, LinearMeta, Pass, Pipeline,
-    PipelineBuilder, PixelFormat, Point, PostProcessor, Preprocessor, QrMeta, Quad, Reject,
-    ScanOptions, Scratch, Symbol, SymbolDecoder, SymbolMeta, Symbology, SymbologyReader,
+    Escalation, FrameContext, Gs1Element, ImageBuffer, ImageView, ItfOptions, LinearMeta, Pass,
+    Pipeline, PipelineBuilder, PixelFormat, Point, PostProcessor, Preprocessor, QrMeta, Quad,
+    Reject, ScanOptions, Scratch, Symbol, SymbolDecoder, SymbolMeta, Symbology, SymbologyReader,
     SymbologySet,
 };
 

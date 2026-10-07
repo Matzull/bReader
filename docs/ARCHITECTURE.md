@@ -135,11 +135,18 @@ EAN/UPC specifics: EAN-13 encodes its first digit in the L/G parity of the left 
 
 ### 3.2 QR (`breader-qr`)
 
-1. Finder pattern candidates from the binary matrix (1:1:3:1:1 run ratio along rows, confirmed vertically and diagonally), clustered.
-2. Triplet selection by geometry (right angle, similar module size), estimated version, alignment pattern search for v ≥ 2.
-3. Perspective transform from the four reference points; grid sampling with local refinement.
-4. Format and version information (BCH), unmasking, codeword extraction, de-interleaving, Reed-Solomon (`breader-ecc`), bitstream decoding with ECI.
-5. Mirrored read retried when format information fails.
+`QrReader` uses the binarized pass image (`uses_binary() == true`) and runs on every pass; inverted passes cover light-on-dark symbols.
+
+Modules: `detect` (finder patterns, triplets), `alignment` (Annex E table), `sample` (homography and grid sampling), `spec` (dimensions, block layouts), `decode` (grid → payload), `reader` (orchestration).
+
+1. **Finder patterns** — rows of the binary matrix are scanned with a step of 3 / 2 / 1 rows (Fast / Balanced / Exhaustive) for the dark-light-dark-light-dark ratio 1:1:3:1:1, with tolerance per run: unit runs in [0.5, 1.5]·u, the center run in [2, 4]·u. Each hit is cross-checked vertically and along one diagonal through its center; the center is refined to the mean of the horizontal and vertical estimates, and the module size is their mean. Hits whose centers fall within one finder width of each other are merged, and the number of confirmations is kept.
+2. **Triplets** — among the strongest finders (at most 30), triples are kept when their module sizes agree (max/min ≤ 1.6), the angle at the corner finder is in [60°, 120°], and the two legs differ by at most a factor of 1.6. The corner finder is top-left. Top-right and bottom-left are assigned from the sign of the cross product. A mirrored symbol therefore produces a transposed grid, which the decoder handles. The estimated dimension is `(|TL−TR| + |TL−BL|) / (2·module) + 7`, rounded to the nearest `4k + 1`. Triplets are tried best-score first. A finder may be reused if the triplet that claimed it failed to decode.
+3. **Fourth point** — for version ≥ 2, the bottom-right alignment pattern is searched near its predicted position: the parallelogram prediction moved 3 modules inward, within a window of ±4 modules. The search looks for a dark-light-dark 1:1:1 center with module size consistent with the finders. If it is found, a homography maps the module coordinates (3.5, 3.5), (d−3.5, 3.5), (3.5, d−3.5) and (d−6.5, d−6.5) to the image; otherwise the parallelogram (affine) estimate is used.
+4. **Sampling** — module centers are mapped through the homography. Modules under 3 px are read at the center; larger modules take the majority of 5 sub-samples. When version ≥ 7, the version information read from the first sampling overrides the estimate, and the grid is resampled. If decoding fails, dimensions ±4 are tried.
+5. **Decoding** — format information (BCH (15,5), both copies, nearest valid word with distance ≤ 3), version information (BCH (18,6), distance ≤ 3), unmasking, codeword placement, de-interleaving per the block layout, Reed-Solomon on every block (`breader-ecc`), and the bitstream (numeric, alphanumeric, byte, kanji, ECI, FNC1 in first and second position; Structured Append headers are parsed and ignored). If format information fails, the transposed grid is tried (mirrored symbol). Any block failing RS rejects the symbol.
+6. **Results** — the quad maps module corners (0,0), (d,0), (d,d), (0,d) to the image, scaled to original-frame coordinates. Candidates whose center falls inside a symbol already decoded in this frame are skipped. `QrMeta` records version, level, mask, corrected errors, ECI and mirroring. The AIM identifier follows ISO/IEC 15424: `]Q1` by default, `]Q2` with ECI, `]Q3`/`]Q4` with FNC1 in first position (without/with ECI), and `]Q5`/`]Q6` with FNC1 in second position.
+
+Later improvements, driven by the benchmarks: piecewise homographies over all alignment patterns for large versions, grayscale sampling, and recovery of a missing finder from two finders plus timing patterns.
 
 ### 3.3 Error correction (`breader-ecc`)
 
