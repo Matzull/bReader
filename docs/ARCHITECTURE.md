@@ -201,9 +201,34 @@ Further semantic parsers (vCard, Wi-Fi, GS1 Digital Link, ...) are added as `Con
 
 `Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear` (default), `image`, `rayon`.
 
-## 5. Planned extensions
+## 5. Performance plan (M7)
 
-- **Video tracking**: a `Tracker` wrapping `Reader` keeps symbols from previous frames, scans their neighborhoods first and stabilizes results across frames. Lives outside the per-frame pipeline so the core stays stateless.
-- **Parallelism** (`rayon`): parallel scanlines and parallel candidate decoding within a pass; results merged deterministically.
-- **SIMD**: binarization and luma conversion kernels with scalar fallback (NFR-9).
+Measured on 2026-10-07 on a Ryzen 5 5500U, single thread, in ms per image:
+
+| | challenging (3 MP) | synth (1.1 MP) |
+|---|---|---|
+| Balanced, all | 60.4 | 17.3 |
+| Balanced, 1D only | 41.3 | 9.8 |
+| Balanced, QR only | 23.9 | 9.4 |
+| Fast, all | 10.9 | 2.7 |
+| Fast, QR only | 8.6 | 2.3 |
+| Local binarizer / Otsu / downscale ×2 | 6.9 / 3.7 / 4.8 | 2.0 / 2.4 / 1.8 |
+
+Work items, in priority order. Each must keep read counts and 0 FP unchanged.
+
+1. **Image kernels** (`breader-imgproc`). Luma conversion, Otsu, local binarizer and downscale are at about 2 ns/px; the target is ≤ 0.5 ns/px. Rewrite them to be autovectorization-friendly first: row-wise passes, integer arithmetic, no bounds checks in inner loops. Explicit SIMD (`std::arch`, AVX2 / NEON with runtime detection and a scalar fallback) is allowed only in a `simd` module with one `unsafe` block per kernel, each tested against the scalar version (NFR-9). Downscale ×2 gets a specialized path.
+2. **1D in Balanced**:
+   - Non-axis scanlines step with fixed-point DDA and nearest or linear sampling, instead of bilinear sampling with floats.
+   - The smoothed edge detector runs only on lines whose unsmoothed pass produced a partial match (start pattern found, decode failed).
+   - Measure the read contribution of the downscaled variant for 1D, and keep it only if it adds reads.
+3. **QR polarity sharing**: `QrReader::handles_inversion() == true`. The finder search detects both polarities from one run-length pass over the binary matrix, candidates carry their polarity, and sampling XORs it. This removes the inverted copy and the second finder scan.
+4. **Parallelism** (`rayon` feature): image variants and binarizations are computed in parallel; inside a pass, 1D scanline chunks and QR candidates are processed in parallel. Results are merged in a fixed order so output stays deterministic (NFR-3). Single-threaded remains the default.
+5. **Video tracker** (`breader::Tracker`, wraps a `Reader`):
+   - **Each frame:** scans the regions of symbols from recent frames first, using a cropped `ImageView` with the quad expanded by 50 %, at full effort for those regions. It then runs a Fast global scan, followed by a Balanced global scan every N frames (configurable, default 10) or when nothing is tracked.
+   - **Tracks:** each holds symbology, data, last quad, first and last frame seen, and hit count. A track is reported as `New`, `Updated` or `Lost` (not seen for K frames, default 5).
+   - **Output:** stable symbols across frames, which avoids the flicker of per-frame results.
+   - **Validation:** the Dynamsoft `video-based-testing` set, with code sets per video taken from its CSVs. The metrics are time to first read, the fraction of each video's codes ever read, FPs, and per-frame latency.
+
+## 6. Planned extensions
+
 - **More symbologies**: Data Matrix, PDF417, Aztec as new `SymbologyReader` crates reusing the cached binarizations.

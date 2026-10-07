@@ -92,6 +92,25 @@ impl<'a> ImageView<'a> {
     pub fn rows(&self) -> impl Iterator<Item = &'a [u8]> + '_ {
         (0..self.height).map(move |y| self.row(y))
     }
+
+    /// Zero-copy sub-rectangle, clipped to the image. `None` when the
+    /// clipped rectangle is empty.
+    pub fn crop(&self, x: usize, y: usize, width: usize, height: usize) -> Option<ImageView<'a>> {
+        let x1 = x.saturating_add(width).min(self.width);
+        let y1 = y.saturating_add(height).min(self.height);
+        if x >= x1 || y >= y1 {
+            return None;
+        }
+        let (w, h) = (x1 - x, y1 - y);
+        let start = y * self.stride + x;
+        let end = (y1 - 1) * self.stride + x1;
+        Some(ImageView {
+            data: &self.data[start..end],
+            width: w,
+            height: h,
+            stride: self.stride,
+        })
+    }
 }
 
 /// Owned, tightly packed 8-bit luma image; reused across frames to avoid
@@ -171,5 +190,21 @@ mod tests {
         let v = ImageView::new(&buf, 2, 2, 3).unwrap();
         assert_eq!(v.row(1), &[3, 4]);
         assert_eq!(v.get(1, 0), 2);
+    }
+
+    #[test]
+    fn crop_is_clipped_and_zero_copy() {
+        let buf: Vec<u8> = (0..60).collect();
+        let img = ImageView::new(&buf, 5, 6, 10).unwrap();
+        let c = img.crop(2, 1, 10, 2).unwrap();
+        assert_eq!((c.width(), c.height(), c.stride()), (3, 2, 10));
+        assert_eq!(c.row(0), &[12, 13, 14]);
+        assert_eq!(c.row(1), &[22, 23, 24]);
+        assert!(img.crop(5, 0, 1, 1).is_none());
+        assert!(img.crop(0, 6, 1, 1).is_none());
+        assert!(img.crop(0, 0, 0, 1).is_none());
+        let full = img.crop(0, 0, usize::MAX, usize::MAX).unwrap();
+        assert_eq!((full.width(), full.height()), (5, 6));
+        assert_eq!(full.get(4, 5), 54);
     }
 }
