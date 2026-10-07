@@ -6,10 +6,13 @@ use crate::Reader;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TrackerConfig {
-    /// A full-effort global scan runs every this many frames.
-    pub full_scan_interval: u32,
-    /// Same, while nothing is tracked; 1 scans at full effort every empty frame.
-    pub idle_scan_interval: u32,
+    /// The frame is split into this many horizontal strips; one strip is
+    /// scanned at `full_effort` per frame, cycling. 1 scans the whole frame
+    /// at `full_effort` every frame and skips the global scan.
+    pub strips: u32,
+    /// Extra strip height as a fraction of the strip height, split evenly
+    /// between top and bottom.
+    pub strip_overlap: f32,
     /// A track is lost when it has not been seen for this many frames.
     pub lost_after: u32,
     /// Each side of a track's bounding box grows by this fraction of its size.
@@ -22,8 +25,8 @@ pub struct TrackerConfig {
 impl Default for TrackerConfig {
     fn default() -> Self {
         Self {
-            full_scan_interval: 4,
-            idle_scan_interval: 1,
+            strips: 3,
+            strip_overlap: 0.5,
             lost_after: 5,
             roi_margin: 0.5,
             roi_effort: Effort::Balanced,
@@ -64,7 +67,6 @@ pub struct Tracker {
     tracks: Vec<Track>,
     frame_index: u64,
     next_id: u64,
-    since_full: u32,
     #[cfg(test)]
     stats: TestStats,
 }
@@ -74,7 +76,7 @@ pub struct Tracker {
 struct TestStats {
     roi_scans: u32,
     global_scans: u32,
-    full_scans: u32,
+    strip_scans: u32,
 }
 
 impl Tracker {
@@ -93,7 +95,6 @@ impl Tracker {
             tracks: Vec::new(),
             frame_index: 0,
             next_id: 0,
-            since_full: 0,
             #[cfg(test)]
             stats: TestStats::default(),
         }
@@ -140,31 +141,27 @@ impl Tracker {
             }
         }
 
-        let interval = if self.tracks.is_empty() {
-            self.config
-                .idle_scan_interval
-                .min(self.config.full_scan_interval)
-        } else {
-            self.config.full_scan_interval
-        };
-        let full = self.since_full + 1 >= interval;
-        let effort = if full {
-            self.since_full = 0;
-            #[cfg(test)]
-            {
-                self.stats.full_scans += 1;
-            }
-            self.config.full_effort
-        } else {
-            self.since_full += 1;
+        let strips = self.config.strips.max(1) as usize;
+        if strips > 1 {
             #[cfg(test)]
             {
                 self.stats.global_scans += 1;
             }
-            self.config.global_effort
-        };
-        for s in self.scan(effort, frame) {
-            push_unique(&mut detections, s);
+            for s in self.scan(self.config.global_effort, frame) {
+                push_unique(&mut detections, s);
+            }
+        }
+        let index = (frame_index % strips as u64) as usize;
+        let (y, h) = strip_rows(frame.height(), strips, index, self.config.strip_overlap);
+        if let Some(view) = frame.crop(0, y, frame.width(), h) {
+            #[cfg(test)]
+            {
+                self.stats.strip_scans += 1;
+            }
+            for mut s in self.scan(self.config.full_effort, view) {
+                offset(&mut s, 0.0, y as f32);
+                push_unique(&mut detections, s);
+            }
         }
 
         let mut events = Vec::new();
@@ -234,6 +231,15 @@ impl Tracker {
         }
         out
     }
+}
+
+/// First row and height of strip `index` of `strips`, grown by `overlap`.
+fn strip_rows(height: usize, strips: usize, index: usize, overlap: f32) -> (usize, usize) {
+    let sh = height as f32 / strips as f32;
+    let pad = sh * overlap.max(0.0) / 2.0;
+    let y0 = (index as f32 * sh - pad).floor().max(0.0);
+    let y1 = (((index + 1) as f32) * sh + pad).ceil().min(height as f32);
+    (y0 as usize, (y1 - y0).max(1.0) as usize)
 }
 
 fn diagonal(s: &Symbol) -> f32 {
@@ -350,7 +356,15 @@ mod tests {
         assert_eq!(t.tracks()[0].hits, 12);
         assert_eq!(t.tracks()[0].symbol.symbology, Symbology::Qr);
         assert!(t.stats.roi_scans >= 10, "{}", t.stats.roi_scans);
-        assert!(t.stats.global_scans > 0 && t.stats.full_scans > 0);
+        assert!(t.stats.global_scans > 0 && t.stats.strip_scans == 12);
+    }
+
+    #[test]
+    fn strips_cover_the_frame_with_overlap() {
+        assert_eq!(strip_rows(300, 3, 0, 0.5), (0, 125));
+        assert_eq!(strip_rows(300, 3, 1, 0.5), (75, 150));
+        assert_eq!(strip_rows(300, 3, 2, 0.5), (175, 125));
+        assert_eq!(strip_rows(300, 1, 0, 0.5), (0, 300));
     }
 
     #[test]
@@ -393,7 +407,7 @@ mod tests {
     #[test]
     fn roi_only_frame_keeps_track_without_global_help() {
         let config = TrackerConfig {
-            full_scan_interval: 1000,
+            strips: 1,
             ..TrackerConfig::default()
         };
         let mut t = Tracker::new(ScanOptions::default(), config);

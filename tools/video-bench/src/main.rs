@@ -19,7 +19,7 @@ use metrics::{Acc, Key, Report};
 
 const USAGE: &str = "usage: video-bench <dataset-dir> [--engines tracker,fast,balanced] \
 [--filter substr] [--max-frames N] [--json out.json] [--verbose] \
-[--interval N] [--idle N] [--lost N] [--margin F] [--roi-effort E] [--global-effort E] [--full-effort E]";
+[--strips N] [--overlap F] [--lost N] [--margin F] [--roi-effort E] [--global-effort E] [--full-effort E]";
 
 struct Args {
     dataset: PathBuf,
@@ -74,8 +74,8 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--max-frames" => a.max_frames = Some(num(args.next(), "--max-frames")?),
             "--json" => a.json = args.next().map(PathBuf::from),
             "--verbose" => a.verbose = true,
-            "--interval" => a.config.full_scan_interval = num(args.next(), "--interval")?,
-            "--idle" => a.config.idle_scan_interval = num(args.next(), "--idle")?,
+            "--strips" => a.config.strips = num(args.next(), "--strips")?,
+            "--overlap" => a.config.strip_overlap = num(args.next(), "--overlap")?,
             "--lost" => a.config.lost_after = num(args.next(), "--lost")?,
             "--margin" => a.config.roi_margin = num(args.next(), "--margin")?,
             "--roi-effort" => a.config.roi_effort = effort(args.next())?,
