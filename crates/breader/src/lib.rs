@@ -53,11 +53,11 @@ mod tracker;
 pub use tracker::{FrameUpdate, Track, TrackEvent, Tracker, TrackerConfig};
 
 pub use breader_core::{
-    Binarizer, BitMatrix, Charset, Code39Options, Content, DataSegment, Detector, EanAddonPolicy,
-    EcLevel, Effort, Error, Escalation, FrameContext, Gs1Element, ImageBuffer, ImageView,
-    ItfOptions, LinearMeta, Pass, Pipeline, PipelineBuilder, PixelFormat, Point, PostProcessor,
-    Preprocessor, QrMeta, Quad, Reject, ScanOptions, Scratch, Symbol, SymbolDecoder, SymbolMeta,
-    Symbology, SymbologyReader, SymbologySet,
+    Binarizer, BitMatrix, Charset, Code39Options, Content, DataMatrixMeta, DataSegment, Detector,
+    EanAddonPolicy, EcLevel, Effort, Error, Escalation, FrameContext, Gs1Element, ImageBuffer,
+    ImageView, ItfOptions, LinearMeta, Pass, Pipeline, PipelineBuilder, PixelFormat, Point,
+    PostProcessor, Preprocessor, QrMeta, Quad, Reject, ScanOptions, Scratch, Symbol, SymbolDecoder,
+    SymbolMeta, Symbology, SymbologyReader, SymbologySet,
 };
 
 pub use breader_content::{Gs1Error, charset, gs1};

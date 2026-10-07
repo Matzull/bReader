@@ -6,6 +6,7 @@ members = [
     "crates/breader-ecc",
     "crates/breader-linear",
     "crates/breader-qr",
+    "crates/breader-datamatrix",
     "crates/breader-content",
     "crates/breader",
     "tools/bench",
@@ -19,6 +20,7 @@ default-members = [
     "crates/breader-ecc",
     "crates/breader-linear",
     "crates/breader-qr",
+    "crates/breader-datamatrix",
     "crates/breader-content",
     "crates/breader",
 ]
@@ -37,6 +39,7 @@ breader-imgproc = { path = "crates/breader-imgproc" }
 breader-ecc = { path = "crates/breader-ecc" }
 breader-linear = { path = "crates/breader-linear" }
 breader-qr = { path = "crates/breader-qr" }
+breader-datamatrix = { path = "crates/breader-datamatrix" }
 breader-content = { path = "crates/breader-content" }
 breader = { path = "crates/breader" }
 

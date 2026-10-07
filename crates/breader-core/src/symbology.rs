@@ -19,6 +19,8 @@ pub enum Symbology {
     Code39,
     /// Interleaved 2 of 5.
     Itf,
+    /// Data Matrix ECC 200, including rectangular and DMRE sizes.
+    DataMatrix,
 }
 
 impl Symbology {
@@ -32,6 +34,7 @@ impl Symbology {
         Self::Code128,
         Self::Code39,
         Self::Itf,
+        Self::DataMatrix,
     ];
 
     /// True for 1D symbologies.
@@ -50,6 +53,7 @@ impl Symbology {
             Self::Code128 => "Code 128",
             Self::Code39 => "Code 39",
             Self::Itf => "ITF",
+            Self::DataMatrix => "Data Matrix",
         }
     }
 }

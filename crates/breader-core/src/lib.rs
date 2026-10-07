@@ -33,6 +33,7 @@ pub use module::{
 pub use options::{Code39Options, EanAddonPolicy, Effort, Escalation, ItfOptions, ScanOptions};
 pub use pipeline::{Pipeline, PipelineBuilder};
 pub use symbol::{
-    Charset, Content, DataSegment, EcLevel, Gs1Element, LinearMeta, QrMeta, Symbol, SymbolMeta,
+    Charset, Content, DataMatrixMeta, DataSegment, EcLevel, Gs1Element, LinearMeta, QrMeta, Symbol,
+    SymbolMeta,
 };
 pub use symbology::{Symbology, SymbologySet};

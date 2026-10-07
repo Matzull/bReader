@@ -88,6 +88,25 @@ pub enum SymbolMeta {
     Qr(QrMeta),
     /// 1D symbology details.
     Linear(LinearMeta),
+    /// Data Matrix details.
+    DataMatrix(DataMatrixMeta),
+}
+
+/// Details of a decoded Data Matrix symbol.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataMatrixMeta {
+    /// Symbol height in modules, including the finder and clock patterns.
+    pub rows: u16,
+    /// Symbol width in modules, including the finder and clock patterns.
+    pub cols: u16,
+    /// Codewords changed by Reed-Solomon correction, summed over all blocks.
+    pub errors_corrected: u32,
+    /// The symbol was read mirrored (transposed).
+    pub mirrored: bool,
+    /// ECI designators in order of appearance.
+    pub eci: Vec<u32>,
+    /// Structured Append: (position, total, file id) when present; position and total are 1-based.
+    pub structured_append: Option<(u8, u8, u16)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
