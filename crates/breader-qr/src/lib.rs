@@ -6,6 +6,7 @@ mod alignment;
 mod check;
 mod decode;
 mod detect;
+mod plane;
 mod reader;
 mod sample;
 mod spec;

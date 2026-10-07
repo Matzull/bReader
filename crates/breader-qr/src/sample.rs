@@ -2,6 +2,8 @@
 
 use breader_core::{BitMatrix, Perspective, Point};
 
+use crate::plane::Plane;
+
 use crate::alignment::alignment_centers;
 
 use crate::check::{finder_mismatch, timing_mismatch};
@@ -280,7 +282,7 @@ const FINDER_TOLERANCE: u32 = 48;
 /// the module lies outside the image. Large modules take the majority of
 /// five sub-samples.
 fn read_module(
-    bin: &BitMatrix,
+    bin: Plane<'_>,
     h: &Mapper,
     c: usize,
     r: usize,
@@ -313,7 +315,7 @@ fn read_module(
 
 /// Cheap test of a dimension hypothesis: the timing patterns between the
 /// finders must alternate under the mapping.
-pub(crate) fn timing_plausible(bin: &BitMatrix, h: &Mapper, dim: usize) -> bool {
+pub(crate) fn timing_plausible(bin: Plane<'_>, h: &Mapper, dim: usize) -> bool {
     let multi = module_size(h, dim).is_some_and(|m| m >= 3.0);
     let mut bad = 0u32;
     for i in 8..dim - 8 {
@@ -331,7 +333,7 @@ pub(crate) fn timing_plausible(bin: &BitMatrix, h: &Mapper, dim: usize) -> bool 
 
 /// Cheap test of a mapping: the finder patterns and their separators must
 /// appear where the mapping puts them.
-pub(crate) fn finders_plausible(bin: &BitMatrix, h: &Mapper, dim: usize) -> bool {
+pub(crate) fn finders_plausible(bin: Plane<'_>, h: &Mapper, dim: usize) -> bool {
     let multi = module_size(h, dim).is_some_and(|m| m >= 3.0);
     let mut bad = 0u32;
     // Origin of each 8x8 block (separator included) and of its 7x7 finder.
@@ -359,7 +361,7 @@ pub(crate) fn finders_plausible(bin: &BitMatrix, h: &Mapper, dim: usize) -> bool
 /// the symbol lies outside the image, or when the timing patterns and finder
 /// corners of the grid are implausible (checked before the data area is read).
 pub(crate) fn sample_grid(
-    bin: &BitMatrix,
+    bin: Plane<'_>,
     h: &Mapper,
     dim: usize,
     module_px: f32,
@@ -421,7 +423,7 @@ pub(crate) fn sample_grid(
 /// Sub-module refinement of a finder center: maximizes agreement of the 9x9
 /// finder template (7x7 pattern in a light one-module border) with the
 /// binary image, along the module axes `ex`, `ey` (pixels per module).
-pub(crate) fn refine_finder(bin: &BitMatrix, c: Point, ex: Point, ey: Point) -> Point {
+pub(crate) fn refine_finder(bin: Plane<'_>, c: Point, ex: Point, ey: Point) -> Point {
     // Agreement count; gives up (returning 0) once `floor` can no longer be beaten.
     let score = |p: Point, floor: i32| -> i32 {
         let mut s = 0;

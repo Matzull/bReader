@@ -7,6 +7,7 @@ use breader_core::{
 
 use super::*;
 use crate::detect::FinderSearch;
+use crate::plane::Plane;
 
 mod render;
 use render::{Modules, Render, make_modules, similarity_quad, threshold};
@@ -41,8 +42,17 @@ fn payload(version: i16) -> Vec<u8> {
 
 /// Detects, samples at the best triplet and returns the grid.
 fn sample_best(bin: &BitMatrix, expect_dim: usize) -> Option<(BitMatrix, Triplet)> {
+    sample_best_in(bin, false, expect_dim)
+}
+
+fn sample_best_in(
+    raw: &BitMatrix,
+    inverted: bool,
+    expect_dim: usize,
+) -> Option<(BitMatrix, Triplet)> {
+    let bin = Plane::new(raw, inverted);
     let mut s = FinderSearch::default();
-    s.find_finders(bin, 1);
+    s.find_finders(raw, 1);
     s.select_triplets(bin, 30, 1);
     let t = *s.triplets.iter().find(|t| {
         let (dims, n) = candidate_dims(t.dim);
@@ -109,7 +119,7 @@ fn finders_and_triplet_clean() {
             let bin = threshold(&img, r.w, r.h);
             let mut s = FinderSearch::default();
             s.find_finders(&bin, 1);
-            s.select_triplets(&bin, 30, 1);
+            s.select_triplets(Plane::new(&bin, false), 30, 1);
             let t = s
                 .triplets
                 .first()
@@ -343,7 +353,8 @@ fn end_to_end_mirrored_inverted_blurred() {
     let (_, r, img) = render_case(5, 4.0, 20.0, 1, false);
     let inv: Vec<u8> = img.iter().map(|p| 255 - p).collect();
     assert_eq!(scan_one(&inv, r.w, r.h, Effort::Balanced).len(), 1);
-    assert!(scan_one(&inv, r.w, r.h, Effort::Fast).is_empty());
+    // Polarity is shared: even Fast reads the inverted symbol.
+    assert_eq!(scan_one(&inv, r.w, r.h, Effort::Fast).len(), 1);
     assert_eq!(scan_one(&img, r.w, r.h, Effort::Fast).len(), 1);
 }
 
@@ -382,4 +393,82 @@ fn end_to_end_two_symbols_and_skip() {
     assert_eq!(found.len(), 2);
     QrReader.scan(&mut ctx, &mut found);
     assert_eq!(found.len(), 2);
+}
+
+#[test]
+fn reader_handles_inversion_itself() {
+    assert!(QrReader.handles_inversion());
+}
+
+#[test]
+fn inverted_symbols_sample_to_dark_grid() {
+    for version in [1, 2, 7, 25] {
+        for deg in [0.0, 37.0, 120.0] {
+            let (m, r, img) = render_case(version, 4.0, deg, 0, false);
+            let inv: Vec<u8> = img.iter().map(|p| 255 - p).collect();
+            let bin = threshold(&inv, r.w, r.h);
+            let (grid, t) = sample_best_in(&bin, true, m.dim)
+                .unwrap_or_else(|| panic!("v{version} {deg} no sample"));
+            assert!(t.tl.inv && t.tr.inv && t.bl.inv);
+            let a = agreement(&grid, &m, false);
+            assert!(a >= 0.995, "v{version} deg{deg}: agreement {a}");
+        }
+    }
+}
+
+#[test]
+fn finder_search_tags_polarity() {
+    let (_, r, img) = render_case(3, 4.0, 10.0, 0, false);
+    let inv: Vec<u8> = img.iter().map(|p| 255 - p).collect();
+    for (luma, expect_inv) in [(&img, false), (&inv, true)] {
+        let bin = threshold(luma, r.w, r.h);
+        let mut s = FinderSearch::default();
+        s.find_finders(&bin, 1);
+        let strong: Vec<_> = s.finders.iter().filter(|f| f.count >= 3).collect();
+        assert!(strong.len() >= 3);
+        assert!(strong.iter().all(|f| f.inv == expect_inv));
+    }
+}
+
+/// One normal and one inverted symbol side by side.
+fn mixed_image() -> (Vec<u8>, usize, usize) {
+    let a = make_modules(3, b"NORMAL");
+    let b = make_modules(4, b"INVERTED");
+    let (w, h) = (400usize, 200usize);
+    let mut img = vec![255u8; w * h];
+    for (m, cx, invert) in [(&a, 90.0, false), (&b, 300.0, true)] {
+        let r = Render {
+            w,
+            h,
+            quad: similarity_quad(m.dim, Point::new(cx, 100.0), 4.0, 8.0),
+            mirrored: false,
+            blur: 0,
+            invert,
+        };
+        let drawn = r.draw(m);
+        // Each symbol keeps its own half of the frame (and quiet zone).
+        for y in 0..h {
+            for x in 0..w {
+                if (x < w / 2) != invert {
+                    img[y * w + x] = drawn[y * w + x];
+                }
+            }
+        }
+    }
+    (img, w, h)
+}
+
+#[test]
+fn mixed_polarity_found_in_every_effort() {
+    let (img, w, h) = mixed_image();
+    for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+        let out = scan_one(&img, w, h, effort);
+        let mut data: Vec<_> = out.iter().map(|s| s.data.clone()).collect();
+        data.sort();
+        assert_eq!(
+            data,
+            [b"INVERTED".to_vec(), b"NORMAL".to_vec()],
+            "{effort:?}"
+        );
+    }
 }

@@ -4,6 +4,8 @@ use std::f32::consts::SQRT_2;
 
 use breader_core::{BitMatrix, Point};
 
+use crate::plane::Plane;
+
 const FINDER_UNITS: [f32; 5] = [1.0, 1.0, 3.0, 1.0, 1.0];
 /// Hard cap on stored finder hits per pass.
 const ROW_TOL: f32 = 0.65;
@@ -20,6 +22,8 @@ pub(crate) struct Finder {
     /// pixels; the module size follows once the symbol orientation is known.
     chords: [f32; 3],
     pub count: u32,
+    /// Light-on-dark symbol: the pattern was found in the inverted plane.
+    pub inv: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -78,14 +82,14 @@ fn finder_ratio(runs: &[u32; 5], tol_pct: u32) -> bool {
     })
 }
 
-fn in_bounds(m: &BitMatrix, x: i32, y: i32) -> bool {
+fn in_bounds(m: Plane<'_>, x: i32, y: i32) -> bool {
     x >= 0 && y >= 0 && (x as usize) < m.width() && (y as usize) < m.height()
 }
 
 /// Counts consecutive pixels of `dark` color starting at (x, y). Returns the
 /// count and whether the walk left the image or hit `limit`.
 fn count_run(
-    m: &BitMatrix,
+    m: Plane<'_>,
     mut x: i32,
     mut y: i32,
     d: (i32, i32),
@@ -113,7 +117,7 @@ struct Line {
 }
 
 /// Measures the five runs around a dark start pixel along direction `d`.
-fn line_check(m: &BitMatrix, x: i32, y: i32, d: (i32, i32), limit: u32) -> Option<Line> {
+fn line_check(m: Plane<'_>, x: i32, y: i32, d: (i32, i32), limit: u32) -> Option<Line> {
     if !in_bounds(m, x, y) || !m.get(x as usize, y as usize) {
         return None;
     }
@@ -148,7 +152,7 @@ fn line_check(m: &BitMatrix, x: i32, y: i32, d: (i32, i32), limit: u32) -> Optio
     })
 }
 
-fn confirm_finder(m: &BitMatrix, hx: f32, y: usize, h_total: f32) -> Option<(Point, [f32; 3])> {
+fn confirm_finder(m: Plane<'_>, hx: f32, y: usize, h_total: f32) -> Option<(Point, [f32; 3])> {
     let limit = (h_total * 1.5) as u32 + 2;
     let (mut cx, mut cy) = (hx, y as f32 + 0.5);
     let mut chords = [h_total, 0.0, 0.0];
@@ -219,43 +223,54 @@ impl FinderSearch {
         }
         bounds.push(width as u32);
         // Run k spans bounds[k]..bounds[k + 1]; run 0 is dark when pixel 0 is.
-        let first = usize::from(!m.get(0, y));
-        for b in bounds.windows(6).skip(first).step_by(2) {
-            let runs = [
-                b[1] - b[0],
-                b[2] - b[1],
-                b[3] - b[2],
-                b[4] - b[3],
-                b[5] - b[4],
-            ];
-            if finder_ratio(&runs, ROW_TOL_PERCENT) {
-                let hx = (b[2] + b[3]) as f32 / 2.0;
-                let h_total = (b[5] - b[0]) as f32;
-                self.add_hit(m, hx, y, h_total);
+        // A dark-on-light finder starts on a dark run, a light-on-dark one on
+        // a light run; both are tested against the same run boundaries.
+        let first_dark = usize::from(!m.get(0, y));
+        for inv in [false, true] {
+            let first = first_dark ^ usize::from(inv);
+            for b in bounds.windows(6).skip(first).step_by(2) {
+                let runs = [
+                    b[1] - b[0],
+                    b[2] - b[1],
+                    b[3] - b[2],
+                    b[4] - b[3],
+                    b[5] - b[4],
+                ];
+                if finder_ratio(&runs, ROW_TOL_PERCENT) {
+                    let hx = (b[2] + b[3]) as f32 / 2.0;
+                    let h_total = (b[5] - b[0]) as f32;
+                    self.add_hit(Plane::new(m, inv), hx, y, h_total);
+                }
             }
         }
         self.edges = bounds;
     }
 
-    fn add_hit(&mut self, m: &BitMatrix, hx: f32, y: usize, h_total: f32) {
+    fn add_hit(&mut self, plane: Plane<'_>, hx: f32, y: usize, h_total: f32) {
+        let inv = plane.inverted();
         let yf = y as f32 + 0.5;
         for &i in &self.recent {
             let f = &mut self.finders[i];
-            if (hx - f.pos.x).abs() < f.module * 2.5 && (yf - f.pos.y).abs() < f.module * 2.5 {
+            if f.inv == inv
+                && (hx - f.pos.x).abs() < f.module * 2.5
+                && (yf - f.pos.y).abs() < f.module * 2.5
+            {
                 f.count += 1;
                 return;
             }
         }
-        if self.finders.len() >= MAX_FINDERS {
+        if self.finders.len() >= MAX_FINDERS
+            && self.finders.iter().filter(|f| f.inv == inv).count() >= MAX_FINDERS
+        {
             return;
         }
-        let Some((pos, chords)) = confirm_finder(m, hx, y, h_total) else {
+        let Some((pos, chords)) = confirm_finder(plane, hx, y, h_total) else {
             return;
         };
         let reach = chords.iter().copied().fold(f32::MAX, f32::min) / 7.0 * 3.5;
         for &i in &self.recent {
             let f = &mut self.finders[i];
-            if f.pos.distance(pos) < reach.max(f.module * 3.5) {
+            if f.inv == inv && f.pos.distance(pos) < reach.max(f.module * 3.5) {
                 let n = f.count as f32;
                 f.pos = Point::new(
                     (f.pos.x * n + pos.x) / (n + 1.0),
@@ -278,17 +293,20 @@ impl FinderSearch {
             module,
             chords,
             count: 1,
+            inv,
         });
     }
 
     /// Builds candidate triplets from the strongest `max_finders` finders,
     /// best score first. Finder pairs are kept only when the timing pattern
     /// between them alternates, so triplets are not formed across symbols.
-    pub fn select_triplets(&mut self, m: &BitMatrix, max_finders: usize, row_step: usize) {
+    pub fn select_triplets(&mut self, m: Plane<'_>, max_finders: usize, row_step: usize) {
+        let inv = m.inverted();
         self.triplets.clear();
         let strength = |f: &Finder| f.count as f32 * row_step as f32 / (7.0 * f.module.max(0.5));
         self.order.clear();
-        self.order.extend(0..self.finders.len());
+        self.order
+            .extend((0..self.finders.len()).filter(|&i| self.finders[i].inv == inv));
         let fs = &self.finders;
         self.order
             .sort_by(|&a, &b| strength(&fs[b]).total_cmp(&strength(&fs[a])));
@@ -355,10 +373,9 @@ impl FinderSearch {
             let (px, py) = (-dy * side, dx * side);
             for (corner, other) in [(fa, fb), (fb, fa)] {
                 let c = Point::new(corner.pos.x + px, corner.pos.y + py);
-                let near = self
-                    .finders
-                    .iter()
-                    .any(|f| f.pos.distance(c) < 2.0 * corner.module.max(1.0));
+                let near = self.finders.iter().any(|f| {
+                    f.inv == corner.inv && f.pos.distance(c) < 2.0 * corner.module.max(1.0)
+                });
                 if near {
                     continue;
                 }
@@ -404,7 +421,7 @@ const MAX_LINKS_PER_FINDER: usize = 8;
 /// (strong perspective or blur can break the check).
 const UNVERIFIED_LINK_MAX_FINDERS: usize = 40;
 
-fn pixel_dark(m: &BitMatrix, p: Point) -> bool {
+fn pixel_dark(m: Plane<'_>, p: Point) -> bool {
     p.x >= 0.0
         && p.y >= 0.0
         && (p.x as usize) < m.width()
@@ -414,7 +431,7 @@ fn pixel_dark(m: &BitMatrix, p: Point) -> bool {
 
 /// Cheap pre-check of the first modules of a timing line next to a finder
 /// (finder edge, separator, first timing modules) at fixed offsets.
-fn timing_end_ok(m: &BitMatrix, from: Point, u: Point, perp: Point, module: f32) -> bool {
+fn timing_end_ok(m: Plane<'_>, from: Point, u: Point, perp: Point, module: f32) -> bool {
     const EXPECT: [(f32, bool); 6] = [
         (0.0, true),
         (3.0, true),
@@ -448,14 +465,7 @@ fn timing_end_ok(m: &BitMatrix, from: Point, u: Point, perp: Point, module: f32)
 /// finder edge, separator, alternating unit modules, separator, finder edge.
 /// The unit run count gives the dimension independently of the module size
 /// estimate, and tolerates the foreshortening of perspective.
-fn link(
-    m: &BitMatrix,
-    a: &Finder,
-    b: &Finder,
-    ia: usize,
-    ib: usize,
-    relaxed: bool,
-) -> Option<Link> {
+fn link(m: Plane<'_>, a: &Finder, b: &Finder, ia: usize, ib: usize, relaxed: bool) -> Option<Link> {
     let dist = a.pos.distance(b.pos);
     if dist <= 0.0 {
         return None;
@@ -723,7 +733,7 @@ fn alignment_unit(runs: &[f32; 5], module: f32) -> bool {
 
 /// Checks the 5x5 module pattern around `c` (dark ring, light ring, dark
 /// center) along the module axes `ex`, `ey` (pixels per module).
-fn verify_alignment(m: &BitMatrix, c: Point, ex: Point, ey: Point) -> usize {
+fn verify_alignment(m: Plane<'_>, c: Point, ex: Point, ey: Point) -> usize {
     let mut bad = 0;
     for j in -2i32..=2 {
         for i in -2i32..=2 {
@@ -767,7 +777,7 @@ fn window_edges(m: &BitMatrix, y: usize, x0: usize, x1: usize, out: &mut Vec<u32
 /// Looks for an alignment pattern center near `pred` (within `radius`
 /// pixels). `ex`/`ey` are the module axes in pixels.
 pub(crate) fn find_alignment(
-    m: &BitMatrix,
+    m: Plane<'_>,
     scratch: &mut Vec<u32>,
     pred: Point,
     (ex, ey): (Point, Point),
@@ -789,7 +799,7 @@ pub(crate) fn find_alignment(
     let row_step = ((module / 3.0) as usize).max(1);
     for y in (y0..y1).step_by(row_step) {
         scratch.clear();
-        window_edges(m, y, x0, x1, scratch);
+        window_edges(m.raw(), y, x0, x1, scratch);
         let first_dark = m.get(x0, y);
         let n_runs = scratch.len() + 1;
         let bound = |k: usize| -> u32 {

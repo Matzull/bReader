@@ -49,7 +49,7 @@ A `Pass` is `{ preprocessor: Option<usize>, binarizer: usize, inverted: bool }`.
 
 | Effort | Image variants | Binarizers | Inversion |
 |---|---|---|---|
-| Fast | original | first | no |
+| Fast | original | first | only readers that handle both polarities themselves (1D, QR) |
 | Balanced | original + first preprocessor | first two | yes |
 | Exhaustive | all | all | yes |
 
@@ -135,7 +135,7 @@ EAN/UPC specifics: EAN-13 encodes its first digit in the L/G parity of the left 
 
 ### 3.2 QR (`breader-qr`)
 
-`QrReader` uses the binarized pass image (`uses_binary() == true`) and runs on every pass; inverted passes cover light-on-dark symbols.
+`QrReader` uses the binarized pass image (`uses_binary() == true`) and `handles_inversion() == true`. It reads both polarities from the same matrix through a `Plane` view, which XORs the polarity, so light-on-dark symbols are found even in Fast and the pipeline never builds an inverted copy for it.
 
 Modules: `detect` (finder patterns, triplets), `alignment` (Annex E table), `sample` (homography and grid sampling), `spec` (dimensions, block layouts), `decode` (grid → payload), `reader` (orchestration).
 
@@ -221,7 +221,7 @@ Work items, in priority order. Each must keep read counts and 0 FP unchanged.
    - Non-axis scanlines step with fixed-point DDA and nearest or linear sampling, instead of bilinear sampling with floats.
    - The smoothed edge detector runs only on lines whose unsmoothed pass produced a partial match (start pattern found, decode failed).
    - Measure the read contribution of the downscaled variant for 1D, and keep it only if it adds reads.
-3. **QR polarity sharing**: `QrReader::handles_inversion() == true`. The finder search detects both polarities from one run-length pass over the binary matrix, candidates carry their polarity, and sampling XORs it. This removes the inverted copy and the second finder scan.
+3. **QR polarity sharing** (done): run boundaries are extracted once per row and the 1:1:3:1:1 test runs for both parities; finders and triplets carry their polarity. Balanced time is unchanged, because confirmation and triplet work still run per polarity. Fast now reads inverted QR for about 10 % more QR time (held-out set: 159 → 179 QR in Fast).
 4. **Parallelism** (`rayon` feature): image variants and binarizations are computed in parallel; inside a pass, 1D scanline chunks and QR candidates are processed in parallel. Results are merged in a fixed order so output stays deterministic (NFR-3). Single-threaded remains the default.
 5. **Video tracker** (`breader::Tracker`, wraps a `Reader`):
    - **Each frame:** scans the regions of symbols from recent frames first, using a cropped `ImageView` with the quad expanded by 50 %, at full effort for those regions. It then runs a Fast global scan, followed by a Balanced global scan every N frames (configurable, default 10) or when nothing is tracked.

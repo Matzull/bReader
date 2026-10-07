@@ -7,6 +7,7 @@ use breader_core::{
 
 use crate::decode::{DecodedQr, decode_grid, read_version};
 use crate::detect::{FinderSearch, Triplet, candidate_dims, find_alignment};
+use crate::plane::Plane;
 use crate::sample::{
     Homography, Mapper, finders_plausible, fourth_point, module_axes, module_size, pattern_cells,
     predict_alignment, refine_finder, sample_grid, timing_plausible, transform,
@@ -89,7 +90,7 @@ enum Variant {
 impl Work {
     /// Decodes a triplet; failures are retried once with finder centers
     /// refined against the finder template.
-    fn try_triplet(&mut self, bin: &BitMatrix, t: &Triplet) -> Option<Found> {
+    fn try_triplet(&mut self, bin: Plane<'_>, t: &Triplet) -> Option<Found> {
         self.plausible = 0;
         if let Some(f) = self.try_refined(bin, t) {
             return Some(f);
@@ -107,7 +108,7 @@ impl Work {
         None
     }
 
-    fn try_refined(&mut self, bin: &BitMatrix, t: &Triplet) -> Option<Found> {
+    fn try_refined(&mut self, bin: Plane<'_>, t: &Triplet) -> Option<Found> {
         if !t.synthetic
             && let Some(f) = self.try_dims(bin, t)
         {
@@ -135,7 +136,7 @@ impl Work {
     }
 
     /// Tries the dimension candidates of a triplet until one decodes.
-    fn try_dims(&mut self, bin: &BitMatrix, t: &Triplet) -> Option<Found> {
+    fn try_dims(&mut self, bin: Plane<'_>, t: &Triplet) -> Option<Found> {
         let (cands, n) = candidate_dims(t.dim);
         let mut queue = [0usize; 5];
         let mut len = 0;
@@ -232,7 +233,7 @@ impl Work {
     /// Small symbols have no (or one) alignment pattern to pin down the
     /// fourth corner under perspective; Reed-Solomon arbitrates between
     /// shifted guesses of that point.
-    fn perturbed(&mut self, bin: &BitMatrix, t: &Triplet, dim: usize) -> Option<Found> {
+    fn perturbed(&mut self, bin: Plane<'_>, t: &Triplet, dim: usize) -> Option<Found> {
         const STEPS: [(f32, f32); 16] = [
             (1.0, 1.0),
             (-1.0, -1.0),
@@ -278,7 +279,7 @@ impl Work {
         None
     }
 
-    fn alignment(&mut self, bin: &BitMatrix, t: &Triplet, dim: usize) -> Option<Point> {
+    fn alignment(&mut self, bin: Plane<'_>, t: &Triplet, dim: usize) -> Option<Point> {
         let pred = predict_alignment(t, dim);
         let module = (t.tl.module + t.tr.module + t.bl.module) / 3.0;
         let axes = module_axes(t, dim);
@@ -297,7 +298,7 @@ impl Work {
 
     /// Grows a homography from the finders by locating alignment patterns
     /// one after another, nearest to the known points first.
-    fn refine(&mut self, bin: &BitMatrix, t: &Triplet, dim: usize) -> Option<Mapper> {
+    fn refine(&mut self, bin: Plane<'_>, t: &Triplet, dim: usize) -> Option<Mapper> {
         let version = version_for_dimension(dim)?;
         let d = dim as f32;
         let (tl, tr, bl) = (t.tl.pos, t.tr.pos, t.bl.pos);
@@ -410,6 +411,10 @@ impl SymbologyReader for QrReader {
         SymbologySet::EMPTY.with(Symbology::Qr)
     }
 
+    fn handles_inversion(&self) -> bool {
+        true
+    }
+
     fn scan(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
         let params = Params::for_effort(ctx.options().effort);
         let scale = ctx.scale();
@@ -430,42 +435,47 @@ impl SymbologyReader for QrReader {
                 !known.iter().any(|q| q.contains(p))
             });
         }
-        work.search
-            .select_triplets(bin, params.max_finders, params.row_step);
-        let mut failures = 0;
-        let mut syn_failures = 0;
-        let mut successes = 0;
-        let mut ti = 0;
-        while ti < work.search.triplets.len() {
-            let t = work.search.triplets[ti];
-            ti += 1;
-            let spent = if t.synthetic {
-                syn_failures >= params.max_recovered_failures + 3 * successes
-            } else {
-                failures >= params.max_failures + 3 * successes
-            };
-            if spent {
-                continue;
-            }
-            let inside = [t.tl, t.tr, t.bl].iter().any(|f| {
-                let p = Point::new(f.pos.x * scale.0, f.pos.y * scale.1);
-                known.iter().any(|q| q.contains(p))
-            });
-            if inside {
-                continue;
-            }
-            let Some(found) = work.try_triplet(bin, &t) else {
-                if t.synthetic {
-                    syn_failures += 1;
+        // Both polarities share the finder search; triplets and budgets are
+        // per polarity.
+        for inverted in [false, true] {
+            let plane = Plane::new(bin, inverted);
+            work.search
+                .select_triplets(plane, params.max_finders, params.row_step);
+            let mut failures = 0;
+            let mut syn_failures = 0;
+            let mut successes = 0;
+            let mut ti = 0;
+            while ti < work.search.triplets.len() {
+                let t = work.search.triplets[ti];
+                ti += 1;
+                let spent = if t.synthetic {
+                    syn_failures >= params.max_recovered_failures + 3 * successes
                 } else {
-                    failures += 1;
+                    failures >= params.max_failures + 3 * successes
+                };
+                if spent {
+                    continue;
                 }
-                continue;
-            };
-            if let Some(sym) = build_symbol(&found, scale) {
-                successes += 1;
-                known.push(sym.quad);
-                out.push(sym);
+                let inside = [t.tl, t.tr, t.bl].iter().any(|f| {
+                    let p = Point::new(f.pos.x * scale.0, f.pos.y * scale.1);
+                    known.iter().any(|q| q.contains(p))
+                });
+                if inside {
+                    continue;
+                }
+                let Some(found) = work.try_triplet(plane, &t) else {
+                    if t.synthetic {
+                        syn_failures += 1;
+                    } else {
+                        failures += 1;
+                    }
+                    continue;
+                };
+                if let Some(sym) = build_symbol(&found, scale) {
+                    successes += 1;
+                    known.push(sym.quad);
+                    out.push(sym);
+                }
             }
         }
     }
