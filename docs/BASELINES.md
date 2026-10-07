@@ -69,7 +69,7 @@ No engine produced false positives on the `negative` class. Most false positives
 
 Timings on this machine vary up to 2x between runs; compare engines in the same session.
 
-## Proposed v1 targets (pending confirmation)
+## v1 targets (confirmed 2026-10-07)
 
 | Metric | Target |
 |---|---|

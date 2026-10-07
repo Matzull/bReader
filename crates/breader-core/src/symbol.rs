@@ -7,6 +7,9 @@ pub struct Symbol {
     pub data: Vec<u8>,
     /// Payload as text when the charset could be determined unambiguously.
     pub text: Option<String>,
+    /// Charset of each byte range of `data`, in order and contiguous. Empty
+    /// means the whole payload uses the symbology's default interpretation.
+    pub segments: Vec<DataSegment>,
     pub content: Content,
     pub quad: Quad,
     pub orientation_deg: f32,
@@ -15,6 +18,29 @@ pub struct Symbol {
     pub meta: SymbolMeta,
     /// Decoder-specific quality estimate in [0, 1]; never used to accept a result.
     pub quality: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DataSegment {
+    pub start: usize,
+    pub end: usize,
+    pub charset: Charset,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Charset {
+    /// Characters from a restricted set that is ASCII by construction
+    /// (QR numeric/alphanumeric modes, Code 39, digits).
+    Ascii,
+    /// ISO-8859-1, the default of Code 128 (with FNC4) and the ISO default of QR byte mode.
+    Latin1,
+    /// QR kanji mode: Shift JIS double-byte characters.
+    ShiftJis,
+    /// Bytes under an explicit ECI designator.
+    Eci(u32),
+    /// QR byte mode without ECI; resolved by a documented heuristic.
+    Undeclared,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

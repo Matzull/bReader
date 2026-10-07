@@ -152,6 +152,51 @@ Later improvements, driven by the benchmarks: piecewise homographies over all al
 
 GF(256) arithmetic with log/antilog tables built at compile time (`const fn`), syndrome computation, Berlekamp–Massey, Chien search, Forney. Returns corrected count for metadata and quality. Reusable by Data Matrix and PDF417 later (PDF417 needs GF(929), so the field becomes a trait parameter when that lands).
 
+### 3.4 Content (`breader-content`)
+
+Decoders never interpret charsets. They return raw `data` plus `segments`: contiguous byte ranges, each with a `Charset`. An empty list means the symbology default. Every charset rule lives in one place, and module crates stay independent of each other.
+
+Post-processors, in this order: `Dedup`, `TextDecoder`, `ContentClassifier`.
+
+1. **TextDecoder** sets `text`:
+   - **Declared segments:** each segment is decoded with its charset and the results are concatenated. Any unknown ECI or invalid sequence leaves `text = None`; `data` is always kept.
+   - **Defaults per symbology:**
+     - Code 128: Latin-1.
+     - Code 39, ITF, EAN/UPC: ASCII.
+     - QR without segments: same rule as `Undeclared`.
+   - **`Undeclared` QR byte mode, in this order:**
+     1. strict UTF-8;
+     2. Shift JIS, when every byte forms valid Shift JIS and at least one double-byte character appears;
+     3. otherwise ISO-8859-1, which is the ISO 18004 default.
+   - **ECI mapping:**
+     - 0 and 2: CP437.
+     - 1 and 3: ISO-8859-1.
+     - 4–13 and 15–18: the corresponding ISO-8859 parts.
+     - 20: Shift JIS.
+     - 21–24: Windows-1250, 1251, 1252 and 1256.
+     - 25 and 33: UTF-16 BE and LE.
+     - 26: UTF-8.
+     - 27 and 170: ASCII.
+     - 28: Big5.
+     - 29: GB2312.
+     - 30: EUC-KR.
+     - 31: GBK.
+     - 32: GB18030.
+     - 34 and 35: UTF-32 BE and LE.
+     - 899: binary, so `text = None`.
+     - Others: unknown.
+   - **Dependency:** `encoding_rs`. CP437 and UTF-32 are implemented locally.
+2. **ContentClassifier** sets `content`:
+   - **GS1** (`Content::Gs1`) when the AIM identifier marks GS1 data (`]C1`, `]Q3`, `]Q4`) and the GS1 parser accepts the whole payload. EAN/UPC symbols map to AI 01 with the GTIN padded to 14 digits.
+   - **URL** for `http://`, `https://` and `ftp://` (case-insensitive) with no whitespace.
+   - **Binary** when `text` is `None` or contains control characters other than TAB, CR, LF, GS, RS or EOT.
+   - **Text** otherwise.
+
+   A parse failure never rejects a symbol; it only lowers the classification.
+3. **GS1 parser** — element strings with GS (0x1D) separators. It uses a table of AIs with their format (numeric or alphanumeric, fixed or variable length, maximum length) and the list of predefined fixed lengths. It validates digits, check digits (GTIN, SSCC, GLN and other mod-10 keys) and dates (YYMMDD, where DD = 00 is allowed). It produces `Gs1Element { ai, value }`. `gs1::hri(&[Gs1Element])` renders the bracketed human-readable form.
+
+Further semantic parsers (vCard, Wi-Fi, GS1 Digital Link, ...) are added as `Content` variants and classifier rules.
+
 ## 4. Facade (`breader`)
 
 `Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear` (default), `image`, `rayon`.

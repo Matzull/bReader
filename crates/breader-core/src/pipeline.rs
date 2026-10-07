@@ -233,6 +233,7 @@ mod tests {
                     symbology: Symbology::Code39,
                     data: vec![inverted as u8],
                     text: None,
+                    segments: Vec::new(),
                     content: Content::Unparsed,
                     quad: Quad::default(),
                     orientation_deg: 0.0,

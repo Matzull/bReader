@@ -389,6 +389,7 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
         symbology: Symbology::Qr,
         data: dec.data.clone(),
         text,
+        segments: Vec::new(),
         content: Content::Unparsed,
         quad,
         orientation_deg: quad.orientation_deg(),

@@ -71,6 +71,7 @@ mod tests {
             symbology: Symbology::Code128,
             data: data.to_vec(),
             text: None,
+            segments: Vec::new(),
             content: Content::Unparsed,
             quad,
             orientation_deg: 0.0,
