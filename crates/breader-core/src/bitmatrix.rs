@@ -61,6 +61,11 @@ impl BitMatrix {
         &mut self.bits[start..start + self.words_per_row]
     }
 
+    /// All words, row after row, with the number of words per row.
+    pub fn words_mut(&mut self) -> (&mut [u64], usize) {
+        (&mut self.bits, self.words_per_row)
+    }
+
     /// Flips every pixel; padding bits beyond `width` stay zero.
     pub fn invert(&mut self) {
         let tail = self.width % 64;

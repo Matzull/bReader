@@ -10,7 +10,11 @@ default = ["qr", "linear"]
 qr = ["dep:breader-qr"]
 linear = ["dep:breader-linear"]
 image = ["dep:image"]
-rayon = []
+# Multi-threaded kernels and scanning on rayon's global pool; results are
+# identical to the single-threaded build. To bound the threads, run the scan
+# inside `rayon::ThreadPoolBuilder::new().num_threads(n).build()?.install(..)`
+# or set `RAYON_NUM_THREADS`.
+rayon = ["breader-imgproc/rayon", "breader-linear?/rayon", "breader-qr?/rayon"]
 
 [dependencies]
 breader-core.workspace = true

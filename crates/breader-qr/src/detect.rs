@@ -184,6 +184,70 @@ fn confirm_finder(m: Plane<'_>, hx: f32, y: usize, h_total: f32) -> Option<(Poin
     Some((Point::new(cx, cy), chords))
 }
 
+/// Rows per parallel work item of the finder search.
+#[cfg(feature = "rayon")]
+const PAR_BAND_ROWS: usize = 32;
+/// Matrices below this many pixels are searched on the calling thread.
+#[cfg(feature = "rayon")]
+const PAR_MIN_PIXELS: usize = 1 << 20;
+
+/// A run sequence of row `y` in the 1:1:3:1:1 ratio.
+#[derive(Debug, Clone, Copy)]
+struct RowHit {
+    y: usize,
+    inv: bool,
+    hx: f32,
+    h_total: f32,
+}
+
+/// Appends the finder-like run sequences of row `y` to `out`, dark-on-light
+/// ones before light-on-dark ones.
+fn row_hits(m: &BitMatrix, y: usize, bounds: &mut Vec<u32>, out: &mut Vec<RowHit>) {
+    let width = m.width();
+    // Run boundaries: 0, every color change, width.
+    bounds.clear();
+    bounds.push(0);
+    let words = m.row_words(y);
+    let mut prev = words.first().map_or(0, |w| w & 1);
+    for (wi, &wd) in words.iter().enumerate() {
+        let mut t = wd ^ ((wd << 1) | prev);
+        prev = wd >> 63;
+        while t != 0 {
+            let pos = wi * 64 + t.trailing_zeros() as usize;
+            if pos >= width {
+                break;
+            }
+            bounds.push(pos as u32);
+            t &= t - 1;
+        }
+    }
+    bounds.push(width as u32);
+    // Run k spans bounds[k]..bounds[k + 1]; run 0 is dark when pixel 0 is.
+    // A dark-on-light finder starts on a dark run, a light-on-dark one on
+    // a light run; both are tested against the same run boundaries.
+    let first_dark = usize::from(!m.get(0, y));
+    for inv in [false, true] {
+        let first = first_dark ^ usize::from(inv);
+        for b in bounds.windows(6).skip(first).step_by(2) {
+            let runs = [
+                b[1] - b[0],
+                b[2] - b[1],
+                b[3] - b[2],
+                b[4] - b[3],
+                b[5] - b[4],
+            ];
+            if finder_ratio(&runs, ROW_TOL_PERCENT) {
+                out.push(RowHit {
+                    y,
+                    inv,
+                    hx: (b[2] + b[3]) as f32 / 2.0,
+                    h_total: (b[5] - b[0]) as f32,
+                });
+            }
+        }
+    }
+}
+
 impl FinderSearch {
     /// Scans every `row_step`-th row of the binary image for finder patterns.
     pub fn find_finders(&mut self, m: &BitMatrix, row_step: usize) {
@@ -191,59 +255,65 @@ impl FinderSearch {
         self.recent.clear();
         self.max_module = 0.0;
         let step = row_step.max(1);
-        let mut y = step / 2;
-        while y < m.height() {
-            // Finders far above the current row can no longer be matched.
-            let (fs, reach) = (&self.finders, 3.5 * self.max_module + 2.0);
-            self.recent.retain(|&i| fs[i].pos.y + reach >= y as f32);
-            self.scan_row(m, y);
-            y += step;
+        let first = step / 2;
+        #[cfg(feature = "rayon")]
+        if m.width() * m.height() >= PAR_MIN_PIXELS
+            && rayon::current_num_threads() > 1
+            && !breader_core::parallel::is_sequential()
+        {
+            self.find_finders_banded(m, first, step);
+            return;
+        }
+        let mut bounds = std::mem::take(&mut self.edges);
+        let mut hits = Vec::new();
+        for y in (first..m.height()).step_by(step) {
+            self.age_recent(y);
+            hits.clear();
+            row_hits(m, y, &mut bounds, &mut hits);
+            self.apply_hits(m, &hits);
+        }
+        self.edges = bounds;
+    }
+
+    /// Run extraction is independent per row; only the clustering of hits
+    /// into finders depends on earlier rows, so rows are searched in
+    /// parallel bands and the hits fed to the clustering in row order.
+    #[cfg(feature = "rayon")]
+    fn find_finders_banded(&mut self, m: &BitMatrix, first: usize, step: usize) {
+        use rayon::prelude::*;
+        let rows: Vec<usize> = (first..m.height()).step_by(step).collect();
+        let per_band: Vec<Vec<RowHit>> = rows
+            .par_chunks(PAR_BAND_ROWS)
+            .map_init(Vec::new, |bounds, band| {
+                let mut hits = Vec::new();
+                for &y in band {
+                    row_hits(m, y, bounds, &mut hits);
+                }
+                hits
+            })
+            .collect();
+        let mut hits = per_band.iter().flatten().peekable();
+        let mut row = Vec::new();
+        for &y in &rows {
+            self.age_recent(y);
+            row.clear();
+            while let Some(h) = hits.next_if(|h| h.y == y) {
+                row.push(*h);
+            }
+            self.apply_hits(m, &row);
         }
     }
 
-    fn scan_row(&mut self, m: &BitMatrix, y: usize) {
-        let width = m.width();
-        // Run boundaries: 0, every color change, width.
-        let mut bounds = std::mem::take(&mut self.edges);
-        bounds.clear();
-        bounds.push(0);
-        let words = m.row_words(y);
-        let mut prev = words.first().map_or(0, |w| w & 1);
-        for (wi, &wd) in words.iter().enumerate() {
-            let mut t = wd ^ ((wd << 1) | prev);
-            prev = wd >> 63;
-            while t != 0 {
-                let pos = wi * 64 + t.trailing_zeros() as usize;
-                if pos >= width {
-                    break;
-                }
-                bounds.push(pos as u32);
-                t &= t - 1;
-            }
+    /// Finders far above the current row can no longer be matched.
+    fn age_recent(&mut self, y: usize) {
+        let (fs, reach) = (&self.finders, 3.5 * self.max_module + 2.0);
+        self.recent.retain(|&i| fs[i].pos.y + reach >= y as f32);
+    }
+
+    fn apply_hits(&mut self, m: &BitMatrix, hits: &[RowHit]) {
+        for h in hits {
+            self.add_hit(Plane::new(m, h.inv), h.hx, h.y, h.h_total);
         }
-        bounds.push(width as u32);
-        // Run k spans bounds[k]..bounds[k + 1]; run 0 is dark when pixel 0 is.
-        // A dark-on-light finder starts on a dark run, a light-on-dark one on
-        // a light run; both are tested against the same run boundaries.
-        let first_dark = usize::from(!m.get(0, y));
-        for inv in [false, true] {
-            let first = first_dark ^ usize::from(inv);
-            for b in bounds.windows(6).skip(first).step_by(2) {
-                let runs = [
-                    b[1] - b[0],
-                    b[2] - b[1],
-                    b[3] - b[2],
-                    b[4] - b[3],
-                    b[5] - b[4],
-                ];
-                if finder_ratio(&runs, ROW_TOL_PERCENT) {
-                    let hx = (b[2] + b[3]) as f32 / 2.0;
-                    let h_total = (b[5] - b[0]) as f32;
-                    self.add_hit(Plane::new(m, inv), hx, y, h_total);
-                }
-            }
-        }
-        self.edges = bounds;
     }
 
     fn add_hit(&mut self, plane: Plane<'_>, hx: f32, y: usize, h_total: f32) {

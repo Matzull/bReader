@@ -7,6 +7,8 @@ mod geometry;
 mod image;
 mod module;
 mod options;
+#[doc(hidden)]
+pub mod parallel;
 mod pipeline;
 mod symbol;
 mod symbology;

@@ -124,6 +124,12 @@ impl Aggregator {
         }
     }
 
+    /// Removes and returns the hits collected so far.
+    #[cfg(feature = "rayon")]
+    pub fn take_hits(&mut self) -> Vec<PlacedHit> {
+        std::mem::take(&mut self.hits)
+    }
+
     pub fn len(&self) -> usize {
         self.hits.len()
     }

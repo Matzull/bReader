@@ -47,106 +47,242 @@ impl Binarizer for LocalBinarizer {
         let sat = summed_area(&thresholds, tw, th);
         let sat_stride = tw + 1;
 
+        let grid = Grid {
+            sat: &sat,
+            stride: sat_stride,
+            tw,
+            th,
+        };
+        #[cfg(feature = "rayon")]
+        if crate::is_large(w, h) {
+            use rayon::prelude::*;
+            let (words, wpr) = out.words_mut();
+            words
+                .par_chunks_mut(wpr.max(1) * block)
+                .enumerate()
+                .for_each_init(
+                    || vec![0u8; w],
+                    |pixel_thr, (ty, chunk)| {
+                        self.pack_tile_row(src, block, ty, &grid, pixel_thr, chunk, wpr.max(1));
+                    },
+                );
+            return;
+        }
         let mut pixel_thr = vec![0u8; w];
-        for ty in 0..th {
-            let y0 = ty.saturating_sub(self.window);
-            let y1 = (ty + self.window + 1).min(th);
-            for tx in 0..tw {
-                let x0 = tx.saturating_sub(self.window);
-                let x1 = (tx + self.window + 1).min(tw);
-                let sum = sat[y1 * sat_stride + x1] + sat[y0 * sat_stride + x0]
-                    - sat[y0 * sat_stride + x1]
-                    - sat[y1 * sat_stride + x0];
-                let count = ((x1 - x0) * (y1 - y0)) as u64;
-                let t = (sum / count) as u8;
-                let px0 = tx * block;
-                pixel_thr[px0..(px0 + block).min(w)].fill(t);
+        let (words, wpr) = out.words_mut();
+        for (ty, chunk) in words.chunks_mut(wpr.max(1) * block).enumerate() {
+            self.pack_tile_row(src, block, ty, &grid, &mut pixel_thr, chunk, wpr.max(1));
+        }
+    }
+}
+
+/// Summed-area table of the tile thresholds.
+struct Grid<'a> {
+    sat: &'a [u64],
+    stride: usize,
+    tw: usize,
+    th: usize,
+}
+
+impl LocalBinarizer {
+    /// Smooths the thresholds over the window and packs the pixel rows of
+    /// tile row `ty` into `chunk`, which holds those rows' words.
+    #[allow(clippy::too_many_arguments)]
+    fn pack_tile_row(
+        &self,
+        src: ImageView<'_>,
+        block: usize,
+        ty: usize,
+        grid: &Grid<'_>,
+        pixel_thr: &mut [u8],
+        chunk: &mut [u64],
+        wpr: usize,
+    ) {
+        let (w, h) = (src.width(), src.height());
+        let (sat, sat_stride, tw, th) = (grid.sat, grid.stride, grid.tw, grid.th);
+        let y0 = ty.saturating_sub(self.window);
+        let y1 = (ty + self.window + 1).min(th);
+        for tx in 0..tw {
+            let x0 = tx.saturating_sub(self.window);
+            let x1 = (tx + self.window + 1).min(tw);
+            let sum = sat[y1 * sat_stride + x1] + sat[y0 * sat_stride + x0]
+                - sat[y0 * sat_stride + x1]
+                - sat[y1 * sat_stride + x0];
+            let count = ((x1 - x0) * (y1 - y0)) as u64;
+            let t = (sum / count) as u8;
+            let px0 = tx * block;
+            pixel_thr[px0..(px0 + block).min(w)].fill(t);
+        }
+        for (i, words) in chunk.chunks_mut(wpr).enumerate() {
+            let y = ty * block + i;
+            if y < h {
+                pack_row_with(src.row(y), pixel_thr, words);
             }
-            for y in ty * block..((ty + 1) * block).min(h) {
-                pack_row_with(src.row(y), &pixel_thr, out.row_words_mut(y));
+        }
+    }
+}
+
+/// Per-column and per-tile accumulators for one tile row.
+#[derive(Debug, Default)]
+struct RowStats {
+    col_min: Vec<u8>,
+    col_max: Vec<u8>,
+    col_sum: Vec<u16>,
+}
+
+impl RowStats {
+    fn new(w: usize) -> Self {
+        Self {
+            col_min: vec![0; w],
+            col_max: vec![0; w],
+            col_sum: vec![0; w],
+        }
+    }
+
+    /// Min, max and sum of every tile of tile row `ty`.
+    fn tiles(
+        &mut self,
+        src: ImageView<'_>,
+        block: usize,
+        ty: usize,
+        mins: &mut [u8],
+        maxs: &mut [u8],
+        sums: &mut [u64],
+    ) {
+        let h = src.height();
+        mins.fill(u8::MAX);
+        maxs.fill(0);
+        sums.fill(0);
+        let y_end = ((ty + 1) * block).min(h);
+        // Bands of at most 256 rows keep the `u16` column sums exact.
+        for band_start in (ty * block..y_end).step_by(256) {
+            let band_end = (band_start + 256).min(y_end);
+            // Vertical pass: per-column statistics over the band rows.
+            let first = src.row(band_start);
+            self.col_min.copy_from_slice(first);
+            self.col_max.copy_from_slice(first);
+            for (s, &v) in self.col_sum.iter_mut().zip(first) {
+                *s = u16::from(v);
+            }
+            for y in band_start + 1..band_end {
+                let row = src.row(y);
+                for (((lo, hi), s), &v) in self
+                    .col_min
+                    .iter_mut()
+                    .zip(self.col_max.iter_mut())
+                    .zip(self.col_sum.iter_mut())
+                    .zip(row)
+                {
+                    *lo = (*lo).min(v);
+                    *hi = (*hi).max(v);
+                    *s += u16::from(v);
+                }
+            }
+            // Horizontal pass: reduce each tile's columns.
+            let stats = self
+                .col_min
+                .chunks(block)
+                .zip(self.col_max.chunks(block))
+                .zip(self.col_sum.chunks(block));
+            for (tx, ((lo, hi), sum)) in stats.enumerate() {
+                let (lo, hi, sum) = reduce_columns(lo, hi, sum);
+                mins[tx] = mins[tx].min(lo);
+                maxs[tx] = maxs[tx].max(hi);
+                sums[tx] += sum;
             }
         }
     }
 }
 
 impl LocalBinarizer {
-    fn tile_thresholds(&self, src: ImageView<'_>, block: usize, tw: usize, th: usize) -> Vec<u8> {
+    /// Thresholds of tile row `ty` from its statistics. Tiles without
+    /// contrast borrow from the already computed neighbours above and left.
+    #[allow(clippy::too_many_arguments)]
+    fn row_thresholds(
+        &self,
+        src: ImageView<'_>,
+        block: usize,
+        ty: usize,
+        stats: (&[u8], &[u8], &[u64]),
+        above: Option<&[u8]>,
+        row: &mut [u8],
+    ) {
         let (w, h) = (src.width(), src.height());
+        let (mins, maxs, sums) = stats;
+        let rows = ((ty + 1) * block).min(h) - ty * block;
+        for tx in 0..row.len() {
+            let cols = ((tx + 1) * block).min(w) - tx * block;
+            let (lo, hi) = (mins[tx], maxs[tx]);
+            let t = if hi - lo >= self.min_contrast {
+                (sums[tx] / (rows * cols) as u64) as u8
+            } else {
+                let mut acc = 0u32;
+                let mut n = 0u32;
+                if let Some(above) = above {
+                    acc += u32::from(above[tx]);
+                    n += 1;
+                }
+                if tx > 0 {
+                    acc += u32::from(row[tx - 1]);
+                    n += 1;
+                }
+                if let (Some(above), true) = (above, tx > 0) {
+                    acc += u32::from(above[tx - 1]);
+                    n += 1;
+                }
+                match acc.checked_div(n) {
+                    Some(avg) if avg > u32::from(lo) => avg as u8,
+                    _ => lo / 2,
+                }
+            };
+            row[tx] = t;
+        }
+    }
+
+    fn tile_thresholds(&self, src: ImageView<'_>, block: usize, tw: usize, th: usize) -> Vec<u8> {
         let mut thresholds = vec![0u8; tw * th];
-        let mut col_min = vec![0u8; w];
-        let mut col_max = vec![0u8; w];
-        let mut col_sum = vec![0u16; w];
+        #[cfg(feature = "rayon")]
+        if crate::is_large(src.width(), src.height()) {
+            use rayon::prelude::*;
+            // Statistics of different tile rows are independent; only the
+            // fallback for flat tiles needs the previous row, so that part
+            // runs in order afterwards.
+            let mut mins = vec![0u8; tw * th];
+            let mut maxs = vec![0u8; tw * th];
+            let mut sums = vec![0u64; tw * th];
+            mins.par_chunks_mut(tw)
+                .zip(maxs.par_chunks_mut(tw))
+                .zip(sums.par_chunks_mut(tw))
+                .enumerate()
+                .for_each_init(
+                    || RowStats::new(src.width()),
+                    |scratch, (ty, ((mn, mx), sm))| scratch.tiles(src, block, ty, mn, mx, sm),
+                );
+            for ty in 0..th {
+                let (done, rest) = thresholds.split_at_mut(ty * tw);
+                let above = (ty > 0).then(|| &done[(ty - 1) * tw..]);
+                let r = ty * tw..(ty + 1) * tw;
+                let stats = (&mins[r.clone()], &maxs[r.clone()], &sums[r]);
+                self.row_thresholds(src, block, ty, stats, above, &mut rest[..tw]);
+            }
+            return thresholds;
+        }
+        let mut scratch = RowStats::new(src.width());
         let mut mins = vec![0u8; tw];
         let mut maxs = vec![0u8; tw];
         let mut sums = vec![0u64; tw];
         for ty in 0..th {
-            mins.fill(u8::MAX);
-            maxs.fill(0);
-            sums.fill(0);
-            let y_end = ((ty + 1) * block).min(h);
-            // Bands of at most 256 rows keep the `u16` column sums exact.
-            for band_start in (ty * block..y_end).step_by(256) {
-                let band_end = (band_start + 256).min(y_end);
-                // Vertical pass: per-column statistics over the band rows.
-                let first = src.row(band_start);
-                col_min.copy_from_slice(first);
-                col_max.copy_from_slice(first);
-                for (s, &v) in col_sum.iter_mut().zip(first) {
-                    *s = u16::from(v);
-                }
-                for y in band_start + 1..band_end {
-                    let row = src.row(y);
-                    for (((lo, hi), s), &v) in col_min
-                        .iter_mut()
-                        .zip(col_max.iter_mut())
-                        .zip(col_sum.iter_mut())
-                        .zip(row)
-                    {
-                        *lo = (*lo).min(v);
-                        *hi = (*hi).max(v);
-                        *s += u16::from(v);
-                    }
-                }
-                // Horizontal pass: reduce each tile's columns.
-                let stats = col_min
-                    .chunks(block)
-                    .zip(col_max.chunks(block))
-                    .zip(col_sum.chunks(block));
-                for (tx, ((lo, hi), sum)) in stats.enumerate() {
-                    let (lo, hi, sum) = reduce_columns(lo, hi, sum);
-                    mins[tx] = mins[tx].min(lo);
-                    maxs[tx] = maxs[tx].max(hi);
-                    sums[tx] += sum;
-                }
-            }
-            let rows = y_end - ty * block;
-            for tx in 0..tw {
-                let cols = ((tx + 1) * block).min(w) - tx * block;
-                let (lo, hi) = (mins[tx], maxs[tx]);
-                let t = if hi - lo >= self.min_contrast {
-                    (sums[tx] / (rows * cols) as u64) as u8
-                } else {
-                    let mut acc = 0u32;
-                    let mut n = 0u32;
-                    if ty > 0 {
-                        acc += u32::from(thresholds[(ty - 1) * tw + tx]);
-                        n += 1;
-                    }
-                    if tx > 0 {
-                        acc += u32::from(thresholds[ty * tw + tx - 1]);
-                        n += 1;
-                    }
-                    if ty > 0 && tx > 0 {
-                        acc += u32::from(thresholds[(ty - 1) * tw + tx - 1]);
-                        n += 1;
-                    }
-                    match acc.checked_div(n) {
-                        Some(avg) if avg > u32::from(lo) => avg as u8,
-                        _ => lo / 2,
-                    }
-                };
-                thresholds[ty * tw + tx] = t;
-            }
+            scratch.tiles(src, block, ty, &mut mins, &mut maxs, &mut sums);
+            let (done, rest) = thresholds.split_at_mut(ty * tw);
+            let above = (ty > 0).then(|| &done[(ty - 1) * tw..]);
+            self.row_thresholds(
+                src,
+                block,
+                ty,
+                (&mins, &maxs, &sums),
+                above,
+                &mut rest[..tw],
+            );
         }
         thresholds
     }

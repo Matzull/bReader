@@ -123,6 +123,138 @@ fn scan_profile<D: LinearDecoder>(
     }
 }
 
+/// Pre-sampled profiles of the column and oblique lines of a plan.
+struct Sources<'a> {
+    columns: &'a [u8],
+    height: usize,
+    oblique: &'a [u8],
+    offsets: &'a [usize],
+    opts: &'a LineOptions,
+}
+
+/// Where each line's profile comes from, as running counts so that any
+/// sub-range of lines can be scanned on its own.
+#[derive(Debug, Clone, Copy)]
+struct Cursor {
+    column: usize,
+    slanted: usize,
+}
+
+impl Cursor {
+    fn advance(&mut self, line: &Scanline) {
+        if line.from.x == line.to.x {
+            self.column += 1;
+        } else if Oblique::is_oblique(line) {
+            self.slanted += 1;
+        }
+    }
+}
+
+fn scan_line(
+    img: &ImageView<'_>,
+    line: &Scanline,
+    index: u32,
+    cursor: Cursor,
+    sources: &Sources<'_>,
+    profile: &mut Vec<u8>,
+    stage: &mut Stage,
+) {
+    if line.from.x == line.to.x {
+        let h = sources.height;
+        let column = &sources.columns[cursor.column * h..(cursor.column + 1) * h];
+        scan_profile(&DECODERS, column, line, index, sources.opts, stage);
+    } else if Oblique::is_oblique(line) {
+        let range = sources.offsets[cursor.slanted]..sources.offsets[cursor.slanted + 1];
+        scan_profile(
+            &DECODERS,
+            &sources.oblique[range],
+            line,
+            index,
+            sources.opts,
+            stage,
+        );
+    } else {
+        profile::sample(img, line, false, profile);
+        scan_profile(&DECODERS, profile, line, index, sources.opts, stage);
+    }
+}
+
+fn scan_lines(
+    img: &ImageView<'_>,
+    lines: &[Scanline],
+    sources: &Sources<'_>,
+    profile: &mut Vec<u8>,
+    stage: &mut Stage,
+) {
+    let mut cursor = Cursor {
+        column: 0,
+        slanted: 0,
+    };
+    for (i, line) in lines.iter().enumerate() {
+        scan_line(img, line, i as u32, cursor, sources, profile, stage);
+        cursor.advance(line);
+    }
+}
+
+/// Lines per parallel work item.
+#[cfg(feature = "rayon")]
+const PAR_LINES: usize = 16;
+/// Frames below this many pixels are scanned on the calling thread.
+#[cfg(feature = "rayon")]
+const PAR_MIN_PIXELS: usize = 1 << 19;
+
+#[cfg(feature = "rayon")]
+fn parallel_worthwhile(img: &ImageView<'_>, lines: usize) -> bool {
+    img.width() * img.height() >= PAR_MIN_PIXELS
+        && lines >= 2 * PAR_LINES
+        && rayon::current_num_threads() > 1
+        && !breader_core::parallel::is_sequential()
+}
+
+/// Scans the lines in fixed chunks on the rayon pool. Every chunk collects
+/// its hits on its own; they are returned in line order, so the
+/// caller sees the same sequence as `scan_lines` would push.
+#[cfg(feature = "rayon")]
+fn scan_lines_parallel(
+    img: &ImageView<'_>,
+    lines: &[Scanline],
+    sources: &Sources<'_>,
+    template: &Stage,
+) -> Vec<PlacedHit> {
+    use rayon::prelude::*;
+    let mut starts = Vec::with_capacity(lines.len().div_ceil(PAR_LINES));
+    let mut cursor = Cursor {
+        column: 0,
+        slanted: 0,
+    };
+    for chunk in lines.chunks(PAR_LINES) {
+        starts.push(cursor);
+        for line in chunk {
+            cursor.advance(line);
+        }
+    }
+    let fresh = || {
+        let mut stage = Stage::default();
+        stage.edge_params.clone_from(&template.edge_params);
+        (stage, Vec::new())
+    };
+    let per_chunk: Vec<Vec<PlacedHit>> = lines
+        .par_chunks(PAR_LINES)
+        .zip(starts.par_iter())
+        .enumerate()
+        .map_init(fresh, |(stage, profile), (c, (chunk, start))| {
+            let mut cursor = *start;
+            for (k, line) in chunk.iter().enumerate() {
+                let index = (c * PAR_LINES + k) as u32;
+                scan_line(img, line, index, cursor, sources, profile, stage);
+                cursor.advance(line);
+            }
+            stage.aggregator.take_hits()
+        })
+        .collect();
+    per_chunk.into_iter().flatten().collect()
+}
+
 /// Parallel lines on both sides of `seed`, stopping per side once the
 /// symbol stops being read.
 fn refine<D: LinearDecoder>(
@@ -273,28 +405,24 @@ impl LinearReader {
             .copied()
             .collect();
         profile::sample_oblique_batch(&img, &oblique, false, &mut work.offsets, &mut work.oblique);
-        let (mut column, mut slanted) = (0, 0);
-        for (i, line) in lines.iter().enumerate() {
-            if line.from.x == line.to.x {
-                let h = img.height();
-                let profile = &work.columns[column * h..(column + 1) * h];
-                column += 1;
-                scan_profile(&DECODERS, profile, line, i as u32, &opts, &mut work.stage);
-            } else if Oblique::is_oblique(line) {
-                let profile = &work.oblique[work.offsets[slanted]..work.offsets[slanted + 1]];
-                slanted += 1;
-                scan_profile(&DECODERS, profile, line, i as u32, &opts, &mut work.stage);
-            } else {
-                profile::sample(&img, line, false, &mut work.profile);
-                scan_profile(
-                    &DECODERS,
-                    &work.profile,
-                    line,
-                    i as u32,
-                    &opts,
-                    &mut work.stage,
-                );
+        let sources = Sources {
+            columns: &work.columns,
+            height: img.height(),
+            oblique: &work.oblique,
+            offsets: &work.offsets,
+            opts: &opts,
+        };
+        #[cfg(feature = "rayon")]
+        let parallel = parallel_worthwhile(&img, lines.len());
+        #[cfg(not(feature = "rayon"))]
+        let parallel = false;
+        if parallel {
+            #[cfg(feature = "rayon")]
+            for hit in scan_lines_parallel(&img, &lines, &sources, &work.stage) {
+                work.stage.aggregator.push(hit);
             }
+        } else {
+            scan_lines(&img, &lines, &sources, &mut work.profile, &mut work.stage);
         }
         let plan_lines = lines.len() as u32;
         let settings = Settings {

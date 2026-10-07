@@ -54,25 +54,46 @@ impl Preprocessor for Downscale {
 /// 4 * 255), then reduces `F` neighbouring sums with rounding. The constant
 /// factor lets the compiler turn the division into shifts or multiplies.
 fn reduce<const F: usize>(src: ImageView<'_>, dst: &mut ImageBuffer, ow: usize, oh: usize) {
-    let area = (F * F) as u32;
-    let half = area / 2;
+    #[cfg(feature = "rayon")]
+    if crate::is_large(src.width(), src.height()) {
+        use rayon::prelude::*;
+        dst.as_mut_slice()
+            .par_chunks_mut(ow * crate::PAR_BAND_ROWS)
+            .enumerate()
+            .for_each_init(
+                || vec![0u16; ow * F],
+                |vsum, (band, chunk)| {
+                    for (i, out) in chunk.chunks_mut(ow).enumerate() {
+                        reduce_row::<F>(src, band * crate::PAR_BAND_ROWS + i, out, vsum);
+                    }
+                },
+            );
+        return;
+    }
     let mut vsum = vec![0u16; ow * F];
     for oy in 0..oh {
-        let width = ow * F;
-        let first = &src.row(oy * F)[..width];
-        for (s, &v) in vsum.iter_mut().zip(first) {
-            *s = u16::from(v);
+        reduce_row::<F>(src, oy, dst.row_mut(oy), &mut vsum);
+    }
+}
+
+#[inline(always)]
+fn reduce_row<const F: usize>(src: ImageView<'_>, oy: usize, out: &mut [u8], vsum: &mut [u16]) {
+    let area = (F * F) as u32;
+    let half = area / 2;
+    let width = out.len() * F;
+    let first = &src.row(oy * F)[..width];
+    for (s, &v) in vsum.iter_mut().zip(first) {
+        *s = u16::from(v);
+    }
+    for dy in 1..F {
+        let row = &src.row(oy * F + dy)[..width];
+        for (s, &v) in vsum.iter_mut().zip(row) {
+            *s += u16::from(v);
         }
-        for dy in 1..F {
-            let row = &src.row(oy * F + dy)[..width];
-            for (s, &v) in vsum.iter_mut().zip(row) {
-                *s += u16::from(v);
-            }
-        }
-        for (o, group) in dst.row_mut(oy).iter_mut().zip(vsum.chunks_exact(F)) {
-            let sum: u32 = group.iter().map(|&v| u32::from(v)).sum();
-            *o = ((sum + half) / area) as u8;
-        }
+    }
+    for (o, group) in out.iter_mut().zip(vsum.chunks_exact(F)) {
+        let sum: u32 = group.iter().map(|&v| u32::from(v)).sum();
+        *o = ((sum + half) / area) as u8;
     }
 }
 

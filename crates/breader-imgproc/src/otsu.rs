@@ -73,16 +73,64 @@ impl Binarizer for OtsuBinarizer {
     }
 
     fn binarize(&self, src: ImageView<'_>, out: &mut BitMatrix) {
-        let hist = histogram(src);
+        let hist = frame_histogram(src);
         let total = (src.width() * src.height()) as u64;
         let threshold = otsu_threshold(&hist, total);
         if out.width() != src.width() || out.height() != src.height() {
             out.resize(src.width(), src.height());
         }
+        #[cfg(feature = "rayon")]
+        if is_large(&src) {
+            use rayon::prelude::*;
+            let (words, wpr) = out.words_mut();
+            words
+                .par_chunks_mut(wpr.max(1) * crate::PAR_BAND_ROWS)
+                .enumerate()
+                .for_each(|(band, chunk)| {
+                    let y0 = band * crate::PAR_BAND_ROWS;
+                    for (i, row) in chunk.chunks_mut(wpr.max(1)).enumerate() {
+                        pack_row(src.row(y0 + i), threshold, row);
+                    }
+                });
+            return;
+        }
         for y in 0..src.height() {
             pack_row(src.row(y), threshold, out.row_words_mut(y));
         }
     }
+}
+
+#[cfg(feature = "rayon")]
+fn is_large(src: &ImageView<'_>) -> bool {
+    crate::is_large(src.width(), src.height())
+}
+
+/// Histogram of the whole frame; large frames are counted in row bands and
+/// the integer counts merged, which gives the same result in any order.
+fn frame_histogram(src: ImageView<'_>) -> [u64; 256] {
+    #[cfg(feature = "rayon")]
+    if is_large(&src) {
+        use rayon::prelude::*;
+        let bands = src.height().div_ceil(crate::PAR_BAND_ROWS);
+        return (0..bands)
+            .into_par_iter()
+            .map(|b| {
+                let y0 = b * crate::PAR_BAND_ROWS;
+                let rows = crate::PAR_BAND_ROWS.min(src.height() - y0);
+                src.crop(0, y0, src.width(), rows)
+                    .map_or([0u64; 256], histogram)
+            })
+            .reduce(
+                || [0u64; 256],
+                |mut a, b| {
+                    for (x, y) in a.iter_mut().zip(b) {
+                        *x += y;
+                    }
+                    a
+                },
+            );
+    }
+    histogram(src)
 }
 
 #[cfg(test)]
