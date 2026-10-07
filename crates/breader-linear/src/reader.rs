@@ -390,7 +390,6 @@ mod tests {
             let s = &found[0];
             assert_eq!(s.symbology, Symbology::Ean13);
             assert_eq!(s.data, TEXT.as_bytes());
-            assert_eq!(s.text.as_deref(), Some(TEXT));
             assert_eq!(&s.aim_id, b"]E0");
             assert!(linear_meta(s).checksum_verified);
             assert!(linear_meta(s).lines_agreeing >= 2);
@@ -647,7 +646,6 @@ mod tests {
                     let s = &found[0];
                     assert_eq!(s.symbology, Symbology::Code128);
                     assert_eq!(s.data, b"Breader-128");
-                    assert_eq!(s.text.as_deref(), Some("Breader-128"));
                     assert_eq!(&s.aim_id, b"]C0");
                     assert!(linear_meta(s).checksum_verified);
                     assert!(s.quad.contains(Point::new(450.0, 300.0)));
@@ -683,7 +681,6 @@ mod tests {
         let found = scan(&code128_picture(&latin, 0.0), &ScanOptions::default());
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].data, [b'c', b'a', b'f', 0xe9]);
-        assert_eq!(found[0].text.as_deref(), Some("caf\u{e9}"));
     }
 
     #[test]

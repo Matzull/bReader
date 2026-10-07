@@ -191,6 +191,7 @@ dependencies = [
  "breader-linear",
  "breader-qr",
  "image",
+ "qrcode",
 ]
 
 [[package]]
@@ -198,6 +199,7 @@ name = "breader-content"
 version = "0.1.0"
 dependencies = [
  "breader-core",
+ "encoding_rs",
 ]
 
 [[package]]

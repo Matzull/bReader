@@ -799,3 +799,41 @@ fn random_valid_codewords_with_random_streams_never_panic() {
         let _ = decode_grid(&g);
     }
 }
+
+#[test]
+fn segments_record_charsets_and_merge() {
+    use breader_core::{Charset, DataSegment};
+    let seg = |start, end, charset| DataSegment {
+        start,
+        end,
+        charset,
+    };
+    let r = bits_decode(5, EcLevel::L, |b| {
+        b.push_numeric_data(b"12").unwrap();
+        b.push_alphanumeric_data(b"AB").unwrap();
+        b.push_kanji_data(&[0x93, 0x5F]).unwrap();
+        b.push_byte_data(b"x").unwrap();
+        b.push_eci_designator(26).unwrap();
+        b.push_byte_data(b"yz").unwrap();
+        b.push_eci_designator(3).unwrap();
+        b.push_byte_data(b"w").unwrap();
+        b.push_alphanumeric_data(b"Q").unwrap();
+    });
+    assert_eq!(
+        r.segments,
+        [
+            seg(0, 4, Charset::Ascii),
+            seg(4, 6, Charset::ShiftJis),
+            seg(6, 7, Charset::Undeclared),
+            seg(7, 9, Charset::Eci(26)),
+            seg(9, 10, Charset::Eci(3)),
+            seg(10, 11, Charset::Ascii),
+        ]
+    );
+    let r = bits_decode(2, EcLevel::L, |b| {
+        b.push_fnc1_first_position().unwrap();
+        b.push_alphanumeric_data(b"01%10ABC").unwrap();
+    });
+    assert_eq!(r.segments.len(), 1);
+    assert_eq!(r.segments[0].end, r.data.len());
+}

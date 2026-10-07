@@ -1,7 +1,7 @@
 use std::sync::{Mutex, MutexGuard};
 
 use breader::{Effort, PixelFormat, Reader as CoreReader, ScanOptions, Symbol as CoreSymbol};
-use breader::{Symbology, SymbologySet};
+use breader::{Content, Symbology, SymbologySet};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -60,6 +60,8 @@ struct Symbol {
     symbology: &'static str,
     data: Vec<u8>,
     text: Option<String>,
+    content: &'static str,
+    gs1: Option<Vec<(String, String)>>,
     corners: Vec<(f32, f32)>,
     orientation: f32,
     aim_id: String,
@@ -68,11 +70,28 @@ struct Symbol {
 
 impl From<CoreSymbol> for Symbol {
     fn from(s: CoreSymbol) -> Self {
+        let (content, gs1) = match &s.content {
+            Content::Text => ("text", None),
+            Content::Binary => ("binary", None),
+            Content::Url => ("url", None),
+            Content::Gs1(elements) => (
+                "gs1",
+                Some(
+                    elements
+                        .iter()
+                        .map(|e| (e.ai.clone(), e.value.clone()))
+                        .collect(),
+                ),
+            ),
+            _ => ("unparsed", None),
+        };
         let aim: Vec<u8> = s.aim_id.iter().copied().filter(|b| *b != 0).collect();
         Self {
             symbology: symbology_id(s.symbology),
             data: s.data,
             text: s.text,
+            content,
+            gs1,
             corners: s.quad.corners.iter().map(|p| (p.x, p.y)).collect(),
             orientation: s.orientation_deg,
             aim_id: String::from_utf8_lossy(&aim).into_owned(),
@@ -96,6 +115,18 @@ impl Symbol {
     #[getter]
     fn text(&self) -> Option<&str> {
         self.text.as_deref()
+    }
+
+    /// One of "text", "binary", "url", "gs1" or "unparsed".
+    #[getter]
+    fn content(&self) -> &str {
+        self.content
+    }
+
+    /// GS1 element strings as (AI, value) pairs, or None when not GS1.
+    #[getter]
+    fn gs1(&self) -> Option<Vec<(String, String)>> {
+        self.gs1.clone()
     }
 
     #[getter]

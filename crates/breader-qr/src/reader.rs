@@ -380,16 +380,11 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
     }
     let quad = Quad::new(pts);
     let dec = &found.decoded;
-    let text = if dec.eci.is_empty() {
-        String::from_utf8(dec.data.clone()).ok()
-    } else {
-        None
-    };
     Some(Symbol {
         symbology: Symbology::Qr,
         data: dec.data.clone(),
-        text,
-        segments: Vec::new(),
+        text: None,
+        segments: dec.segments.clone(),
         content: Content::Unparsed,
         quad,
         orientation_deg: quad.orientation_deg(),

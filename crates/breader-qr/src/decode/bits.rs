@@ -1,10 +1,11 @@
 //! Bitstream (segment) parsing.
 
 use crate::spec::{ALNUM, count_bits};
-use breader_core::Reject;
+use breader_core::{Charset, DataSegment, Reject};
 
 pub(super) struct Parsed {
     pub data: Vec<u8>,
+    pub segments: Vec<DataSegment>,
     pub eci: Vec<u32>,
     pub aim_id: [u8; 3],
 }
@@ -35,10 +36,26 @@ impl Reader<'_> {
 
 const BAD: Reject = Reject::Checksum;
 
+/// Marks `data[start..end]` as `charset`, merging with the previous range when equal.
+fn mark(segments: &mut Vec<DataSegment>, start: usize, end: usize, charset: Charset) {
+    if start >= end {
+        return;
+    }
+    match segments.last_mut() {
+        Some(last) if last.charset == charset && last.end == start => last.end = end,
+        _ => segments.push(DataSegment {
+            start,
+            end,
+            charset,
+        }),
+    }
+}
+
 pub(super) fn parse(bytes: &[u8], version: u8) -> Result<Parsed, Reject> {
     let mut r = Reader { bytes, pos: 0 };
     let mut data: Vec<u8> = Vec::new();
     let mut eci: Vec<u32> = Vec::new();
+    let mut segs: Vec<DataSegment> = Vec::new();
     let mut fnc1_first = false;
     let mut fnc1_second = false;
     let mut segments = 0usize;
@@ -48,6 +65,7 @@ pub(super) fn parse(bytes: &[u8], version: u8) -> Result<Parsed, Reject> {
             break;
         }
         let mode = r.take(4)?;
+        let seg_start = data.len();
         match mode {
             0 => break,
             1 => {
@@ -177,6 +195,15 @@ pub(super) fn parse(bytes: &[u8], version: u8) -> Result<Parsed, Reject> {
         if matches!(mode, 1 | 2 | 4 | 8) {
             segments += 1;
         }
+        let charset = match mode {
+            4 => match eci.last() {
+                Some(&n) => Charset::Eci(n),
+                None => Charset::Undeclared,
+            },
+            8 => Charset::ShiftJis,
+            _ => Charset::Ascii,
+        };
+        mark(&mut segs, seg_start, data.len(), charset);
     }
 
     let base = if fnc1_first {
@@ -189,6 +216,7 @@ pub(super) fn parse(bytes: &[u8], version: u8) -> Result<Parsed, Reject> {
     let n = base + u8::from(!eci.is_empty());
     Ok(Parsed {
         data,
+        segments: segs,
         eci,
         aim_id: [b']', b'Q', b'0' + n],
     })

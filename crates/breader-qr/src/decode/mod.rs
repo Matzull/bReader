@@ -6,7 +6,7 @@ mod bits;
 mod tests;
 
 use crate::spec::{self, FORMAT_MASK, FORMAT_WORDS, VERSION_WORDS};
-use breader_core::{BitMatrix, EcLevel, Reject};
+use breader_core::{BitMatrix, DataSegment, EcLevel, Reject};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DecodedQr {
@@ -19,6 +19,8 @@ pub(crate) struct DecodedQr {
     /// position is not included; `%` in alphanumeric GS1 data is mapped
     /// to ASCII 29 (and `%%` to `%`).
     pub data: Vec<u8>,
+    /// Charset of each byte range of `data`, adjacent equal ranges merged.
+    pub segments: Vec<DataSegment>,
     pub eci: Vec<u32>,
     pub mirrored: bool,
     /// ISO/IEC 15424 identifier: ]Q1..]Q6.
@@ -187,6 +189,7 @@ fn decode_with(
         mask,
         errors_corrected: corrected,
         data: parsed.data,
+        segments: parsed.segments,
         eci: parsed.eci,
         mirrored,
         aim_id: parsed.aim_id,

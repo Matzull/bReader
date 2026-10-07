@@ -12,8 +12,10 @@ pub use breader_core::{
     Symbology, SymbologyReader, SymbologySet,
 };
 
+pub use breader_content::{Gs1Error, charset, gs1};
+
 pub mod modules {
-    pub use breader_content::{ContentClassifier, Dedup};
+    pub use breader_content::{ContentClassifier, Dedup, TextDecoder};
     pub use breader_imgproc::{Downscale, LocalBinarizer, OtsuBinarizer};
     #[cfg(feature = "linear")]
     pub use breader_linear::LinearReader;
@@ -32,6 +34,7 @@ pub fn default_pipeline() -> Pipeline {
     let builder = builder.reader(modules::LinearReader);
     builder
         .post_processor(modules::Dedup)
+        .post_processor(modules::TextDecoder)
         .post_processor(modules::ContentClassifier)
         .build()
         .expect("pipeline always has a binarizer")

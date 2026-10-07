@@ -336,7 +336,7 @@ impl Aggregator {
         Symbol {
             symbology: first.symbology,
             data: first.text.clone(),
-            text: Some(first.text.iter().map(|&b| char::from(b)).collect()),
+            text: None,
             segments: Vec::new(),
             content: Content::Unparsed,
             orientation_deg: quad.orientation_deg(),

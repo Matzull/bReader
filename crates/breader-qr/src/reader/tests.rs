@@ -311,10 +311,8 @@ fn end_to_end_rotations_and_versions() {
             let out = scan_one(&img, r.w, r.h, Effort::Balanced);
             assert_eq!(out.len(), 1, "v{version} {deg}");
             assert_eq!(out[0].data, payload(version), "v{version} {deg}");
-            assert_eq!(
-                out[0].text.as_deref().map(str::as_bytes),
-                Some(&payload(version)[..])
-            );
+            assert!(out[0].text.is_none());
+            assert!(out[0].segments.is_empty() || out[0].segments.len() == 1);
             let SymbolMeta::Qr(meta) = &out[0].meta else {
                 panic!()
             };

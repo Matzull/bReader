@@ -1,8 +1,8 @@
 //! End-to-end check of the default pipeline on a rendered EAN-13.
 
 use breader::{
-    Content, EanAddonPolicy, Effort, ImageBuffer, ImageView, LinearMeta, Reader, ScanOptions,
-    SymbolMeta, Symbology,
+    Content, EanAddonPolicy, Effort, Gs1Element, ImageBuffer, ImageView, LinearMeta, Reader,
+    ScanOptions, SymbolMeta, Symbology,
 };
 
 const L_CODE: [&str; 10] = [
@@ -69,7 +69,13 @@ fn reads_a_rendered_ean13_with_default_options() {
     assert_eq!(s.symbology, Symbology::Ean13);
     assert_eq!(s.data, b"5901234123457");
     assert_eq!(s.text.as_deref(), Some("5901234123457"));
-    assert_eq!(s.content, Content::Text);
+    assert_eq!(
+        s.content,
+        Content::Gs1(vec![Gs1Element {
+            ai: "01".into(),
+            value: "05901234123457".into()
+        }])
+    );
     assert_eq!(&s.aim_id, b"]E0");
     assert!(s.orientation_deg < 2.0 || s.orientation_deg > 358.0);
     let SymbolMeta::Linear(LinearMeta {
