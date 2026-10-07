@@ -1,7 +1,6 @@
 //! GS1 element strings: Application Identifier table, parser and HRI.
 //!
-//! The table is written from the GS1 General Specifications. Entries that
-//! should be re-checked against the current edition are marked `REVIEW`.
+//! The table is written from the GS1 General Specifications.
 
 use breader_core::Gs1Element;
 use std::fmt;
@@ -61,6 +60,8 @@ enum Date {
     YmdRange,
     /// YYMMDD optionally followed by HHMM.
     YmdOptTime,
+    /// YYMMDDHH optionally followed by MM or MMSS.
+    YmdHOptMs,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -201,7 +202,7 @@ const AIS: &[Spec] = &[
     n("366n", 6, 6),
     n("367n", 6, 6),
     n("368n", 6, 6),
-    n("369n", 6, 6), // REVIEW: existence of 369n
+    n("369n", 6, 6),
     n("37", 1, 8),
     n("390n", 1, 15),
     n("391n", 4, 18),
@@ -239,7 +240,7 @@ const AIS: &[Spec] = &[
     x("7008", 3),
     x("7009", 10),
     x("7010", 2),
-    n("7011", 6, 10).date(Date::YmdOptTime), // REVIEW: AI 7011 format
+    n("7011", 6, 10).date(Date::YmdOptTime),
     x("7020", 20),
     x("7021", 20),
     x("7022", 20),
@@ -261,17 +262,18 @@ const AIS: &[Spec] = &[
     n("8005", 6, 6),
     n("8006", 18, 18).chk(Check::Prefix(14)),
     x("8007", 34),
-    n("8008", 8, 12), // REVIEW: date/time not validated
+    n("8008", 8, 12).date(Date::YmdHOptMs),
     x("8009", 50),
     x("8010", 30),
     n("8011", 1, 12),
     x("8012", 20),
-    x("8013", 25), // REVIEW: check characters not validated
+    // The trailing check-character pair is not verified; it only affects classification.
+    x("8013", 25),
     n("8017", 18, 18).chk(Check::Full),
     n("8018", 18, 18).chk(Check::Full),
     n("8019", 1, 10),
     x("8020", 25),
-    n("8026", 18, 18).chk(Check::Prefix(14)), // REVIEW
+    n("8026", 18, 18).chk(Check::Prefix(14)),
     x("8110", 70),
     n("8111", 4, 4),
     x("8112", 70),
@@ -372,6 +374,12 @@ fn valid_date(kind: Date, v: &[u8]) -> bool {
             10 => valid_ymd(v) && valid_hm(&v[6..]),
             _ => false,
         },
+        Date::YmdHOptMs => {
+            matches!(v.len(), 8 | 10 | 12)
+                && valid_ymd(v)
+                && two(&v[6..]) <= 23
+                && v[8..].chunks(2).all(|c| two(c) <= 59)
+        }
     }
 }
 
@@ -617,6 +625,22 @@ mod tests {
                 .map(|_| char::from_u32((next() % 0x800) as u32).unwrap_or('x'))
                 .collect();
             let _ = parse(&s);
+        }
+    }
+
+    #[test]
+    fn production_date_time_8008() {
+        for ok in ["800825013114", "80082501311430", "8008250131143059"] {
+            assert!(parse(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "8008250131",
+            "80082501311",
+            "800825013124",
+            "80082501311460",
+            "800825013114305",
+        ] {
+            assert!(parse(bad).is_err(), "{bad}");
         }
     }
 }
