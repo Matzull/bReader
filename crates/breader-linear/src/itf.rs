@@ -122,7 +122,9 @@ struct Read {
     last_bar: usize,
 }
 
-fn read_symbol(runs: &Runs, j: usize) -> Option<Read> {
+/// Checks the start pattern at run `j`; returns the bar/space bias and the
+/// module estimate.
+fn start_of(runs: &Runs, j: usize) -> Option<(f32, f32)> {
     let raw = adjusted_widths::<4>(runs, j, 0.0)?;
     let mean = raw.iter().sum::<f32>() / 4.0;
     if mean < MIN_MODULE || runs.space_before(j) < 0.9 * QUIET * mean * START_SPREAD.0 {
@@ -142,6 +144,11 @@ fn read_symbol(runs: &Runs, j: usize) -> Option<Read> {
     if quiet_before(runs, j, bias) < QUIET * module {
         return None;
     }
+    Some((bias, module))
+}
+
+fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
+    let (bias, module) = start_of(runs, j)?;
     let mut read = Read {
         digits: [0; MAX_DIGITS],
         len: 0,
@@ -161,6 +168,7 @@ fn read_symbol(runs: &Runs, j: usize) -> Option<Read> {
             return None;
         }
         let g = read_pair(runs, at, bias, narrow)?;
+        *started = true;
         narrow = g.narrow;
         read.digits[read.len] = g.digits.0;
         read.digits[read.len + 1] = g.digits.1;
@@ -173,14 +181,15 @@ fn read_symbol(runs: &Runs, j: usize) -> Option<Read> {
 }
 
 impl LinearDecoder for ItfDecoder {
-    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) {
+    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) -> bool {
         if !opts.symbologies.contains(Symbology::Itf) {
-            return;
+            return false;
         }
+        let mut started = false;
         let n = runs.len();
         let mut j = usize::from(n > 0 && !runs.is_bar(0));
         while j + 4 + 10 + 3 <= n {
-            if let Some(read) = read_symbol(runs, j) {
+            if let Some(read) = read_symbol(runs, j, &mut started) {
                 let digits = &read.digits[..read.len];
                 let length_ok =
                     digits.len() >= opts.itf_min_length && opts.itf_length_ok(digits.len());
@@ -203,6 +212,7 @@ impl LinearDecoder for ItfDecoder {
             }
             j += 2;
         }
+        started
     }
 }
 

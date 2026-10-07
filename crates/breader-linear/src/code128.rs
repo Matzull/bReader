@@ -189,11 +189,11 @@ fn start_pattern(runs: &Runs, at: usize) -> Option<usize> {
     }
     let k = 11.0 / total;
     let mut best = (f32::MAX, 0);
-    let starts = usize::from(START_A)..=usize::from(START_C);
-    for (p, pattern) in WIDTHS
+    let first = usize::from(START_A);
+    for (p, pattern) in WIDTHS[first..=usize::from(START_C)]
         .iter()
         .enumerate()
-        .filter(|(p, _)| starts.contains(p))
+        .map(|(k, w)| (first + k, w))
     {
         let e: f32 = (0..6).map(|i| (raw[i] * k - pattern[i]).abs()).sum();
         if e < best.0 {
@@ -211,7 +211,8 @@ struct Read {
     last_bar: usize,
 }
 
-fn read_symbol(runs: &Runs, j: usize) -> Option<Read> {
+/// Checks the start character at run `j` and the quiet zone before it.
+fn start_of(runs: &Runs, j: usize) -> Option<(CharMatch, f32)> {
     start_pattern(runs, j)?;
     let start = match_char(runs, j, 0.0, 0.0)?;
     if !(START_A..=START_C).contains(&start.value) || start.weak {
@@ -221,6 +222,12 @@ fn read_symbol(runs: &Runs, j: usize) -> Option<Read> {
     if quiet_before(runs, j, bias) < QUIET * start.module {
         return None;
     }
+    Some((start, bias))
+}
+
+fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
+    let (start, bias) = start_of(runs, j)?;
+    *started = true;
     let mut values = [0u8; MAX_CHARS + 2];
     values[0] = start.value;
     let mut read = Read {
@@ -413,14 +420,15 @@ fn push_fnc1(
 }
 
 impl LinearDecoder for Code128Decoder {
-    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) {
+    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) -> bool {
         if !opts.symbologies.contains(Symbology::Code128) {
-            return;
+            return false;
         }
+        let mut started = false;
         let n = runs.len();
         let mut j = usize::from(n > 0 && !runs.is_bar(0));
         while j + 6 * 4 < n {
-            if let Some(read) = read_symbol(runs, j)
+            if let Some(read) = read_symbol(runs, j, &mut started)
                 && let values = &read.values[..read.len]
                 && checksum_ok(values)
                 && let Some((text, aim)) = interpret(values[0], &values[1..values.len() - 1])
@@ -441,6 +449,7 @@ impl LinearDecoder for Code128Decoder {
             }
             j += 2;
         }
+        started
     }
 }
 

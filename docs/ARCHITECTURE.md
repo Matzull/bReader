@@ -94,7 +94,7 @@ Validation is part of each decoder, not an optional post-step: a `SymbologyReade
 
 ### 3.1 Linear (`breader-linear`)
 
-`LinearReader` returns `uses_binary() == false` and `handles_inversion() == true`: it reads grayscale profiles and decodes both polarities from the same edges, so the pipeline runs it once per image variant.
+`LinearReader` returns `uses_binary() == false` and `handles_inversion() == true`: it reads grayscale profiles and decodes both polarities from the same edges. It only scans the original image; the downscaled variant was measured to add no 1D reads on any dataset.
 
 Internal modules and data flow for one pass:
 
@@ -115,8 +115,8 @@ ScanPlan ─► Scanline ─► profile (u8) ─► Edges ─► Runs ─┬─ 
    | Balanced | 8 (every 22.5°) |
    | Exhaustive | 12 (every 15°) |
 
-2. **Profile** — samples along the scanline at 1 px steps: direct reads when axis-aligned (vertical lines in one row-major sweep), bilinear interpolation otherwise.
-3. **Edges** — central difference of the profile. An edge is a local extremum with `|d| ≥ max(min_edge, 0.12 · local_range, noise term)`, where the noise is estimated on flat blocks only and the threshold is capped at 0.3 · range. Signs must alternate; for consecutive same-sign extrema, the stronger one is kept. Each edge is then moved to the half-level crossing between the neighbouring extremes, which gives sub-pixel positions and corrects print gain. A [1 2 1]-smoothed variant runs as well in Balanced and Exhaustive (it is the only variant in Fast) for noisy lines; unsmoothed is the default because smoothing merges 1.5–2 px bars.
+2. **Profile** — samples along the scanline at 1 px steps: direct reads when axis-aligned (vertical lines in one row-major sweep). Oblique lines use 16.16 fixed-point DDA with integer bilinear weights and are sampled band by band (32 rows), so each band stays in cache while every line crosses it. Nearest and 1D interpolation were measured and lost reads.
+3. **Edges** — central difference of the profile. An edge is a local extremum with `|d| ≥ max(min_edge, 0.12 · local_range, noise term)`, where the noise is estimated on flat blocks only and the threshold is capped at 0.3 · range. Signs must alternate; for consecutive same-sign extrema, the stronger one is kept. Each edge is then moved to the half-level crossing between the neighbouring extremes, which gives sub-pixel positions and corrects print gain. A [1 2 1]-smoothed variant runs in Balanced and Exhaustive only on lines where some decoder found its start pattern (it is the only variant in Fast); unsmoothed is the default because smoothing merges 1.5–2 px bars.
 4. **Runs** — widths between consecutive edges, edge positions, and the polarity of the first run. Decoders read both polarities by swapping the bar/space roles. They never allocate.
 5. **LinearDecoder** (family-internal trait, static dispatch through a tuple of decoders): `decode(&self, runs, opts, out: &mut Vec<LineHit>)`. Each decoder tries both reading directions:
    - finds its start (or reversed stop) pattern;
@@ -216,8 +216,8 @@ Measured on 2026-10-07 on a Ryzen 5 5500U, single thread, in ms per image:
 
 Work items, in priority order. Each must keep read counts and 0 FP unchanged.
 
-1. **Image kernels** (`breader-imgproc`). Luma conversion, Otsu, local binarizer and downscale are at about 2 ns/px; the target is ≤ 0.5 ns/px. Rewrite them to be autovectorization-friendly first: row-wise passes, integer arithmetic, no bounds checks in inner loops. Explicit SIMD (`std::arch`, AVX2 / NEON with runtime detection and a scalar fallback) is allowed only in a `simd` module with one `unsafe` block per kernel, each tested against the scalar version (NFR-9). Downscale ×2 gets a specialized path.
-2. **1D in Balanced**:
+1. **Image kernels** (`breader-imgproc`) — done: all ≤ 0.4 ns/px at 1080p, bit-identical output, SSE2 only for bit packing and RGBA/BGRA luma. Luma conversion, Otsu, local binarizer and downscale are at about 2 ns/px; the target is ≤ 0.5 ns/px. Rewrite them to be autovectorization-friendly first: row-wise passes, integer arithmetic, no bounds checks in inner loops. Explicit SIMD (`std::arch`, AVX2 / NEON with runtime detection and a scalar fallback) is allowed only in a `simd` module with one `unsafe` block per kernel, each tested against the scalar version (NFR-9). Downscale ×2 gets a specialized path.
+2. **1D in Balanced** — done: 41.3 → 14.4 ms/img on challenging, 9.6 → 3.3 on synth, no read change:
    - Non-axis scanlines step with fixed-point DDA and nearest or linear sampling, instead of bilinear sampling with floats.
    - The smoothed edge detector runs only on lines whose unsmoothed pass produced a partial match (start pattern found, decode failed).
    - Measure the read contribution of the downscaled variant for 1D, and keep it only if it adds reads.

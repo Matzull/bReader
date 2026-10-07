@@ -111,9 +111,12 @@ const RANGE_REACH: usize = 2;
 /// treated as flat when estimating noise.
 const FLAT_BLOCK: f32 = 0.6;
 
-fn extreme(samples: &[u8], max: bool) -> f32 {
-    let it = samples.iter().copied();
-    f32::from(if max { it.max() } else { it.min() }.unwrap_or(0))
+fn low(samples: &[u8]) -> u8 {
+    samples.iter().fold(255, |m, &v| m.min(v))
+}
+
+fn high(samples: &[u8]) -> u8 {
+    samples.iter().fold(0, |m, &v| m.max(v))
 }
 
 /// Reusable buffers for edge detection.
@@ -164,6 +167,9 @@ impl EdgeDetector {
             let d = &self.diff;
             for i in lo..hi {
                 let v = d[i];
+                if v.abs() < threshold {
+                    continue;
+                }
                 let sign = v.signum();
                 let (a, b, c) = (sign * d[i - 1], sign * v, sign * d[i + 1]);
                 if b < threshold || b < a || b <= c {
@@ -216,24 +222,23 @@ impl EdgeDetector {
                 continue;
             }
             let (before, after) = if e.rising {
-                (
-                    extreme(&profile[p..=c], false),
-                    extreme(&profile[c..=n], true),
-                )
+                (low(&profile[p..=c]), high(&profile[c..=n]))
             } else {
-                (
-                    extreme(&profile[p..=c], true),
-                    extreme(&profile[c..=n], false),
-                )
+                (high(&profile[p..=c]), low(&profile[c..=n]))
             };
-            let mid = (before + after) / 2.0;
+            let twice_mid = i32::from(before) + i32::from(after);
+            let mid = twice_mid as f32 / 2.0;
             let lo = c.saturating_sub(CROSSING_REACH);
             let hi = (c + CROSSING_REACH).min(last - 1);
             let mut best: Option<(f32, f32)> = None;
-            for i in lo..=hi {
-                let (p0, p1) = (f32::from(profile[i]), f32::from(profile[i + 1]));
-                if p0 != p1 && (p0 - mid) * (p1 - mid) <= 0.0 && (p1 > p0) == e.rising {
-                    let x = i as f32 + (mid - p0) / (p1 - p0);
+            for (i, w) in profile[lo..=hi + 1].windows(2).enumerate() {
+                let (q0, q1) = (i32::from(w[0]), i32::from(w[1]));
+                if q0 != q1
+                    && (2 * q0 - twice_mid) * (2 * q1 - twice_mid) <= 0
+                    && (q1 > q0) == e.rising
+                {
+                    let (p0, p1) = (f32::from(w[0]), f32::from(w[1]));
+                    let x = (lo + i) as f32 + (mid - p0) / (p1 - p0);
                     let d = (x - e.pos).abs();
                     if best.is_none_or(|(bd, _)| d < bd) {
                         best = Some((d, x));

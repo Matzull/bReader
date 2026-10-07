@@ -82,16 +82,19 @@ impl From<&ScanOptions> for LineOptions {
 pub(crate) trait LinearDecoder {
     /// Pushes every validated symbol found in `runs`, read in the forward
     /// direction of the runs. Callers also pass the reversed runs.
-    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>);
+    ///
+    /// Returns true when a start pattern was found, whether or not the symbol
+    /// beyond it decoded.
+    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) -> bool;
 }
 
 macro_rules! decoder_tuples {
     ($($name:ident),+) => {
         impl<$($name: LinearDecoder),+> LinearDecoder for ($($name,)+) {
             #[allow(non_snake_case)]
-            fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) {
+            fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) -> bool {
                 let ($($name,)+) = self;
-                $($name.decode(runs, opts, out);)+
+                false $(| $name.decode(runs, opts, out))+
             }
         }
     };
@@ -111,7 +114,7 @@ mod tests {
     struct Fixed(&'static [u8]);
 
     impl LinearDecoder for Fixed {
-        fn decode(&self, _runs: &Runs, _opts: &LineOptions, out: &mut Vec<LineHit>) {
+        fn decode(&self, _runs: &Runs, _opts: &LineOptions, out: &mut Vec<LineHit>) -> bool {
             out.push(LineHit {
                 symbology: Symbology::Code39,
                 text: self.0.to_vec(),
@@ -124,6 +127,7 @@ mod tests {
                 checksum_verified: false,
                 inverted: false,
             });
+            false
         }
     }
 

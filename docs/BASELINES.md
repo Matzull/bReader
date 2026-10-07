@@ -69,6 +69,19 @@ No engine produced false positives on the `negative` class. Most false positives
 
 Timings on this machine vary up to 2x between runs; compare engines in the same session.
 
+## breader after M7 kernels, QR polarity and 1D work (2026-10-07)
+
+| Dataset | Effort | Read rate | FP | Latency p50 / p95 / max |
+|---|---|---|---|---|
+| challenging-images | Fast | 279/392 = 71.2 % | 0 | 2.1 / 25.4 / 63.7 |
+| challenging-images | Balanced | 348/392 = 88.8 % | 0 | 9.4 / 90.9 / 146.1 |
+| challenging-images | Exhaustive | 344/392 = 87.8 % | 0 | 22.2 / 246.0 / 350.0 |
+| synth | Fast | 192/228 = 84.2 % | 0 | 0.9 / 6.6 / 19.5 |
+| synth | Balanced | 223/228 = 97.8 % | 0 | 3.9 / 25.1 / 65.0 |
+| synth | Exhaustive | 224/228 = 98.2 % | 0 | 8.1 / 59.9 / 189.0 |
+
+zxing-cpp in the same session on challenging-images: 341/392 = 87.0 %, 1 FP, 23.3 / 330.2 / 400.4 ms.
+
 ## v1 targets (confirmed 2026-10-07)
 
 | Metric | Target |

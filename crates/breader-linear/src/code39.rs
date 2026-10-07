@@ -116,7 +116,9 @@ struct Read {
     last_bar: usize,
 }
 
-fn read_symbol(runs: &Runs, j: usize) -> Option<Read> {
+/// Reads the start character at run `j` and returns it with the bar/space
+/// bias.
+fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32)> {
     let raw = adjusted_widths::<9>(runs, j, 0.0)?;
     if runs.space_before(j) < QUIET_SCREEN * raw.iter().sum::<f32>() {
         return None;
@@ -135,6 +137,12 @@ fn read_symbol(runs: &Runs, j: usize) -> Option<Read> {
     if start.ch != STAR || quiet_before(runs, j, bias) < QUIET * start.narrow {
         return None;
     }
+    Some((start, bias))
+}
+
+fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
+    let (start, bias) = start_of(runs, j)?;
+    *started = true;
     let mut read = Read {
         chars: [0; MAX_CHARS],
         len: 0,
@@ -223,14 +231,15 @@ fn expand_full_ascii(chars: &[u8]) -> Option<Vec<u8>> {
 }
 
 impl LinearDecoder for Code39Decoder {
-    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) {
+    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) -> bool {
         if !opts.symbologies.contains(Symbology::Code39) {
-            return;
+            return false;
         }
+        let mut started = false;
         let n = runs.len();
         let mut j = usize::from(n > 0 && !runs.is_bar(0));
         while j + 9 + 10 + 9 <= n {
-            if let Some(read) = read_symbol(runs, j) {
+            if let Some(read) = read_symbol(runs, j, &mut started) {
                 let mut data = &read.chars[..read.len];
                 let checked = opts.code39_checksum;
                 if checked {
@@ -271,6 +280,7 @@ impl LinearDecoder for Code39Decoder {
             }
             j += 2;
         }
+        started
     }
 }
 

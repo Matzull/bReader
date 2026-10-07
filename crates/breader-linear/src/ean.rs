@@ -372,8 +372,9 @@ struct Read {
     digits: usize,
 }
 
-fn read_layout(runs: &Runs, j: usize, layout: &Layout) -> Option<Read> {
+fn read_layout(runs: &Runs, j: usize, layout: &Layout, started: &mut bool) -> Option<Read> {
     let cal = calibrate(runs, j, layout.guards)?;
+    *started = true;
     let last = j + layout.total - 1;
     if runs.space_before(j) < layout.quiet * cal.start()
         || runs.space_after(last) < layout.quiet * cal.end()
@@ -492,13 +493,13 @@ impl EanDecoder {
         }
     }
 
-    fn ean13(runs: &Runs, j: usize, opts: &LineOptions) -> Option<LineHit> {
+    fn ean13(runs: &Runs, j: usize, opts: &LineOptions, started: &mut bool) -> Option<LineHit> {
         let upca = opts.symbologies.contains(Symbology::UpcA);
         let ean13 = opts.symbologies.contains(Symbology::Ean13);
         if !upca && !ean13 {
             return None;
         }
-        let read = read_layout(runs, j, &EAN13)?;
+        let read = read_layout(runs, j, &EAN13, started)?;
         let first = EAN13_FIRST
             .iter()
             .position(|&m| m == parity_mask(&read.left))? as u8;
@@ -521,11 +522,11 @@ impl EanDecoder {
         Some(Self::hit(runs, j, &EAN13, &read, symbology, text, opts))
     }
 
-    fn ean8(runs: &Runs, j: usize, opts: &LineOptions) -> Option<LineHit> {
+    fn ean8(runs: &Runs, j: usize, opts: &LineOptions, started: &mut bool) -> Option<LineHit> {
         if !opts.symbologies.contains(Symbology::Ean8) {
             return None;
         }
-        let read = read_layout(runs, j, &EAN8)?;
+        let read = read_layout(runs, j, &EAN8, started)?;
         if parity_mask(&read.left[..4]) != 0 {
             return None;
         }
@@ -548,11 +549,11 @@ impl EanDecoder {
         ))
     }
 
-    fn upce(runs: &Runs, j: usize, opts: &LineOptions) -> Option<LineHit> {
+    fn upce(runs: &Runs, j: usize, opts: &LineOptions, started: &mut bool) -> Option<LineHit> {
         if !opts.symbologies.contains(Symbology::UpcE) {
             return None;
         }
-        let read = read_layout(runs, j, &UPCE)?;
+        let read = read_layout(runs, j, &UPCE, started)?;
         let parity = parity_mask(&read.left);
         let (ns, check) = (0..2u8).find_map(|ns| {
             let want = |c: usize| {
@@ -589,30 +590,32 @@ impl EanDecoder {
 }
 
 impl LinearDecoder for EanDecoder {
-    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) {
+    fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) -> bool {
         let set = opts.symbologies;
         let want13 = set.contains(Symbology::Ean13) || set.contains(Symbology::UpcA);
         let want8 = set.contains(Symbology::Ean8);
         let want_e = set.contains(Symbology::UpcE);
+        let mut started = false;
         if !(want13 || want8 || want_e) {
-            return;
+            return started;
         }
         let n = runs.len();
         let mut j = usize::from(n > 0 && !runs.is_bar(0));
         while j + UPCE.total <= n {
             if plausible_start(runs, j) {
                 if want13 && j + EAN13.total <= n {
-                    out.extend(Self::ean13(runs, j, opts));
+                    out.extend(Self::ean13(runs, j, opts, &mut started));
                 }
                 if want8 && j + EAN8.total <= n {
-                    out.extend(Self::ean8(runs, j, opts));
+                    out.extend(Self::ean8(runs, j, opts, &mut started));
                 }
                 if want_e {
-                    out.extend(Self::upce(runs, j, opts));
+                    out.extend(Self::upce(runs, j, opts, &mut started));
                 }
             }
             j += 2;
         }
+        started
     }
 }
 
@@ -811,6 +814,17 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn decode_reports_a_start_when_the_check_digit_fails() {
+        let p = Render::px(3.0).profile(&ean13_modules("5901234123458"));
+        let runs = runs_with(&p, &EdgeParams::fine());
+        let mut out = Vec::new();
+        assert!(EanDecoder.decode(&runs, &opts(), &mut out));
+        assert!(out.is_empty());
+        let blank = Runs::from_widths(true, &[40.0, 30.0], 50.0, 50.0);
+        assert!(!EanDecoder.decode(&blank, &opts(), &mut out));
     }
 
     #[test]

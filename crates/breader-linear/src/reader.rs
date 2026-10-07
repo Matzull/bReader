@@ -10,7 +10,7 @@ use crate::ean::EanDecoder;
 use crate::edges::{EdgeDetector, EdgeParams, Edges};
 use crate::itf::ItfDecoder;
 use crate::plan::{ScanPlan, Scanline, clip_line};
-use crate::profile;
+use crate::profile::{self, Oblique};
 use crate::runs::Runs;
 
 /// Decoders tried on every scanline, composed statically.
@@ -36,6 +36,8 @@ struct Work {
     lines: Vec<Scanline>,
     profile: Vec<u8>,
     columns: Vec<u8>,
+    oblique: Vec<u8>,
+    offsets: Vec<usize>,
     seeds: Vec<PlacedHit>,
     stage: Stage,
 }
@@ -75,7 +77,13 @@ fn scan_profile<D: LinearDecoder>(
     opts: &LineOptions,
     stage: &mut Stage,
 ) {
-    for params in &stage.edge_params {
+    let mut retry = false;
+    for (variant, params) in stage.edge_params.iter().enumerate() {
+        // The smoothed variant only matters when the unsmoothed one saw a
+        // start pattern it could not decode.
+        if variant > 0 && !retry {
+            break;
+        }
         stage.detector.detect(profile, params, &mut stage.edges);
         Runs::from_edges(&stage.edges, &mut stage.runs);
         if stage.runs.is_empty() {
@@ -84,15 +92,15 @@ fn scan_profile<D: LinearDecoder>(
         Runs::reverse_from(&stage.runs, &mut stage.reversed);
         stage.hits.clear();
         if opts.normal {
-            decoders.decode(&stage.runs, opts, &mut stage.hits);
-            decoders.decode(&stage.reversed, opts, &mut stage.hits);
+            retry |= decoders.decode(&stage.runs, opts, &mut stage.hits);
+            retry |= decoders.decode(&stage.reversed, opts, &mut stage.hits);
         }
         if opts.invert {
             let dark_symbols = stage.hits.len();
             stage.runs.flip_roles();
             stage.reversed.flip_roles();
-            decoders.decode(&stage.runs, opts, &mut stage.hits);
-            decoders.decode(&stage.reversed, opts, &mut stage.hits);
+            retry |= decoders.decode(&stage.runs, opts, &mut stage.hits);
+            retry |= decoders.decode(&stage.reversed, opts, &mut stage.hits);
             for hit in &mut stage.hits[dark_symbols..] {
                 hit.inverted = true;
             }
@@ -218,6 +226,18 @@ impl SymbologyReader for LinearReader {
     }
 
     fn scan(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
+        // Downscaled variants never added a 1D read on any test set, and
+        // cost as much per pixel as the original.
+        if ctx.pass().preprocessor.is_some() {
+            return;
+        }
+        self.scan_image(ctx, out);
+    }
+}
+
+impl LinearReader {
+    /// Scans the pass image of `ctx`, whichever variant it is.
+    fn scan_image(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
         if ctx.pass().inverted || !ctx.options().symbologies.intersects(self.symbologies()) {
             return;
         }
@@ -247,12 +267,22 @@ impl SymbologyReader for LinearReader {
         profile::sample_columns(&img, &columns, false, &mut work.columns);
 
         let lines = std::mem::take(&mut work.lines);
-        let mut column = 0;
+        let oblique: Vec<Scanline> = lines
+            .iter()
+            .filter(|l| Oblique::is_oblique(l))
+            .copied()
+            .collect();
+        profile::sample_oblique_batch(&img, &oblique, false, &mut work.offsets, &mut work.oblique);
+        let (mut column, mut slanted) = (0, 0);
         for (i, line) in lines.iter().enumerate() {
             if line.from.x == line.to.x {
                 let h = img.height();
                 let profile = &work.columns[column * h..(column + 1) * h];
                 column += 1;
+                scan_profile(&DECODERS, profile, line, i as u32, &opts, &mut work.stage);
+            } else if Oblique::is_oblique(line) {
+                let profile = &work.oblique[work.offsets[slanted]..work.offsets[slanted + 1]];
+                slanted += 1;
                 scan_profile(&DECODERS, profile, line, i as u32, &opts, &mut work.stage);
             } else {
                 profile::sample(&img, line, false, &mut work.profile);
@@ -337,7 +367,7 @@ mod tests {
         let mut ctx = FrameContext::new(img.view(), opts, pre, &binarizers, &mut scratch);
         ctx.set_pass(pass);
         let mut out = Vec::new();
-        LinearReader.scan(&mut ctx, &mut out);
+        LinearReader.scan_image(&mut ctx, &mut out);
         out
     }
 
@@ -499,6 +529,24 @@ mod tests {
         let width = q.corners[0].distance(q.corners[1]);
         assert!((width - 285.0).abs() < 20.0, "width {width}");
         assert!(found[0].orientation_deg.abs() < 3.0);
+    }
+
+    #[test]
+    fn preprocessed_variants_are_skipped() {
+        let img = picture(&ean13_modules(TEXT), 0.0);
+        let pre: Vec<Box<dyn Preprocessor>> = vec![Box::new(Half)];
+        let mut scratch = Scratch::new();
+        let binarizers: Vec<Box<dyn Binarizer>> = Vec::new();
+        let opts = ScanOptions::default();
+        let mut ctx = FrameContext::new(img.view(), &opts, &pre, &binarizers, &mut scratch);
+        ctx.set_pass(Pass {
+            preprocessor: Some(0),
+            binarizer: 0,
+            inverted: false,
+        });
+        let mut out = Vec::new();
+        LinearReader.scan(&mut ctx, &mut out);
+        assert!(out.is_empty());
     }
 
     #[test]
