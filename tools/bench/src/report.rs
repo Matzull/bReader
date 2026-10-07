@@ -3,7 +3,7 @@ use std::time::Duration;
 use breader::Symbology;
 use serde_json::{Value, json};
 
-use crate::matching::{Stats, SymStats};
+use benchlib::matching::{Stats, SymStats};
 
 pub struct Latency {
     pub p50: f64,

@@ -4,6 +4,9 @@
 
 use breader_imgproc::{luma_view, to_luma};
 
+mod tracker;
+pub use tracker::{FrameUpdate, Track, TrackEvent, Tracker, TrackerConfig};
+
 pub use breader_core::{
     Binarizer, BitMatrix, Charset, Code39Options, Content, DataSegment, Detector, EanAddonPolicy,
     EcLevel, Effort, Error, Escalation, FrameContext, Gs1Element, ImageBuffer, ImageView,

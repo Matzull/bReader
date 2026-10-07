@@ -9,6 +9,7 @@ members = [
     "crates/breader-content",
     "crates/breader",
     "tools/bench",
+    "tools/video-bench",
     "tools/synth",
 ]
 exclude = ["crates/breader-py"]

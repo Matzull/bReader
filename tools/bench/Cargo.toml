@@ -5,12 +5,17 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[lib]
+name = "benchlib"
+path = "src/lib.rs"
+
 [[bin]]
 name = "bench"
 path = "src/main.rs"
 
 [features]
 baselines = ["dep:rxing", "dep:rqrr"]
+rayon = ["breader/rayon"]
 
 [dependencies]
 breader = { workspace = true, features = ["image"] }

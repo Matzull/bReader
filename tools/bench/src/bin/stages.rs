@@ -81,6 +81,10 @@ fn main() {
                 ..Default::default()
             },
         ),
+        (
+            "exhaustive all",
+            ScanOptions::with_effort(Effort::Exhaustive),
+        ),
         ("fast all", ScanOptions::with_effort(Effort::Fast)),
         (
             "fast linear",

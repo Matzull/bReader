@@ -1,8 +1,3 @@
-#[cfg(feature = "baselines")]
-mod baselines;
-mod engine;
-mod groundtruth;
-mod matching;
 mod report;
 
 use std::collections::BTreeMap;
@@ -13,6 +8,7 @@ use std::time::Instant;
 use breader::{Effort, Escalation};
 use serde_json::{Value, json};
 
+use benchlib::{engine, groundtruth, matching};
 use engine::{BreaderEngine, Engine};
 use groundtruth::Expected;
 use matching::Stats;
