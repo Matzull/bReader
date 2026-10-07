@@ -35,21 +35,13 @@ cd fuzz
 cargo +nightly fuzz run pipeline -- -max_total_time=300
 ```
 
-`cargo fuzz run` writes new interesting inputs into `corpus/<target>/`. To keep
-the committed seed corpora small, use a separate working corpus and pass the
-committed one as a read-only seed directory:
-
-```sh
-cargo +nightly fuzz run pipeline /tmp/work/pipeline corpus/pipeline -- -max_total_time=300
-```
+`cargo fuzz run` writes new interesting inputs into `corpus/<target>/`. The
+corpus is not versioned (`corpus/`, `artifacts/`, `target/` and `coverage/` are
+gitignored); CI keeps it in its cache between nightly runs, and locally it grows
+across runs. Run `cargo +nightly fuzz cmin <target>` occasionally to shrink it.
 
 `-max_len=<n>` raises the input size limit (the `pipeline` target needs about
 65 KiB for a 256x256 image).
-
-Commit only small seeds: after a long run, `cargo +nightly fuzz cmin <target>`
-and keep `corpus/` under 2 MB in total (drop inputs above about 3 KiB; the
-`pipeline` target in particular grows quickly). `artifacts/`, `target/` and
-`coverage/` are gitignored.
 
 Baseline (5 minutes each, `-rss_limit_mb=2048 -timeout=10`, no findings):
 `pipeline` 60k execs (~200/s), `charset_decode` 30M, `content_pipeline` 13M,
