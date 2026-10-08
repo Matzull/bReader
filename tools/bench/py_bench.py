@@ -77,9 +77,13 @@ class ZxingEngine:
         }
 
     def read(self, gray):
-        return [
-            (self.formats[r.format], bytes(r.bytes)) for r in zxingcpp.read_barcodes(gray) if r.format in self.formats
-        ]
+        out = []
+        for r in zxingcpp.read_barcodes(gray):
+            if r.format in self.formats:
+                data = bytes(r.bytes)
+                text = r.text.encode("utf-8", "replace")
+                out.append((self.formats[r.format], data, [text] if text != data else []))
+        return out
 
 
 class BreaderEngine:
@@ -90,12 +94,29 @@ class BreaderEngine:
         self.reader = breader.Reader(effort)
 
     def read(self, gray):
-        return [(BR_FORMATS[s.symbology], s.data) for s in self.reader.scan(gray) if s.symbology in BR_FORMATS]
+        return [(BR_FORMATS[s.symbology], s.data, []) for s in self.reader.scan(gray) if s.symbology in BR_FORMATS]
 
 
 def map_symbology(name):
     key = "".join(c for c in name if c.isascii() and c.isalnum()).upper()
     return ALIASES.get(key)
+
+
+def upce_to_upca(e):
+    """Expands an 8-digit UPC-E to 12-digit UPC-A; None when the number system is not 0 or 1."""
+    if len(e) != 8 or e[:1] not in (b"0", b"1"):
+        return None
+    d = e[1:7]
+    f = d[5:6]
+    if f in (b"0", b"1", b"2"):
+        mid = d[0:2] + f + b"0000" + d[2:5]
+    elif f == b"3":
+        mid = d[0:3] + b"00000" + d[3:5]
+    elif f == b"4":
+        mid = d[0:4] + b"00000" + d[4:5]
+    else:
+        mid = d[0:5] + b"0000" + f
+    return e[:1] + mid + e[7:]
 
 
 def canonical(sym, data):
@@ -104,8 +125,16 @@ def canonical(sym, data):
         data = text.removeprefix("\x1d").encode("utf-8")
     except UnicodeDecodeError:
         data = data.strip()
-    if sym == "UPC-A" and len(data) == 12 and data.isdigit():
-        return ("EAN-13", b"0" + data)
+    if sym in ("UPC-A", "UPC-E") and data.isdigit():
+        upca = None
+        if sym == "UPC-E" and len(data) == 8:
+            upca = upce_to_upca(data)
+        elif sym == "UPC-A" and len(data) == 12:
+            upca = data
+        if upca is not None:
+            return ("EAN-13", b"0" + upca)
+        if len(data) == 13 and data[:1] == b"0":
+            return ("EAN-13", data)
     return (sym, data)
 
 
@@ -139,7 +168,9 @@ class Stats:
 
 
 def score(found, expected, stats):
-    found_keys = [canonical(s, d) for s, d in found]
+    """`found` items are (symbology, data, alts); alts are other forms a label may use."""
+    found_keys = [canonical(s, d) for s, d, _ in found]
+    alt_keys = [[canonical(s, a) for a in alts] for s, _, alts in found]
     exp_keys = [canonical(s, d) if s else None for s, d in expected]
     used = [False] * len(found)
     for (sym, _), key in zip(expected, exp_keys):
@@ -149,13 +180,13 @@ def score(found, expected, stats):
         row = stats.row(sym)
         row["expected"] += 1
         for i, fk in enumerate(found_keys):
-            if not used[i] and fk == key:
+            if not used[i] and (fk == key or key in alt_keys[i]):
                 used[i] = True
                 row["read"] += 1
                 break
     known = [k for k in exp_keys if k is not None]
     for i, fk in enumerate(found_keys):
-        if used[i] or fk in known:
+        if used[i] or fk in known or any(k in known for k in alt_keys[i]):
             continue
         stats.row(found[i][0])["false_positives"] += 1
 
@@ -234,6 +265,7 @@ def apply_overrides(ann, dir_name, overrides):
                 if b["format"] == entry["from"]["format"] and b["text"] == entry["from"]["text"]:
                     b["format"] = entry["to"]["format"]
                     b["text"] = entry["to"]["text"]
+                    b.pop("bytes_hex", None)
                     applied += 1
                     break
     return applied
@@ -280,11 +312,20 @@ def quads_overlap(a, b):
     return (ca is not None and inside(b, ca)) or (cb is not None and inside(a, cb)) or bbox_iou(a, b) > 0.5
 
 
+def gt_data(b):
+    if "bytes_hex" in b:
+        try:
+            return bytes.fromhex(b["bytes_hex"])
+        except ValueError:
+            pass
+    return b["text"].encode("utf-8")
+
+
 def gt_key(b):
     sym = map_symbology(b["format"])
     if sym is None:
-        return (b["format"], b["text"].strip().encode("utf-8"))
-    return canonical(sym, b["text"].encode("utf-8"))
+        return (b["format"], gt_data(b).strip())
+    return canonical(sym, gt_data(b))
 
 
 def dedup_annotations(ann):
@@ -321,7 +362,7 @@ def run_dataset(base, ann, engine):
     expected_by_file = {}
     for img in ann["images"]:
         expected_by_file.setdefault(img["file"], []).extend(
-            (map_symbology(b["format"]), b["text"].encode("utf-8")) for b in img["barcodes"]
+            (map_symbology(b["format"]), gt_data(b)) for b in img["barcodes"]
         )
     stats = Stats()
     for file in sorted(expected_by_file):

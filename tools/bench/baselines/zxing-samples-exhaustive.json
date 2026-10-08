@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "effort": "exhaustive",
+  "groups": {
+    "aztec-1": {},
+    "aztec-2": {},
+    "codabar-1": {},
+    "codabar-2": {},
+    "code128-1": {
+      "Code 128": {
+        "expected": 6,
+        "read": 3,
+        "false_positives": 0
+      }
+    },
+    "code128-2": {
+      "Code 128": {
+        "expected": 14,
+        "read": 11,
+        "false_positives": 0
+      }
+    },
+    "code128-3": {
+      "Code 128": {
+        "expected": 2,
+        "read": 0,
+        "false_positives": 0
+      }
+    },
+    "code39-1": {
+      "Code 39": {
+        "expected": 6,
+        "read": 3,
+        "false_positives": 0
+      }
+    },
+    "code39-2": {
+      "Code 39": {
+        "expected": 3,
+        "read": 0,
+        "false_positives": 0
+      }
+    },
+    "code39-3": {
+      "Code 39": {
+        "expected": 5,
+        "read": 5,
+        "false_positives": 0
+      }
+    },
+    "code93-1": {},
+    "databarltd-1": {},
+    "datamatrix-1": {
+      "Data Matrix": {
+        "expected": 30,
+        "read": 25,
+        "false_positives": 0
+      }
+    },
+    "datamatrix-2": {
+      "Data Matrix": {
+        "expected": 13,
+        "read": 12,
+        "false_positives": 0
+      }
+    },
+    "datamatrix-3": {
+      "Data Matrix": {
+        "expected": 28,
+        "read": 18,
+        "false_positives": 0
+      }
+    },
+    "datamatrix-4": {
+      "Data Matrix": {
+        "expected": 21,
+        "read": 19,
+        "false_positives": 0
+      }
+    },
+    "datamatrix-5": {
+      "Data Matrix": {
+        "expected": 5,
+        "read": 0,
+        "false_positives": 0
+      }
+    },
+    "dxfilmedge-1": {},
+    "ean13-1": {
+      "EAN-13": {
+        "expected": 16,
+        "read": 12,
+        "false_positives": 0
+      }
+    },
+    "ean13-2": {
+      "EAN-13": {
+        "expected": 16,
+        "read": 6,
+        "false_positives": 0
+      }
+    },
+    "ean13-3": {
+      "EAN-13": {
+        "expected": 8,
+        "read": 8,
+        "false_positives": 0
+      }
+    },
+    "ean13-4": {
+      "EAN-13": {
+        "expected": 20,
+        "read": 4,
+        "false_positives": 0
+      }
+    },
+    "ean13-extension-1": {
+      "EAN-13": {
+        "expected": 5,
+        "read": 4,
+        "false_positives": 0
+      }
+    },
+    "ean8-1": {
+      "EAN-8": {
+        "expected": 9,
+        "read": 5,
+        "false_positives": 0
+      }
+    },
+    "falsepositives-1": {},
+    "falsepositives-2": {},
+    "itf-1": {
+      "ITF": {
+        "expected": 14,
+        "read": 1,
+        "false_positives": 0
+      }
+    },
+    "itf-2": {
+      "ITF": {
+        "expected": 6,
+        "read": 0,
+        "false_positives": 0
+      }
+    },
+    "maxicode-1": {},
+    "maxicode-2": {},
+    "micropdf417-1": {},
+    "microqrcode-1": {},
+    "multi-1": {},
+    "pdf417-1": {},
+    "pdf417-2": {},
+    "pdf417-3": {},
+    "pdf417-4": {},
+    "qrcode-1": {
+      "QR Code": {
+        "expected": 8,
+        "read": 8,
+        "false_positives": 0
+      }
+    },
+    "qrcode-2": {
+      "QR Code": {
+        "expected": 57,
+        "read": 45,
+        "false_positives": 0
+      }
+    },
+    "qrcode-3": {
+      "QR Code": {
+        "expected": 18,
+        "read": 12,
+        "false_positives": 0
+      }
+    },
+    "qrcode-4": {
+      "QR Code": {
+        "expected": 24,
+        "read": 10,
+        "false_positives": 0
+      }
+    },
+    "qrcode-5": {
+      "QR Code": {
+        "expected": 16,
+        "read": 12,
+        "false_positives": 0
+      }
+    },
+    "qrcode-6": {
+      "QR Code": {
+        "expected": 15,
+        "read": 15,
+        "false_positives": 0
+      }
+    },
+    "qrcode-7": {},
+    "rmqrcode-1": {},
+    "rss14-1": {},
+    "rss14-2": {},
+    "rssexpanded-1": {},
+    "rssexpanded-2": {},
+    "rssexpanded-3": {},
+    "rssexpandedstacked-1": {},
+    "rssexpandedstacked-2": {},
+    "telepen-1": {},
+    "upca-1": {
+      "UPC-A": {
+        "expected": 5,
+        "read": 5,
+        "false_positives": 0
+      }
+    },
+    "upca-2": {
+      "UPC-A": {
+        "expected": 26,
+        "read": 11,
+        "false_positives": 0
+      }
+    },
+    "upca-3": {
+      "UPC-A": {
+        "expected": 6,
+        "read": 6,
+        "false_positives": 0
+      }
+    },
+    "upca-4": {
+      "UPC-A": {
+        "expected": 13,
+        "read": 4,
+        "false_positives": 0
+      }
+    },
+    "upca-5": {
+      "UPC-A": {
+        "expected": 20,
+        "read": 10,
+        "false_positives": 0
+      }
+    },
+    "upca-extension-1": {
+      "UPC-A": {
+        "expected": 6,
+        "read": 4,
+        "false_positives": 0
+      }
+    },
+    "upce-1": {
+      "UPC-E": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      }
+    },
+    "upce-2": {
+      "UPC-E": {
+        "expected": 15,
+        "read": 10,
+        "false_positives": 0
+      }
+    },
+    "upce-3": {
+      "UPC-E": {
+        "expected": 11,
+        "read": 5,
+        "false_positives": 0
+      }
+    }
+  }
+}

@@ -111,3 +111,48 @@ Fast searches dark-on-light symbols only. Latency (challenging-images p50 / p95 
 Ground truth: `skewed-datamatrix` leaves some clearly visible symbols unlabeled (each read is a valid `case-N` payload next to its printed caption, far from every annotation). Ten of them are added through `tools/bench/gt-overrides.json` (an entry without `from` adds a label), each checked on a crop of the image. The `wide_to_close_datamatrix` video label is wrapped in typographic quotes, which the video-bench CSV reader now strips.
 
 Misses on challenging-images (6 of 50): two cans whose symbols sit inside a dark ring that merges with them (`datamatrix-2`), two dot-peened symbols on rough metal (`datamatrix-3`), one blurred 14x14 with clock tracks that do not alternate cleanly (`healthcare-2`), and a symbol of about 2.7 px modules (`tiny-barcodes-4`).
+
+## zxing-cpp samples (2026-10-08)
+
+The `test/samples` images and expected-result files of zxing-cpp, tag `v3.1.1`, fetched by `tools/fetch-datasets.sh zxing-samples` (shallow sparse checkout into `data/zxing-samples`). Only the images and the expected values are used, as test data. The binary `zxing-samples-gt` (`tools/bench/src/bin/zxing_samples_gt.rs`) writes an `annotations.json` into each sample directory:
+
+- The directory prefix gives the symbology (`qrcode-2` is QR Code); `falsepositives-*` images get an empty label list, so any read there is a false positive. A `format=` line in `<stem>.result.txt` (Code 32, Pharmazentralnummer) overrides the directory's symbology.
+- The expected value is `<stem>.txt` or `<stem>.bin`; non-UTF-8 values are stored as hex (`bytes_hex`) and compared as bytes. The other `.result.txt` keys (symbology identifier, EC level, ...) are not used.
+- In `*-extension-*` directories the add-on digits that zxing-cpp appends to the text are dropped: the default reader ignores add-ons (`EanAddonPolicy::Ignore`), so the labeled symbol is the main code.
+- Left out, with a note printed by the converter: 9 images with no expected file (`multi-1`, `maxicode-2`; their expectations are hard-coded in zxing-cpp's test code and are not invented here) and 8 parts of structured-append symbols (`qrcode-7/01-0N`, `pdf417-4`), whose only expected text is the merged one. No image failed to load (WebP is decoded by the `image` crate's `webp` feature).
+
+62 directories, 932 images: 46 negative images (`falsepositives-*`) and 886 labeled images with one label each, plus 3 labels added by overrides. Of the 889 labels, 470 are in the nine v1 symbologies and 419 are unsupported (Aztec, PDF417, Micro PDF417, MaxiCode, Micro QR, rMQR, DataBar family, Codabar, Code 93, Telepen, DX film edge, Code 32, PZN) and excluded from the read rate.
+
+Matching changes made for this dataset (all general, with unit tests): UPC-E is expanded to UPC-A and UPC-A / expanded UPC-E in 13-digit EAN notation are folded into EAN-13 like 12-digit UPC-A; a read also matches a label that holds its charset-decoded text (the reader's `text`, or its Shift JIS reading when the bytes are not UTF-8), because zxing-cpp labels hold UTF-8 text. The Dynamsoft results are unchanged.
+
+Read count / false positives per symbology (release build, no GT overrides besides the three below):
+
+| Symbology | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing | zxing-cpp 3.1.1 |
+|---|---|---|---|---|---|---|
+| QR Code | 138 | 95 / 0 | 102 / 0 | 102 / 0 | 119 / 0 | 125 / 1 |
+| EAN-13 | 65 | 24 / 0 | 34 / 0 | 34 / 0 | 43 / 4 | 45 / 4 |
+| EAN-8 | 9 | 4 / 0 | 5 / 0 | 5 / 0 | 8 / 6 | 9 / 0 |
+| UPC-A | 76 | 19 / 0 | 39 / 0 | 40 / 0 | 50 / 0 | 50 / 0 |
+| UPC-E | 29 | 13 / 0 | 16 / 0 | 18 / 0 | 18 / 17 | 20 / 0 |
+| Code 128 | 22 | 10 / 0 | 14 / 0 | 14 / 0 | 21 / 0 | 22 / 0 |
+| Code 39 | 14 | 5 / 0 | 8 / 0 | 8 / 0 | 11 / 3 | 12 / 0 |
+| ITF | 20 | 1 / 0 | 1 / 0 | 1 / 0 | 17 / 0 | 20 / 0 |
+| Data Matrix | 97 | 72 / 0 | 72 / 0 | 74 / 0 | 78 / 2 | 93 / 0 |
+| **Total** | 470 | 243 / 0 | 291 / 0 | 296 / 0 | 365 / 32 | 396 / 5 |
+
+Cells are reads / false positives. Read rate: breader 51.7 % / 61.9 % / 63.0 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13).
+
+Latency: to be measured on an idle machine.
+
+Ground truth additions (`tools/bench/gt-overrides.json`, each checked on the image):
+
+- `qrcode-2/16.webp`: a nested double QR; only the inner symbol is labeled, the outer one is a second readable symbol.
+- `code39-1/code32-1.png`, `code39-1/pzn-1.png`: Code 32 and PZN are carried in plain Code 39 symbols and labeled with their own (unsupported) symbology; the Code 39 content of the same symbol (`3PRM8N`, the base-32 form of the Code 32 value A123456788, and `-12345678`) is added.
+
+Where breader reads less than zxing-cpp:
+
+- ITF: by design, the default accepts 14 digits only (`ItfOptions::allowed_lengths`); 17 of the 20 labels are 4 to 10 digits long (the 3 of 14 digits are read in one case).
+- EAN/UPC (`ean13-4`, `upca-2`, `upca-4`, `upce-3`) and QR Code (`qrcode-4`): not investigated; Fast misses most of them (fewer passes).
+- Code 128 and Code 39 (`code128-3`, `code39-2`, `code128-1`): not investigated.
+- Data Matrix: `datamatrix-5` (0 of 5) and a few in `datamatrix-3`.
+- A kana-only Shift JIS QR payload (`qrcode-2`) is reported with `text` as Latin-1, since the heuristic requires a double-byte character; `data` is the exact payload.

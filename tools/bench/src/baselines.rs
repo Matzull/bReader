@@ -28,16 +28,23 @@ impl Engine for RxingEngine {
     }
 
     fn decode(&mut self, img: &GrayImage) -> Result<Vec<Decoded>, String> {
-        let mut hints = DecodeHints {
-            TryHarder: Some(true),
-            ..Default::default()
-        };
-        let results = match rxing::helpers::detect_multiple_in_luma_with_hints(
-            img.as_raw().clone(),
-            img.width(),
-            img.height(),
-            &mut hints,
-        ) {
+        // rxing panics or loops on some inputs; decode on a worker thread that is abandoned
+        // after a timeout.
+        let (raw, width, height) = (img.as_raw().clone(), img.width(), img.height());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut hints = DecodeHints {
+                TryHarder: Some(true),
+                ..Default::default()
+            };
+            let result =
+                rxing::helpers::detect_multiple_in_luma_with_hints(raw, width, height, &mut hints);
+            let _ = tx.send(result);
+        });
+        let detected = rx
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .map_err(|e| format!("rxing failed: {e}"))?;
+        let results = match detected {
             Ok(r) => r,
             Err(Exceptions::NotFoundException(_)) => Vec::new(),
             Err(e) => return Err(e.to_string()),
@@ -45,7 +52,8 @@ impl Engine for RxingEngine {
         Ok(results
             .iter()
             .filter_map(|r| {
-                map_rxing(r.getBarcodeFormat()).map(|s| (s, r.getText().as_bytes().to_vec()))
+                map_rxing(r.getBarcodeFormat())
+                    .map(|s| Decoded::new(s, r.getText().as_bytes().to_vec()))
             })
             .collect())
     }
@@ -67,7 +75,7 @@ impl Engine for RqrrEngine {
             .detect_grids()
             .iter()
             .filter_map(|g| g.decode().ok())
-            .map(|(_, text)| (Symbology::Qr, text.into_bytes()))
+            .map(|(_, text)| Decoded::new(Symbology::Qr, text.into_bytes()))
             .collect())
     }
 }

@@ -275,6 +275,34 @@
         ],
         "reason": "Unlabeled symbol: a clean, fully Reed-Solomon-valid Data Matrix clearly visible in the image (crop inspected) next to a printed 'case' caption; its text is in the dataset-wide case-N label family and no annotation lies within a symbol-size of its position."
       }
+    ],
+    "qrcode-2": [
+      {
+        "file": "16.webp",
+        "to": {
+          "format": "QR_CODE",
+          "text": "[外側QRコード]\r\n \r\n*ﾀﾞﾌﾞﾙQR*\r\nhttp://d-qr.net/ex/"
+        },
+        "reason": "Nested double QR: the image holds an outer and an inner symbol, only the inner one ([inner QR code]) is labeled. The outer one is a separate, fully readable symbol (verified visually, and zxing-cpp reads both); text is its Shift JIS payload as UTF-8."
+      }
+    ],
+    "code39-1": [
+      {
+        "file": "code32-1.png",
+        "to": {
+          "format": "CODE_39",
+          "text": "3PRM8N"
+        },
+        "reason": "Code 32 is carried in a plain Code 39 symbol; the label is the CODE_32 value A123456788 (printed under the symbol). The underlying Code 39 content is its base-32 form 3PRM8N (A123456788 -> 123456788 -> 3PRM8N), a valid second reading of the same symbol."
+      },
+      {
+        "file": "pzn-1.png",
+        "to": {
+          "format": "CODE_39",
+          "text": "-12345678"
+        },
+        "reason": "PZN is carried in a plain Code 39 symbol and its text is the Code 39 content itself ('-' plus 8 digits, printed as PZN - 12345678); the label names the symbology PZN, which is not supported, so the Code 39 reading of the same symbol is added."
+      }
     ]
   }
 }

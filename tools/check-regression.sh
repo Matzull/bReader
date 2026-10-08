@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Runs the regression gate against the versioned baselines in tools/bench/baselines.
-# Usage: tools/check-regression.sh [--dynamsoft]
+# Usage: tools/check-regression.sh [--dynamsoft] [--zxing-samples] [--all]
 #   Synthetic sets (data/synth seed 1, data/synth-2024 seed 2024) are generated when missing.
 #   --dynamsoft also gates data/dynamsoft/challenging-images, skewed-datamatrix and the videos (needs
 #   tools/fetch-datasets.sh and ffmpeg).
+#   --zxing-samples also gates data/zxing-samples/test/samples (needs tools/fetch-datasets.sh).
+#   --all is --dynamsoft and --zxing-samples.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,12 +13,25 @@ cd "$root"
 base=tools/bench/baselines
 bin=target/release
 dynamsoft=0
-[ "${1:-}" = "--dynamsoft" ] && dynamsoft=1
+zxing=0
+for arg in "$@"; do
+    case "$arg" in
+        --dynamsoft) dynamsoft=1 ;;
+        --zxing-samples) zxing=1 ;;
+        --all) dynamsoft=1; zxing=1 ;;
+        *) echo "unknown option $arg" >&2; exit 2 ;;
+    esac
+done
 
 cargo build --release -p bench -p video-bench -p synth
 
 [ -f data/synth/clean/annotations.json ] || "$bin/synth" data/synth --seed 1
 [ -f data/synth-2024/clean/annotations.json ] || "$bin/synth" data/synth-2024 --count 60 --seed 2024
+
+if [ "$zxing" = 1 ] && [ ! -f data/zxing-samples/test/samples/qrcode-1/annotations.json ]; then
+    echo "data/zxing-samples is missing or has no annotations: run tools/fetch-datasets.sh" >&2
+    exit 2
+fi
 
 status=0
 gate() {
@@ -34,6 +49,11 @@ for effort in fast balanced exhaustive; do
         echo "=== dynamsoft skewed-datamatrix, $effort"
         gate "$bin/bench" data/dynamsoft/skewed-datamatrix --effort "$effort" \
             --check "$base/dynamsoft-skewed-$effort.json"
+    fi
+    if [ "$zxing" = 1 ]; then
+        echo "=== zxing-cpp samples, $effort"
+        gate "$bin/bench" data/zxing-samples/test/samples --effort "$effort" \
+            --check "$base/zxing-samples-$effort.json"
     fi
 done
 if [ "$dynamsoft" = 1 ]; then

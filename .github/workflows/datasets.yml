@@ -33,8 +33,28 @@ jobs:
           key: dynamsoft-${{ steps.upstream.outputs.sha }}
       - name: Fetch datasets
         if: steps.cache.outputs.cache-hit != 'true'
-        run: tools/fetch-datasets.sh
+        run: tools/fetch-datasets.sh dynamsoft
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Dynamsoft regression gate
         run: tools/check-regression.sh --dynamsoft
+
+  zxing-samples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Resolve the pinned zxing-cpp tag
+        id: upstream
+        run: echo "tag=$(sed -n 's/^zxing_tag="\(.*\)"$/\1/p' tools/fetch-datasets.sh)" >> "$GITHUB_OUTPUT"
+      - name: Cache data/zxing-samples
+        uses: actions/cache@v4
+        with:
+          path: data/zxing-samples
+          key: zxing-samples-${{ steps.upstream.outputs.tag }}
+      - name: Fetch datasets and write annotations
+        run: tools/fetch-datasets.sh zxing-samples
+      - name: zxing-cpp samples regression gate
+        run: tools/check-regression.sh --zxing-samples

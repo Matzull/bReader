@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use breader::Symbology;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::matching::canonical;
 
@@ -18,12 +18,42 @@ pub struct ImageEntry {
     pub barcodes: Vec<Barcode>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Barcode {
     pub text: String,
     pub format: String,
+    /// Lowercase hex of the exact expected bytes; takes precedence over `text` when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes_hex: Option<String>,
     #[serde(default)]
     pub points: Vec<[f64; 2]>,
+}
+
+impl Barcode {
+    pub fn data(&self) -> Vec<u8> {
+        self.bytes_hex
+            .as_deref()
+            .and_then(decode_hex)
+            .unwrap_or_else(|| self.text.clone().into_bytes())
+    }
+}
+
+pub fn encode_hex(data: &[u8]) -> String {
+    use std::fmt::Write;
+    data.iter().fold(String::new(), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    })
+}
+
+fn decode_hex(hex: &str) -> Option<Vec<u8>> {
+    if !hex.len().is_multiple_of(2) || !hex.is_ascii() {
+        return None;
+    }
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +148,7 @@ pub fn apply_overrides(ann: &mut Annotations, dataset_dir: &str, overrides: &Ove
                     img.barcodes.push(Barcode {
                         text: entry.to.text.clone(),
                         format: entry.to.format.clone(),
+                        bytes_hex: None,
                         points: entry.points.clone(),
                     });
                     applied += 1;
@@ -131,6 +162,7 @@ pub fn apply_overrides(ann: &mut Annotations, dataset_dir: &str, overrides: &Ove
             {
                 b.format = entry.to.format.clone();
                 b.text = entry.to.text.clone();
+                b.bytes_hex = None;
                 applied += 1;
             }
         }
@@ -204,10 +236,17 @@ fn quads_overlap(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
 fn same_symbol(a: &Barcode, b: &Barcode) -> bool {
     let key = |x: &Barcode| match map_symbology(&x.format) {
         Some(s) => {
-            let (s, d) = canonical(s, x.text.as_bytes());
+            let (s, d) = canonical(s, &x.data());
             (s.name().to_string(), d)
         }
-        None => (x.format.clone(), x.text.trim().as_bytes().to_vec()),
+        None => {
+            let d = x.data();
+            let t = match std::str::from_utf8(&d) {
+                Ok(s) => s.trim().as_bytes().to_vec(),
+                Err(_) => d.trim_ascii().to_vec(),
+            };
+            (x.format.clone(), t)
+        }
     };
     key(a) == key(b) && quads_overlap(&a.points, &b.points)
 }
@@ -243,7 +282,7 @@ pub fn expected_by_file(ann: &Annotations) -> BTreeMap<String, Vec<Expected>> {
             .extend(img.barcodes.iter().map(|b| Expected {
                 symbology: map_symbology(&b.format),
                 label: b.format.clone(),
-                data: b.text.clone().into_bytes(),
+                data: b.data(),
             }));
     }
     map
@@ -286,6 +325,17 @@ mod tests {
     }
 
     #[test]
+    fn bytes_hex_overrides_text() {
+        let json = r#"{"format":"barcode-benchmark/1.0","images":[{"file":"a.png","barcodes":[
+            {"text":"?","format":"QR_CODE","bytes_hex":"ff00"},
+            {"text":"t","format":"QR_CODE","bytes_hex":"zz"}]}]}"#;
+        let map = expected_by_file(&parse_annotations(json).unwrap());
+        assert_eq!(map["a.png"][0].data, vec![0xff, 0x00]);
+        assert_eq!(map["a.png"][1].data, b"t");
+        assert_eq!(encode_hex(&[0xff, 0x00, 0x0a]), "ff000a");
+    }
+
+    #[test]
     fn rejects_unknown_format() {
         assert!(parse_annotations(r#"{"format":"other/2","images":[]}"#).is_err());
         assert!(parse_annotations("not json").is_err());
@@ -307,6 +357,7 @@ mod tests {
         Barcode {
             text: text.into(),
             format: format.into(),
+            bytes_hex: None,
             points: pts.to_vec(),
         }
     }
