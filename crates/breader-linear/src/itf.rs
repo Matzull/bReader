@@ -206,6 +206,7 @@ impl LinearDecoder for ItfDecoder {
                         quality: ((read.separation_sum / groups - 1.0) / 2.0).clamp(0.0, 1.0),
                         aim: if checked { *b"]I1" } else { *b"]I0" },
                         checksum_verified: checked,
+                        short_quiet: false,
                         inverted: false,
                     });
                 }

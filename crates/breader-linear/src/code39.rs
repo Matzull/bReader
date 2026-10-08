@@ -62,11 +62,15 @@ static BY_MASK: [u8; 512] = {
 
 const STAR_MASK: u16 = (1 << 1) | (1 << 4) | (1 << 6);
 
-/// Minimum quiet zone on each side, in narrow element widths (specified: 10).
-const QUIET: f32 = 7.0;
+/// Minimum quiet zone on each side, in narrow element widths. The standard
+/// asks for 10; printed labels often have 4 to 7 because of a cell border.
+const QUIET: f32 = 4.0;
+/// Below this many narrow widths the symbol is flagged `short_quiet` and the
+/// aggregator wants an additional agreeing line.
+const FULL_QUIET: f32 = 7.0;
 /// Cheap first screen: the quiet zone as a fraction of the start character's
-/// width (7 narrow elements are at least 0.4 of a character of up to 16.8).
-const QUIET_SCREEN: f32 = 0.33;
+/// width (4 narrow elements are at least 0.22 of a character of up to 17.6).
+const QUIET_SCREEN: f32 = 0.22;
 /// Largest inter-character gap, in narrow widths; larger gaps split symbols.
 const MAX_GAP: f32 = 3.0;
 const MIN_GAP: f32 = 0.5;
@@ -114,11 +118,12 @@ struct Read {
     narrow_sum: f32,
     count: usize,
     last_bar: usize,
+    short_quiet: bool,
 }
 
 /// Reads the start character at run `j` and returns it with the bar/space
-/// bias.
-fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32)> {
+/// bias and whether the quiet zone before it is short.
+fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32, bool)> {
     let raw = adjusted_widths::<9>(runs, j, 0.0)?;
     if runs.space_before(j) < QUIET_SCREEN * raw.iter().sum::<f32>() {
         return None;
@@ -134,14 +139,16 @@ fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32)> {
         return None;
     }
     let start = read_char(runs, j, bias, 0.0)?;
-    if start.ch != STAR || quiet_before(runs, j, bias) < QUIET * start.narrow {
+    if start.ch != STAR {
         return None;
     }
-    Some((start, bias))
+    let quiet = quiet_before(runs, j, bias);
+    let short = quiet < FULL_QUIET * start.narrow;
+    (quiet >= QUIET * start.narrow).then_some((start, bias, short))
 }
 
 fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
-    let (start, bias) = start_of(runs, j)?;
+    let (start, bias, short_start) = start_of(runs, j)?;
     *started = true;
     let mut read = Read {
         chars: [0; MAX_CHARS],
@@ -150,6 +157,7 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
         narrow_sum: start.narrow,
         count: 1,
         last_bar: 0,
+        short_quiet: short_start,
     };
     let mut narrow = start.narrow;
     let mut at = j + 10;
@@ -164,9 +172,11 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
         read.narrow_sum += c.narrow;
         read.count += 1;
         if c.ch == STAR {
-            if quiet_after(runs, at + 8, bias) < QUIET * narrow {
+            let quiet = quiet_after(runs, at + 8, bias);
+            if quiet < QUIET * narrow {
                 return None;
             }
+            read.short_quiet |= quiet < FULL_QUIET * narrow;
             read.last_bar = at + 8;
             return Some(read);
         }
@@ -274,6 +284,7 @@ impl LinearDecoder for Code39Decoder {
                                 [usize::from(opts.code39_full_ascii) * 2 + usize::from(checked)],
                         ],
                         checksum_verified: checked,
+                        short_quiet: read.short_quiet,
                         inverted: false,
                     });
                 }
@@ -397,12 +408,31 @@ mod tests {
                 quiet_right: right,
                 ..Render::px(3.0)
             };
-            decode_all(&Code39Decoder, &r.profile(&modules), &opts()).len()
+            decode_all(&Code39Decoder, &r.profile(&modules), &opts())
         };
         // Narrow elements are one module wide here.
-        assert_eq!(at(8.0, 8.0), 1);
-        assert_eq!(at(5.0, 12.0), 0);
-        assert_eq!(at(12.0, 5.0), 0);
+        let full = at(8.0, 8.0);
+        assert_eq!((full.len(), full[0].short_quiet), (1, false));
+        for (left, right) in [(5.0, 12.0), (12.0, 5.0), (4.2, 4.2)] {
+            let hits = at(left, right);
+            assert_eq!(hits.len(), 1, "{left} {right}");
+            assert!(hits[0].short_quiet, "{left} {right}");
+        }
+        for (left, right) in [(3.0, 12.0), (12.0, 3.0), (3.0, 3.0)] {
+            assert!(at(left, right).is_empty(), "{left} {right}");
+        }
+    }
+
+    #[test]
+    fn a_star_inside_a_symbol_does_not_start_a_second_symbol() {
+        // The widest inter-character gap is below the shortest quiet zone.
+        for gap in [1, 2, 3] {
+            let p = Render::px(3.0).profile(&code39_modules("AB*CD*EF", 3, gap));
+            assert!(
+                decode_all(&Code39Decoder, &p, &opts()).is_empty(),
+                "gap {gap}"
+            );
+        }
     }
 
     #[test]

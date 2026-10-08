@@ -5,7 +5,7 @@
     "challenging-images": {
       "Code 128": {
         "expected": 60,
-        "read": 29,
+        "read": 47,
         "false_positives": 0
       },
       "Code 39": {

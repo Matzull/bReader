@@ -21,6 +21,9 @@ pub(crate) struct LineHit {
     pub aim: [u8; 3],
     /// An optional check character was present and verified.
     pub checksum_verified: bool,
+    /// The quiet zone on at least one side was shorter than the symbology's
+    /// full requirement; the aggregator asks for more agreeing lines.
+    pub short_quiet: bool,
     /// Bars were lighter than spaces. Set by the reader, not by decoders.
     pub inverted: bool,
 }
@@ -125,6 +128,7 @@ mod tests {
                 quality: 1.0,
                 aim: *b"]A0",
                 checksum_verified: false,
+                short_quiet: false,
                 inverted: false,
             });
             false

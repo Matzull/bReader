@@ -211,11 +211,13 @@ struct Read {
     last_bar: usize,
 }
 
-/// Checks the start character at run `j` and the quiet zone before it.
+/// Checks the start character at run `j` and the quiet zone before it. A
+/// weak start character is returned as such and counts as the one weak
+/// character a symbol may have.
 fn start_of(runs: &Runs, j: usize) -> Option<(CharMatch, f32)> {
     start_pattern(runs, j)?;
     let start = match_char(runs, j, 0.0, 0.0)?;
-    if !(START_A..=START_C).contains(&start.value) || start.weak {
+    if !(START_A..=START_C).contains(&start.value) {
         return None;
     }
     let bias = start_bias(runs, j, usize::from(start.value));
@@ -237,7 +239,7 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
         module_sum: start.module,
         last_bar: 0,
     };
-    let mut weak = 0;
+    let mut weak = usize::from(start.weak);
     let mut module = start.module;
     for c in 1..=MAX_CHARS {
         let at = j + 6 * c;
@@ -444,6 +446,7 @@ impl LinearDecoder for Code128Decoder {
                     quality: (read.margin_sum / chars / 2.0).clamp(0.0, 1.0),
                     aim,
                     checksum_verified: true,
+                    short_quiet: false,
                     inverted: false,
                 });
             }
@@ -663,6 +666,56 @@ mod tests {
                 "check {wrong}"
             );
         }
+    }
+
+    /// Element widths of a symbol in modules, starting with a bar.
+    fn element_widths(modules: &[bool]) -> Vec<f32> {
+        let mut out = vec![0.0f32];
+        for i in 0..modules.len() {
+            if i > 0 && modules[i] != modules[i - 1] {
+                out.push(0.0);
+            }
+            *out.last_mut().unwrap() += 1.0;
+        }
+        out
+    }
+
+    #[test]
+    fn a_weak_start_character_is_read_and_counts_as_the_weak_one() {
+        let widths = element_widths(&encode(START_B, "Weak start"));
+        let read = |w: &[f32]| {
+            let mut out = Vec::new();
+            let runs = Runs::from_widths(true, w, 30.0, 30.0);
+            Code128Decoder.decode(&runs, &opts(), &mut out);
+            out
+        };
+        assert_eq!(texts(&read(&widths)), [b"Weak start".to_vec()]);
+        // Move width between the last bar and space of the start character
+        // (toward start C) until the match to its pattern is ambiguous but still accepted.
+        let weak_start = |w: &[f32]| {
+            let runs = Runs::from_widths(true, w, 30.0, 30.0);
+            start_of(&runs, 0).is_some_and(|(s, _)| s.weak)
+        };
+        let shifted = (1..40)
+            .map(|k| {
+                let mut w = widths.clone();
+                w[4] += k as f32 * 0.04;
+                w[5] -= k as f32 * 0.04;
+                w
+            })
+            .find(|w| weak_start(w))
+            .expect("a perturbation that makes the start weak");
+        assert_eq!(texts(&read(&shifted)), [b"Weak start".to_vec()]);
+        // A second weak character is one too many.
+        let mut both = shifted.clone();
+        let at = 6 * 3;
+        let d = shifted[4] - widths[4];
+        both[at + 4] += d;
+        both[at + 5] -= d;
+        let runs = Runs::from_widths(true, &both, 30.0, 30.0);
+        let weak_second = match_char(&runs, at, 0.0, 1.0).is_some_and(|m| m.weak);
+        assert!(weak_second);
+        assert!(read(&both).is_empty());
     }
 
     #[test]
