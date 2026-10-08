@@ -454,6 +454,7 @@ impl Reader {
         escalation = None,
         max_symbols = 0,
         time_budget_ms = None,
+        upscale_max_side = None,
         min_line_agreement = 2,
         ean_addon = "ignore",
         code39_full_ascii = false,
@@ -470,6 +471,7 @@ impl Reader {
         escalation: Option<&str>,
         max_symbols: i64,
         time_budget_ms: Option<f64>,
+        upscale_max_side: Option<i64>,
         min_line_agreement: i64,
         ean_addon: &str,
         code39_full_ascii: bool,
@@ -508,6 +510,12 @@ impl Reader {
                 )));
             }
         };
+        options.upscale_retry = upscale_max_side
+            .map(|v| {
+                usize::try_from(v)
+                    .map_err(|_| value_err(format!("upscale_max_side must be >= 0, got {v}")))
+            })
+            .transpose()?;
         options.min_line_agreement =
             u16::try_from(positive("min_line_agreement", min_line_agreement)?)
                 .map_err(|_| value_err("min_line_agreement is too large"))?;
@@ -556,6 +564,7 @@ impl Reader {
             "time_budget_ms",
             o.time_budget.map(|t| t.as_secs_f64() * 1000.0),
         )?;
+        d.set_item("upscale_max_side", o.upscale_retry)?;
         d.set_item("min_line_agreement", o.min_line_agreement)?;
         d.set_item("ean_addon", addon_name(o.ean_addon))?;
         d.set_item("code39_full_ascii", o.code39.full_ascii)?;

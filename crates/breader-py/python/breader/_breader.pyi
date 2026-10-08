@@ -39,6 +39,7 @@ class Reader:
         escalation: Optional[str] = None,
         max_symbols: int = 0,
         time_budget_ms: Optional[float] = None,
+        upscale_max_side: Optional[int] = None,
         min_line_agreement: int = 2,
         ean_addon: str = "ignore",
         code39_full_ascii: bool = False,

@@ -154,7 +154,7 @@ def test_bad_input_raises_value_error(image, kwargs):
 
 def test_default_options():
     o = Reader().options
-    assert o["effort"] == "balanced" and o["escalation"] is None
+    assert o["effort"] == "balanced" and o["escalation"] is None and o["upscale_max_side"] is None
     assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix"]
     assert o["itf_lengths"] == (14,) and o["min_line_agreement"] == 2
     o["effort"] = "x"
@@ -164,12 +164,13 @@ def test_default_options():
 def test_options_roundtrip():
     r = Reader(
         "fast", ["QR", "ean-13", "Code_128"], try_invert=True, escalation="stable", max_symbols=3,
-        time_budget_ms=250.5, min_line_agreement=3, ean_addon="optional", code39_full_ascii=True,
+        time_budget_ms=250.5, upscale_max_side=300, min_line_agreement=3, ean_addon="optional", code39_full_ascii=True,
         code39_checksum=True, code39_min_length=4, itf_lengths=[6, 8], itf_min_length=4,
     )
     assert r.options == {
         "effort": "fast", "symbologies": ["qr", "ean13", "code128"], "try_invert": True,
-        "escalation": "stable", "max_symbols": 3, "time_budget_ms": 250.5, "min_line_agreement": 3,
+        "escalation": "stable", "max_symbols": 3, "time_budget_ms": 250.5, "upscale_max_side": 300,
+        "min_line_agreement": 3,
         "ean_addon": "optional", "code39_full_ascii": True, "code39_checksum": True,
         "code39_min_length": 4, "itf_lengths": (6, 8), "itf_min_length": 4,
     }
@@ -190,6 +191,7 @@ def test_options_roundtrip():
         {"time_budget_ms": 0},
         {"time_budget_ms": -5.0},
         {"time_budget_ms": float("nan")},
+        {"upscale_max_side": -1},
         {"min_line_agreement": 0},
         {"min_line_agreement": 70000},
         {"code39_min_length": 0},

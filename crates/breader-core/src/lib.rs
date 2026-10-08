@@ -30,7 +30,10 @@ pub use image::{ImageBuffer, ImageView, PixelFormat};
 pub use module::{
     Binarizer, Detector, PostProcessor, Preprocessor, Reject, SymbolDecoder, SymbologyReader,
 };
-pub use options::{Code39Options, EanAddonPolicy, Effort, Escalation, ItfOptions, ScanOptions};
+pub use options::{
+    Code39Options, DEFAULT_UPSCALE_MAX_SIDE, EanAddonPolicy, Effort, Escalation, ItfOptions,
+    ScanOptions,
+};
 pub use pipeline::{Pipeline, PipelineBuilder};
 pub use symbol::{
     Charset, Content, DataMatrixMeta, DataSegment, EcLevel, Gs1Element, LinearMeta, QrMeta, Symbol,

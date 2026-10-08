@@ -50,6 +50,7 @@ symbols = reader.scan(raw_bytes, width=640, height=480, format="nv12")
 | `escalation` | by effort | `"all"`, `"found"` (stop at first hit), `"stable"` |
 | `max_symbols` | `0` | Stop after this many symbols (0 = unlimited) |
 | `time_budget_ms` | `None` | Checked between passes; a pass in progress is not interrupted |
+| `upscale_max_side` | `None` | Frames up to this size (longer side) that yield nothing are rescanned 3x up-scaled; `None` = 600 for balanced/exhaustive, off for fast; 0 disables |
 | `min_line_agreement` | `2` | Scanlines that must agree on a 1D result |
 | `ean_addon` | `"ignore"` | `"ignore"`, `"optional"` (report add-on), `"required"` |
 | `code39_full_ascii` | `False` | Decode Code 39 Full ASCII |

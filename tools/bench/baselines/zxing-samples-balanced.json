@@ -9,14 +9,14 @@
     "code128-1": {
       "Code 128": {
         "expected": 6,
-        "read": 3,
+        "read": 4,
         "false_positives": 0
       }
     },
     "code128-2": {
       "Code 128": {
         "expected": 14,
-        "read": 11,
+        "read": 12,
         "false_positives": 0
       }
     },
@@ -30,7 +30,7 @@
     "code39-1": {
       "Code 39": {
         "expected": 6,
-        "read": 4,
+        "read": 5,
         "false_positives": 0
       }
     },
@@ -53,28 +53,28 @@
     "datamatrix-1": {
       "Data Matrix": {
         "expected": 30,
-        "read": 25,
+        "read": 26,
         "false_positives": 0
       }
     },
     "datamatrix-2": {
       "Data Matrix": {
         "expected": 13,
-        "read": 12,
+        "read": 13,
         "false_positives": 0
       }
     },
     "datamatrix-3": {
       "Data Matrix": {
         "expected": 28,
-        "read": 16,
+        "read": 19,
         "false_positives": 0
       }
     },
     "datamatrix-4": {
       "Data Matrix": {
         "expected": 21,
-        "read": 19,
+        "read": 21,
         "false_positives": 0
       }
     },
@@ -133,7 +133,7 @@
     "itf-1": {
       "ITF": {
         "expected": 14,
-        "read": 1,
+        "read": 2,
         "false_positives": 0
       }
     },
@@ -163,28 +163,28 @@
     "qrcode-2": {
       "QR Code": {
         "expected": 57,
-        "read": 45,
+        "read": 47,
         "false_positives": 0
       }
     },
     "qrcode-3": {
       "QR Code": {
         "expected": 18,
-        "read": 12,
+        "read": 16,
         "false_positives": 0
       }
     },
     "qrcode-4": {
       "QR Code": {
         "expected": 24,
-        "read": 10,
+        "read": 13,
         "false_positives": 0
       }
     },
     "qrcode-5": {
       "QR Code": {
         "expected": 16,
-        "read": 12,
+        "read": 16,
         "false_positives": 0
       }
     },
@@ -215,7 +215,7 @@
     "upca-2": {
       "UPC-A": {
         "expected": 26,
-        "read": 11,
+        "read": 15,
         "false_positives": 0
       }
     },
