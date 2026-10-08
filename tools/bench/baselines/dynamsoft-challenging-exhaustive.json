@@ -15,7 +15,7 @@
       },
       "Data Matrix": {
         "expected": 50,
-        "read": 44,
+        "read": 45,
         "false_positives": 0
       },
       "EAN-13": {
@@ -35,7 +35,7 @@
       },
       "QR Code": {
         "expected": 234,
-        "read": 226,
+        "read": 229,
         "false_positives": 0
       },
       "UPC-A": {

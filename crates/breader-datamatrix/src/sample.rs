@@ -956,6 +956,97 @@ pub(crate) fn refine(
     Some(h)
 }
 
+/// Per-boundary corrections of the module coordinates along each axis,
+/// measured on the clock tracks: the module pitch of a real print is not
+/// perfectly uniform, and a homography cannot follow that.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Warp {
+    /// Offset in modules of the true column boundary `c` (index `c`, 0..=cols).
+    du: Vec<f32>,
+    /// Same for row boundaries.
+    dv: Vec<f32>,
+}
+
+impl Warp {
+    fn at(d: &[f32], t: f64) -> f64 {
+        let last = d.len() - 1;
+        let t = t.clamp(0.0, last as f64);
+        let i = (t.floor() as usize).min(last - 1);
+        let f = t - i as f64;
+        f64::from(d[i]) * (1.0 - f) + f64::from(d[i + 1]) * f
+    }
+
+    fn apply(&self, u: f64, v: f64) -> (f64, f64) {
+        (u + Self::at(&self.du, u), v + Self::at(&self.dv, v))
+    }
+}
+
+/// Measures the clock transition offsets of `h` on every alternating line
+/// (top rows of all regions, right columns of all regions) and returns the
+/// per-boundary corrections. `None` when too few transitions are found.
+pub(crate) fn clock_warp(plane: Plane<'_>, h: &Mapper, hyp: &Hypothesis) -> Option<Warp> {
+    let (rows, cols) = hyp.grid_dims();
+    let (rv, rh, rr, rc) = hyp.regions();
+    let module = f64::from(h.module_px(rows, cols));
+    if module < 2.0 {
+        return None;
+    }
+    let step = (0.2 / module).clamp(0.02, 0.1);
+    let mut du = vec![(0.0f64, 0u32); cols + 1];
+    let mut dv = vec![(0.0f64, 0u32); rows + 1];
+    for i in 0..rv {
+        let y = (i * (rr + 2)) as f64 + 0.5;
+        for (c, acc) in du.iter_mut().enumerate().take(cols).skip(1) {
+            let dark_before = (c - 1) % 2 == 0;
+            if let Some((_, _, s)) = locate(plane, h, (c as f64, y), (1.0, 0.0), dark_before, step)
+            {
+                acc.0 += s;
+                acc.1 += 1;
+            }
+        }
+    }
+    for j in 0..rh {
+        let x = ((j + 1) * (rc + 2)) as f64 - 0.5;
+        for (r, acc) in dv.iter_mut().enumerate().take(rows).skip(1) {
+            let dark_before = (rows - r) % 2 == 0;
+            if let Some((_, _, s)) = locate(plane, h, (x, r as f64), (0.0, 1.0), dark_before, step)
+            {
+                acc.0 += s;
+                acc.1 += 1;
+            }
+        }
+    }
+    let finish = |acc: &[(f64, u32)]| -> Option<Vec<f32>> {
+        let n = acc.len() - 1;
+        let known: Vec<(usize, f64)> = (1..n)
+            .filter(|&i| acc[i].1 > 0)
+            .map(|i| (i, acc[i].0 / f64::from(acc[i].1)))
+            .collect();
+        if known.len() * 2 < n.saturating_sub(1) {
+            return None;
+        }
+        let mut out = vec![0.0f32; n + 1];
+        for (i, o) in out.iter_mut().enumerate() {
+            let below = known.iter().rev().find(|k| k.0 <= i);
+            let above = known.iter().find(|k| k.0 >= i);
+            *o = match (below, above) {
+                (Some(b), Some(a)) if a.0 != b.0 => {
+                    let f = (i - b.0) as f64 / (a.0 - b.0) as f64;
+                    (b.1 * (1.0 - f) + a.1 * f) as f32
+                }
+                (Some(b), _) => b.1 as f32,
+                (_, Some(a)) => a.1 as f32,
+                _ => 0.0,
+            };
+        }
+        Some(out)
+    };
+    Some(Warp {
+        du: finish(&du)?,
+        dv: finish(&dv)?,
+    })
+}
+
 /// Reads the module grid through the mapper. Returns false when too many
 /// module centers fall outside the image.
 pub(crate) fn sample_grid(
@@ -965,7 +1056,23 @@ pub(crate) fn sample_grid(
     cols: usize,
     out: &mut BitMatrix,
 ) -> bool {
+    sample_grid_warped(plane, h, None, rows, cols, out)
+}
+
+/// `sample_grid` with the module coordinates first corrected by `warp`.
+pub(crate) fn sample_grid_warped(
+    plane: Plane<'_>,
+    h: &Mapper,
+    warp: Option<&Warp>,
+    rows: usize,
+    cols: usize,
+    out: &mut BitMatrix,
+) -> bool {
     out.resize(cols, rows);
+    let map = |u: f64, v: f64| {
+        let (u, v) = warp.map_or((u, v), |w| w.apply(u, v));
+        h.map(u, v)
+    };
     let module = h.module_px(rows, cols);
     if module <= 0.0 {
         return false;
@@ -975,7 +1082,7 @@ pub(crate) fn sample_grid(
     for r in 0..rows {
         for c in 0..cols {
             let (u, v) = (c as f64 + 0.5, r as f64 + 0.5);
-            let Some((x, y)) = h.map(u, v) else {
+            let Some((x, y)) = map(u, v) else {
                 return false;
             };
             let at = |x: f64, y: f64| plane_at(plane, Point::new(x as f32, y as f32));
@@ -986,7 +1093,7 @@ pub(crate) fn sample_grid(
             let dark = if multi {
                 let mut votes = usize::from(at(x, y));
                 for (du, dv) in [(-0.25, 0.0), (0.25, 0.0), (0.0, -0.25), (0.0, 0.25)] {
-                    if let Some((sx, sy)) = h.map(u + du, v + dv) {
+                    if let Some((sx, sy)) = map(u + du, v + dv) {
                         votes += usize::from(at(sx, sy));
                     }
                 }

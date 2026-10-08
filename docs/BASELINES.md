@@ -158,7 +158,7 @@ Read count / false positives per symbology (release build, no GT overrides besid
 
 | Symbology | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing | zxing-cpp 3.1.1 |
 |---|---|---|---|---|---|---|
-| QR Code | 138 | 95 / 0 | 115 / 0 | 115 / 0 | 119 / 0 | 125 / 1 |
+| QR Code | 138 | 107 / 0 | 125 / 0 | 125 / 0 | 119 / 0 | 125 / 1 |
 | EAN-13 | 65 | 24 / 0 | 39 / 0 | 40 / 0 | 43 / 4 | 45 / 4 |
 | EAN-8 | 9 | 7 / 0 | 8 / 0 | 8 / 0 | 8 / 6 | 9 / 0 |
 | UPC-A | 76 | 21 / 0 | 53 / 0 | 56 / 0 | 50 / 0 | 50 / 0 |
@@ -166,7 +166,7 @@ Read count / false positives per symbology (release build, no GT overrides besid
 | Code 128 | 22 | 15 / 0 | 21 / 0 | 21 / 0 | 21 / 0 | 22 / 0 |
 | Code 39 | 14 | 7 / 0 | 11 / 0 | 11 / 0 | 11 / 3 | 12 / 0 |
 | ITF | 20 | 1 / 0 | 2 / 0 | 2 / 0 | 17 / 0 | 20 / 0 |
-| Data Matrix | 97 | 72 / 0 | 79 / 0 | 80 / 0 | 78 / 2 | 93 / 0 |
+| Data Matrix | 97 | 79 / 0 | 86 / 0 | 89 / 0 | 78 / 2 | 93 / 0 |
 | **Total** | 470 | 256 / 0 | 348 / 0 | 355 / 0 | 365 / 32 | 396 / 5 |
 
 Cells are reads / false positives. Read rate: breader 54.5 % / 74.0 % / 75.5 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13). Counts include the linear fixes, the up-scale retry and the edge/border-quiet-zone changes (2026-10-09). A Code 39 read also matches its Full ASCII expansion (`code39-2` labels the expanded text while breader defaults to plain Code 39).
@@ -175,9 +175,13 @@ Balanced and Exhaustive include the up-scale retry (3x Catmull-Rom copy of frame
 
 Latency: to be measured on an idle machine.
 
+Sampling retries (2026-10-09, `breader-qr`, `breader-datamatrix`; zxing-samples reads Fast / Balanced / Exhaustive, 0 false positives at every effort and dataset): QR 95 / 115 / 115 -> 107 / 125 / 125 (pitch correction from the finder and timing patterns, local-threshold sampling from the luma image, nested symbols) and Data Matrix 72 / 79 / 80 -> 79 / 86 / 89 (pitch correction from the clock tracks, pad check waived for uncorrected large blocks). The retries run only after Reed-Solomon failed on a plausible grid; interleaved before / after runs show no latency change (zxing-samples Exhaustive p50 12.7 -> 12.3 ms, challenging-images Balanced 17.1 -> 16.7 ms, Fast 4.7 -> 4.6 ms, synth Balanced 5.6 -> 5.5 ms). challenging-images: QR 186 / 226 / 226 -> 191 / 229 / 229 (the 1862-character v40 symbol of `custom-scan-parameters-4` and `A-0040-Z` now decode), Data Matrix 40 / 44 / 44 -> 40 / 45 / 45. skewed-datamatrix: 714 / 1000 / 1010 -> 724 / 1012 / 1022 of 1324. The video baselines gain 1 to 3 Data Matrix reads in `batch_datamatrix_1080p`; synth is unchanged.
+
+Bench matching and labels changed with this: a label that is UTF-8 read as Latin-1 and encoded again (`way` + `\u00e2\u0080\u0094` + `in` for an em dash, the `custom-scan-parameters-4` text) is compared in repaired form (a normalization, not a misdecode: the decoded text is the correct one); and `skewed-datamatrix/IMG20260320082633.jpg` gains the unlabeled but clearly visible, Reed-Solomon-valid `case-138` through `gt-overrides.json`.
+
 Ground truth additions (`tools/bench/gt-overrides.json`, each checked on the image):
 
-- `qrcode-2/16.webp`: a nested double QR; only the inner symbol is labeled, the outer one is a second readable symbol.
+- `qrcode-2/16.webp`: a nested double QR; only the inner symbol is labeled, the outer one is a second readable symbol (both are read since the nested-symbol rule).
 - `code39-1/code32-1.png`, `code39-1/pzn-1.png`: Code 32 and PZN are carried in plain Code 39 symbols and labeled with their own (unsupported) symbology; the Code 39 content of the same symbol (`3PRM8N`, the base-32 form of the Code 32 value A123456788, and `-12345678`) is added.
 
 Where breader reads less than zxing-cpp:

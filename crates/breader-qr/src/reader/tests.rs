@@ -395,6 +395,136 @@ fn end_to_end_two_symbols_and_skip() {
     assert_eq!(found.len(), 2);
 }
 
+/// A small symbol printed over the data area of a large one (with its own
+/// quiet zone), as in nested-code labels.
+fn nested_image(outer_px: f32, inner_px: f32) -> (Vec<u8>, usize, usize) {
+    let outer = make_modules(20, b"OUTER SYMBOL CARRIES THIS LONG TEXT");
+    let inner = make_modules(2, b"INNER");
+    let w = (outer.dim as f32 * outer_px) as usize + 16;
+    let center = Point::new(w as f32 / 2.0, w as f32 / 2.0);
+    let draw = |m: &Modules, px: f32| {
+        let r = Render {
+            w,
+            h: w,
+            quad: similarity_quad(m.dim, center, px, 0.0),
+            mirrored: false,
+            blur: 0,
+            invert: false,
+        };
+        r.draw(m)
+    };
+    let mut img = draw(&outer, outer_px);
+    let inner_img = draw(&inner, inner_px);
+    // Clear the inner symbol and two modules around it, then paint it.
+    let half = (inner.dim as f32 / 2.0 + 2.0) * inner_px;
+    for y in 0..w {
+        for x in 0..w {
+            let (dx, dy) = (x as f32 - center.x, y as f32 - center.y);
+            if dx.abs() <= half && dy.abs() <= half {
+                img[y * w + x] = inner_img[y * w + x];
+            }
+        }
+    }
+    (img, w, w)
+}
+
+#[test]
+fn nested_symbol_inside_decoded_quad_is_read() {
+    let (img, w, h) = nested_image(6.0, 2.6);
+    for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+        let out = scan_one(&img, w, h, effort);
+        let mut texts: Vec<_> = out.iter().map(|s| s.data.clone()).collect();
+        texts.sort();
+        assert_eq!(
+            texts,
+            [
+                b"INNER".to_vec(),
+                b"OUTER SYMBOL CARRIES THIS LONG TEXT".to_vec()
+            ],
+            "{effort:?}"
+        );
+    }
+}
+
+#[test]
+fn same_size_candidates_inside_a_decoded_quad_stay_skipped() {
+    // Two symbols of one scale never nest: a decoded symbol is reported once
+    // however many scans see it.
+    let (img, w, h) = nested_image(6.0, 6.0);
+    let out = scan_one(&img, w, h, Effort::Exhaustive);
+    let outers = out.iter().filter(|s| s.data.len() > 5).count();
+    assert!(outers <= 1);
+}
+
+/// Smooth, separable displacement of the module boundaries (in modules).
+fn uneven_pitch(u: f32, v: f32) -> (f32, f32) {
+    (u + 0.3 * (0.5 * u).sin(), v + 0.3 * (0.4 * v + 1.0).sin())
+}
+
+#[test]
+fn uneven_module_pitch_needs_the_pitch_retry() {
+    for version in [2, 3, 4] {
+        let m = make_modules(version, &payload(version));
+        let side = ((m.dim as f32 + 8.0) * 4.0 * 1.5) as usize + 20;
+        let center = Point::new(side as f32 / 2.0, side as f32 / 2.0);
+        let r = Render {
+            w: side,
+            h: side,
+            quad: similarity_quad(m.dim, center, 4.0, 0.0),
+            mirrored: false,
+            blur: 0,
+            invert: false,
+        };
+        let img = r.draw_with(&m, uneven_pitch);
+        // The homography alone misreads enough modules to defeat Reed-Solomon.
+        let bin = threshold(&img, side, side);
+        let (grid, _) = sample_best(&bin, m.dim).expect("grid");
+        assert!(
+            decode_grid(&grid).is_err(),
+            "v{version} plain sampling decodes"
+        );
+        for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+            let out = scan_one(&img, side, side, effort);
+            assert_eq!(out.len(), 1, "v{version} {effort:?}");
+            assert_eq!(out[0].data, payload(version), "v{version} {effort:?}");
+        }
+    }
+}
+
+#[test]
+fn noise_stays_unread_after_the_retries() {
+    let mut state = 7u64;
+    let side = 120usize;
+    let img: Vec<u8> = (0..side * side)
+        .map(|_| if lcg(&mut state) & 1 == 0 { 0 } else { 255 })
+        .collect();
+    for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+        assert!(scan_one(&img, side, side, effort).is_empty());
+    }
+}
+
+#[test]
+fn local_threshold_reads_a_lighting_ramp() {
+    let (m, r, img) = render_case(3, 5.0, 0.0, 1, false);
+    // Contrast 100 on a ramp from dark to bright: no single threshold splits it.
+    let ramped: Vec<u8> = img
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            let x = (i % r.w) as f32 / r.w as f32;
+            (10.0 + 70.0 * f32::from(v) / 255.0 + 200.0 * x) as u8
+        })
+        .collect();
+    let bin = threshold(&ramped, r.w, r.h);
+    let plain = sample_best(&bin, m.dim).map(|(g, _)| decode_grid(&g).is_ok());
+    assert_ne!(plain, Some(true), "global threshold already reads it");
+    for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+        let out = scan_one(&ramped, r.w, r.h, effort);
+        assert_eq!(out.len(), 1, "{effort:?}");
+        assert_eq!(out[0].data, payload(3), "{effort:?}");
+    }
+}
+
 #[test]
 fn reader_handles_inversion_itself() {
     assert!(QrReader.handles_inversion());

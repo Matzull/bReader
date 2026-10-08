@@ -9,8 +9,9 @@ use crate::decode::{DecodedQr, decode_grid, read_version};
 use crate::detect::{FinderSearch, Triplet, candidate_dims, find_alignment};
 use crate::plane::Plane;
 use crate::sample::{
-    Homography, Mapper, finders_plausible, fourth_point, module_axes, module_size, pattern_cells,
-    predict_alignment, refine_finder, sample_grid, timing_plausible, transform,
+    Gray, Homography, Mapper, finders_plausible, fourth_point, module_axes, module_size,
+    pattern_cells, predict_alignment, refine_finder, sample_grid, sample_grid_local,
+    timing_plausible, timing_warp, transform,
 };
 use crate::spec::{dimension, version_for_dimension};
 
@@ -20,6 +21,10 @@ pub struct QrReader;
 /// Finder size ratio above which a failed alignment search is repeated in a
 /// much wider window (strong perspective moves the pattern far).
 const WIDE_SEARCH_RATIO: f32 = 1.2;
+/// Half-widths (in boundaries) of the moving average applied to the pitch
+/// corrections measured on the timing patterns; the raw values carry the
+/// jitter of the binarized edges.
+const WARP_SMOOTHING: [usize; 2] = [2, 5];
 /// Failed alignment searches after which a fit without any found pattern
 /// is abandoned.
 const MAX_MISSES: usize = 2;
@@ -62,7 +67,8 @@ impl Params {
 
 /// Buffers reused across candidates within one scan.
 #[derive(Debug, Default)]
-struct Work {
+struct Work<'g> {
+    gray: Option<Gray<'g>>,
     search: FinderSearch,
     grid: BitMatrix,
     runs: Vec<u32>,
@@ -87,7 +93,7 @@ enum Variant {
     Affine,
 }
 
-impl Work {
+impl Work<'_> {
     /// Decodes a triplet; failures are retried once with finder centers
     /// refined against the finder template.
     fn try_triplet(&mut self, bin: Plane<'_>, t: &Triplet) -> Option<Found> {
@@ -169,6 +175,9 @@ impl Work {
             });
             let mut first = true;
             let mut refined = false;
+            // The first mapping that sampled a plausible grid, kept for the
+            // retries below.
+            let mut retry: Option<(Mapper, f32)> = None;
             for variant in [Variant::Refined, Variant::Corner, Variant::Affine] {
                 if implausible {
                     break;
@@ -211,6 +220,7 @@ impl Work {
                             queue[head] = vdim;
                             len += 1;
                         }
+                        retry = None;
                         break;
                     }
                 }
@@ -220,11 +230,59 @@ impl Work {
                 {
                     return Some(Found { decoded, h, dim });
                 }
+                if retry.is_none() {
+                    retry = Some((h, m));
+                }
+            }
+            if let Some((h, m)) = retry
+                && let Some(found) = self.resample(bin, dim, &h, m)
+            {
+                return Some(found);
             }
             if dim <= 41
                 && let Some(found) = self.perturbed(bin, t, dim)
             {
                 return Some(found);
+            }
+        }
+        None
+    }
+
+    /// Decodes the sampled grid when it is a valid symbol of `dim`.
+    fn decode(&self, dim: usize) -> Option<DecodedQr> {
+        decode_grid(&self.grid)
+            .ok()
+            .filter(|d| version_for_dimension(dim) == Some(d.version))
+    }
+
+    /// Retries a grid whose Reed-Solomon failed with sampling that follows
+    /// the print more closely than the homography: modules compared with
+    /// their neighbourhood in the luma image, then the module pitch measured
+    /// on the finders and timing patterns (at two smoothing widths, each
+    /// applied twice since the first correction moves the lines measured).
+    fn resample(&mut self, bin: Plane<'_>, dim: usize, h: &Mapper, m: f32) -> Option<Found> {
+        if let Some(gray) = self.gray
+            && sample_grid_local(gray, bin.inverted(), h, dim, &mut self.grid)
+            && let Some(decoded) = self.decode(dim)
+        {
+            return Some(Found {
+                decoded,
+                h: h.clone(),
+                dim,
+            });
+        }
+        for smooth in WARP_SMOOTHING {
+            let mut w = h.clone();
+            for _ in 0..2 {
+                let Some(next) = timing_warp(bin, &w, dim, smooth) else {
+                    break;
+                };
+                w = next;
+                if sample_grid(bin, &w, dim, m, &mut self.grid)
+                    && let Some(decoded) = self.decode(dim)
+                {
+                    return Some(Found { decoded, h: w, dim });
+                }
             }
         }
         None
@@ -402,6 +460,40 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
     })
 }
 
+/// A symbol already reported in this frame.
+struct Known {
+    quad: Quad,
+    /// Module size in the coordinates of the binary plane.
+    module: f32,
+}
+
+/// A finder at least this fraction of a decoded symbol's module size inside
+/// its quad belongs to that symbol; smaller ones may start a nested symbol.
+const NESTED_MODULE_RATIO: f32 = 0.5;
+
+impl Known {
+    fn new(s: &Symbol, scale: (f32, f32)) -> Option<Self> {
+        let SymbolMeta::Qr(meta) = &s.meta else {
+            return None;
+        };
+        let c = s.quad.corners;
+        let side = (0..4).map(|i| c[i].distance(c[(i + 1) % 4])).sum::<f32>() / 4.0;
+        let dim = 17.0 + 4.0 * f32::from(meta.version);
+        Some(Self {
+            quad: s.quad,
+            module: side / dim / ((scale.0 + scale.1) / 2.0),
+        })
+    }
+
+    /// Whether a finder (plane coordinates) lies on this symbol rather than
+    /// on a much smaller one nested inside it.
+    fn covers(&self, pos: Point, module: f32, scale: (f32, f32)) -> bool {
+        self.quad
+            .contains(Point::new(pos.x * scale.0, pos.y * scale.1))
+            && module >= NESTED_MODULE_RATIO * self.module
+    }
+}
+
 impl SymbologyReader for QrReader {
     fn name(&self) -> &'static str {
         "qr"
@@ -418,22 +510,28 @@ impl SymbologyReader for QrReader {
     fn scan(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
         let params = Params::for_effort(ctx.options().effort);
         let scale = ctx.scale();
-        let mut known: Vec<Quad> = out
+        let mut known: Vec<Known> = out
             .iter()
             .filter(|s| s.symbology == Symbology::Qr)
-            .map(|s| s.quad)
+            .filter_map(|s| Known::new(s, scale))
             .collect();
+        let original = ctx.original();
         let bin = ctx.binary();
         if bin.width() < 21 || bin.height() < 21 {
             return;
         }
-        let mut work = Work::default();
+        let mut work = Work {
+            gray: Some(Gray {
+                img: original,
+                scale,
+            }),
+            ..Work::default()
+        };
         work.search.find_finders(bin, params.row_step);
         if !known.is_empty() {
-            work.search.finders.retain(|f| {
-                let p = Point::new(f.pos.x * scale.0, f.pos.y * scale.1);
-                !known.iter().any(|q| q.contains(p))
-            });
+            work.search
+                .finders
+                .retain(|f| !known.iter().any(|k| k.covers(f.pos, f.module, scale)));
         }
         // Both polarities share the finder search; triplets and budgets are
         // per polarity.
@@ -456,10 +554,9 @@ impl SymbologyReader for QrReader {
                 if spent {
                     continue;
                 }
-                let inside = [t.tl, t.tr, t.bl].iter().any(|f| {
-                    let p = Point::new(f.pos.x * scale.0, f.pos.y * scale.1);
-                    known.iter().any(|q| q.contains(p))
-                });
+                let inside = [t.tl, t.tr, t.bl]
+                    .iter()
+                    .any(|f| known.iter().any(|k| k.covers(f.pos, f.module, scale)));
                 if inside {
                     continue;
                 }
@@ -473,7 +570,7 @@ impl SymbologyReader for QrReader {
                 };
                 if let Some(sym) = build_symbol(&found, scale) {
                     successes += 1;
-                    known.push(sym.quad);
+                    known.extend(Known::new(&sym, scale));
                     out.push(sym);
                 }
             }

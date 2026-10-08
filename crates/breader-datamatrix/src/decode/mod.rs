@@ -58,6 +58,10 @@ pub(crate) fn decode_grid(grid: &BitMatrix) -> Result<DecodedDm, Reject> {
     }
 }
 
+/// Blocks with at most this many check codewords are in the conservative
+/// range of `max_corrections`.
+const SMALL_BLOCK_EC: usize = 12;
+
 /// Corrections refused to keep false positives out: small blocks have too
 /// little redundancy to trust their last correctable error.
 fn max_corrections(ec_per_block: usize) -> usize {
@@ -76,7 +80,13 @@ fn decode_oriented(grid: &BitMatrix, mirrored: bool) -> Result<DecodedDm, Reject
     }
     let size = spec::size(rows as u16, cols as u16).ok_or(Reject::Sampling)?;
     let (corrected, data_cw) = read_codewords(grid, size)?;
-    let parsed = encodation::parse(&data_cw)?;
+    // A block with enough check codewords that decoded without any correction
+    // is a valid codeword set by itself (a random word passes with probability
+    // 2^-(8 * ec)), so the pad sequence adds nothing to the misdecode guard
+    // there. Corrected or small blocks keep it.
+    let ec_per_block = usize::from(size.ec_codewords) / usize::from(size.blocks);
+    let strict_pad = corrected > 0 || ec_per_block <= SMALL_BLOCK_EC;
+    let parsed = encodation::parse(&data_cw, strict_pad)?;
     Ok(DecodedDm {
         rows: size.rows,
         cols: size.cols,

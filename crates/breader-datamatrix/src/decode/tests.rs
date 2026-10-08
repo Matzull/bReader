@@ -355,7 +355,7 @@ fn encoder_gs1_eci_and_macros() {
 // ---- hand-built codeword streams -------------------------------------------
 
 fn parsed(stream: &[u8]) -> Result<super::encodation::Parsed, Reject> {
-    parse(stream)
+    parse(stream, true)
 }
 
 fn ascii(s: &str) -> Vec<u8> {
@@ -463,6 +463,41 @@ fn padding_is_validated() {
     // Only padding is not a message.
     assert!(parsed(&pad(size, &[])).is_err());
     assert!(parsed(&[]).is_err());
+}
+
+/// Data codewords with a first pad and then `fill` instead of the standard sequence.
+fn pad_with(size: &SymbolSize, stream: &[u8], fill: u8) -> Vec<u8> {
+    let mut out = stream.to_vec();
+    out.push(129);
+    out.resize(usize::from(size.data_codewords), fill);
+    out
+}
+
+#[test]
+fn nonstandard_pads_pass_only_without_corrections_on_large_blocks() {
+    let large = spec::sizes()
+        .iter()
+        .find(|s| !s.dmre && usize::from(s.ec_codewords) / usize::from(s.blocks) > SMALL_BLOCK_EC)
+        .unwrap();
+    let stream = ascii("ABC");
+    let grid = paint(large, &with_ec(large, &pad_with(large, &stream, 129)));
+    let d = decode_grid(&grid).unwrap();
+    assert_eq!((d.data.as_slice(), d.errors_corrected), (&b"ABC"[..], 0));
+    // One corrected module keeps the pad check on.
+    let mut bad = grid.clone();
+    let (y, x) = large.symbol_position(1, 1);
+    bad.set(x, y, !bad.get(x, y));
+    assert!(decode_grid(&bad).is_err());
+    // The standard pads still decode after a correction.
+    let std_grid = paint(large, &with_ec(large, &pad(large, &stream)));
+    let mut hit = std_grid.clone();
+    hit.set(x, y, !hit.get(x, y));
+    assert_eq!(decode_grid(&hit).unwrap().errors_corrected, 1);
+    // Small blocks keep the check even when clean.
+    let small = smallest(6);
+    assert!(usize::from(small.ec_codewords) / usize::from(small.blocks) <= SMALL_BLOCK_EC);
+    let grid = paint(small, &with_ec(small, &pad_with(small, &stream, 129)));
+    assert!(decode_grid(&grid).is_err());
 }
 
 #[test]
@@ -1049,7 +1084,7 @@ fn random_input_never_panics_or_decodes_to_nothing() {
                 ][rng.below(15)];
             }
         }
-        if let Ok(p) = parse(&s) {
+        if let Ok(p) = parse(&s, true) {
             assert!(!p.data.is_empty());
             let mut at = 0;
             for seg in &p.segments {

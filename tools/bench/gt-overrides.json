@@ -274,6 +274,32 @@
           ]
         ],
         "reason": "Unlabeled symbol: a clean, fully Reed-Solomon-valid Data Matrix clearly visible in the image (crop inspected) next to a printed 'case' caption; its text is in the dataset-wide case-N label family and no annotation lies within a symbol-size of its position."
+      },
+      {
+        "file": "IMG20260320082633.jpg",
+        "to": {
+          "format": "DATAMATRIX",
+          "text": "case-138"
+        },
+        "points": [
+          [
+            934,
+            2608
+          ],
+          [
+            940,
+            2315
+          ],
+          [
+            1162,
+            2313
+          ],
+          [
+            1155,
+            2599
+          ]
+        ],
+        "reason": "Unlabeled symbol: a Reed-Solomon-valid Data Matrix with a glare streak, clearly visible (crop inspected) under a printed 'case' caption between the labeled case-206 and case-197 symbols; its text is in the dataset-wide case-N label family and no annotation lies within a symbol-size of its position."
       }
     ],
     "qrcode-2": [

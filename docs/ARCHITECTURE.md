@@ -148,6 +148,11 @@ Modules: `detect` (finder patterns, triplets), `alignment` (Annex E table), `sam
 5. **Decoding** — format information (BCH (15,5), both copies, nearest valid word with distance ≤ 3), version information (BCH (18,6), distance ≤ 3), unmasking, codeword placement, de-interleaving per the block layout, Reed-Solomon on every block (`breader-ecc`), and the bitstream (numeric, alphanumeric, byte, kanji, ECI, FNC1 in first and second position; Structured Append headers are parsed and ignored). If format information fails, the transposed grid is tried (mirrored symbol). Any block failing RS rejects the symbol.
 6. **Results** — the quad maps module corners (0,0), (d,0), (d,d), (0,d) to the image, scaled to original-frame coordinates. Candidates whose center falls inside a symbol already decoded in this frame are skipped. `QrMeta` records version, level, mask, corrected errors, ECI and mirroring. The AIM identifier follows ISO/IEC 15424: `]Q1` by default, `]Q2` with ECI, `]Q3`/`]Q4` with FNC1 in first position (without/with ECI), and `]Q5`/`]Q6` with FNC1 in second position.
 
+7. **Retries after a Reed-Solomon failure** (no cost on the happy path). Per dimension hypothesis, with the first mapping that sampled a plausible grid:
+   - *Local threshold:* module values are read from the luma image (center and four nearby points) and compared with the mean of the surrounding 7x7 modules, which copes with a ramp of lighting or a binarization threshold that does not fit a 2-3 px/module symbol.
+   - *Pitch correction:* the offsets of the column and row boundaries are measured on the finder edges and the timing patterns (transition search within half a module), smoothed with a moving average (half-width 2, then 5) and interpolated; module coordinates are shifted before the homography. A homography cannot follow the uneven module pitch of prints on creased or curved sheets. The measurement is repeated once on the corrected mapping. Reed-Solomon and the version check still decide.
+   - *Nested symbols:* a finder inside a decoded quad is kept when its module is below half of that symbol's module size, so a small code printed over the data area of a large one is read as well; finders of the same scale stay skipped.
+
 Later improvements, driven by the benchmarks: piecewise homographies over all alignment patterns for large versions, grayscale sampling, and recovery of a missing finder from two finders plus timing patterns.
 
 ### 3.3 Error correction (`breader-ecc`)
@@ -232,18 +237,20 @@ The structure mirrors `breader-qr`. The modules are `spec` (size table, region l
    - Refinement: the clock-track module centers are located along both clock sides (dark/light run midpoints with sub-pixel interpolation), and the homography is refit by least squares over the L corners plus the clock centers. This handles the top-right corner, which perspective distorts the most.
    - For multi-region symbols, the alignment patterns between data regions (two-module solid and dotted lines) are skipped by the region layout, and their positions are also used as extra fit points.
    - Modules under 3 px are sampled at their center; larger modules use a 5-point majority.
+   - When Reed-Solomon fails on a plausible grid, the grid is sampled again through a mapping corrected per column and row boundary with the clock transitions of the top rows and right columns of every region (the same measurement `refine` uses, kept as an offset per boundary instead of a global fit). This follows the uneven pitch of 2x2-region prints, where the left regions drift against the right ones.
 4. **Cheap gates** (before Reed-Solomon, like the QR gates): L solidity, clock alternation and alignment-pattern agreement on the sampled grid.
 5. **Decoding.**
    - Remove the finder, clock and alignment patterns to obtain the mapping matrix.
    - Extract codewords with the Annex F placement, including the four corner cases.
    - De-interleave the blocks (the 144×144 symbol has unequal blocks).
    - Run Reed-Solomon over GF(256) with polynomial 0x12D and first root α^1, using `breader-ecc`. Every block must succeed.
+   - A block with more than 12 check codewords that decodes with no correction does not need the pad check; non-standard pad values (some encoders write them) are accepted there. Corrected or small blocks keep it.
    - Small blocks may correct fewer codewords than the spec allows: (ec − r) / 2, where r = 2 when ec ≤ 7, r = 1 when ec ≤ 12, and r = 0 otherwise. This is our own zero-FP policy, analogous to QR's misdecode protection, not an ISO 16022 requirement. As a result, 10×10 accepts one correction instead of two.
    - Grid contract: the L finder is on the left and bottom edges. A mirrored retry reflects the grid across the diagonal through the bottom-left corner, which swaps the dimensions.
    - Ambiguous cases, resolved conservatively (details in `decode/encodation.rs`):
      - Reader Programming (234) is rejected.
      - Empty payloads are rejected.
-     - Pads must match the 253-state sequence exactly.
+     - Pads must match the 253-state sequence exactly, except for uncorrected large blocks (above).
      - Structured Append is accepted only in the first position, and macros only before any data.
    - Decode the encodation modes:
      - ASCII, including digit pairs, Upper Shift and padding with its 253-state randomization check;

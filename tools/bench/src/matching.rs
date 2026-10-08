@@ -101,14 +101,25 @@ pub fn code39_full_ascii(data: &[u8]) -> Option<Vec<u8>> {
 
 type Key = (Symbology, Vec<u8>);
 
-/// Canonical comparison key: whitespace trimmed, UPC-A and UPC-E (expanded to UPC-A) folded into
+/// Repairs UTF-8 text that was read as Latin-1 and encoded again (`â\u{80}\u{94}` for an em
+/// dash), a flaw some dataset labels carry. Text that is not such a double encoding is returned
+/// unchanged.
+fn undo_latin1_utf8(s: &str) -> String {
+    if s.is_ascii() || s.chars().any(|c| u32::from(c) > 0xff) {
+        return s.to_string();
+    }
+    let bytes: Vec<u8> = s.chars().map(|c| c as u8).collect();
+    String::from_utf8(bytes).unwrap_or_else(|_| s.to_string())
+}
+
+/// Canonical comparison key: whitespace trimmed, UTF-8 read as Latin-1 repaired, UPC-A and UPC-E (expanded to UPC-A) folded into
 /// EAN-13 with a leading 0,
 /// the dataset's `{GS}` notation turned into ASCII 29 and a leading GS1 FNC1 separator dropped.
 /// Valid UTF-8 is compared as trimmed text, anything else as raw bytes.
 pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
     let trimmed: Vec<u8> = match std::str::from_utf8(data) {
         Ok(s) => {
-            let s = s.trim().replace("{GS}", "\u{1d}");
+            let s = undo_latin1_utf8(s.trim()).replace("{GS}", "\u{1d}");
             s.strip_prefix('\u{1d}').unwrap_or(&s).as_bytes().to_vec()
         }
         Err(_) => data.trim_ascii().to_vec(),
@@ -195,6 +206,24 @@ mod tests {
             label: String::new(),
             data: text.as_bytes().to_vec(),
         }
+    }
+
+    #[test]
+    fn utf8_read_as_latin1_in_a_label_matches_the_real_text() {
+        let mut st = Stats::default();
+        let found = vec![Decoded::new(
+            Symbology::Qr,
+            "way\u{2014}in short".as_bytes().to_vec(),
+        )];
+        let label = exp(Symbology::Qr, "way\u{e2}\u{80}\u{94}in short");
+        score(&found, &[label], &mut st);
+        let s = st.totals();
+        assert_eq!((s.expected, s.read, s.false_positives), (1, 1, 0));
+        // Genuine Latin-1 text is not touched.
+        assert_eq!(
+            canonical(Symbology::Qr, "caf\u{e9}".as_bytes()).1,
+            "caf\u{e9}".as_bytes()
+        );
     }
 
     #[test]

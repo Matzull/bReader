@@ -53,7 +53,7 @@
     "datamatrix-1": {
       "Data Matrix": {
         "expected": 30,
-        "read": 26,
+        "read": 27,
         "false_positives": 0
       }
     },
@@ -67,7 +67,7 @@
     "datamatrix-3": {
       "Data Matrix": {
         "expected": 28,
-        "read": 20,
+        "read": 26,
         "false_positives": 0
       }
     },
@@ -81,7 +81,7 @@
     "datamatrix-5": {
       "Data Matrix": {
         "expected": 5,
-        "read": 0,
+        "read": 2,
         "false_positives": 0
       }
     },
@@ -163,21 +163,21 @@
     "qrcode-2": {
       "QR Code": {
         "expected": 57,
-        "read": 47,
+        "read": 49,
         "false_positives": 0
       }
     },
     "qrcode-3": {
       "QR Code": {
         "expected": 18,
-        "read": 16,
+        "read": 17,
         "false_positives": 0
       }
     },
     "qrcode-4": {
       "QR Code": {
         "expected": 24,
-        "read": 13,
+        "read": 20,
         "false_positives": 0
       }
     },

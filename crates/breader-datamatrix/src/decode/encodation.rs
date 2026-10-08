@@ -7,7 +7,8 @@
 //! - Structured Append, macros 05/06 and the first-position FNC1 are only
 //!   accepted before any data character.
 //! - Padding must follow the standard sequence exactly (129, then the
-//!   253-state randomized pads) up to the end of the data codewords.
+//!   253-state randomized pads) up to the end of the data codewords, unless
+//!   the caller vouches for the codewords (see `parse`).
 //! - C40, Text and X12 may end without unlatch; a single remaining codeword
 //!   is then read as ASCII. A shift value ending the last triple is accepted as padding
 //!   (the standard pads with Shift 1, some encoders use Shift 2).
@@ -72,6 +73,8 @@ fn base256_mask(pos: usize) -> u8 {
 
 struct State<'a> {
     cw: &'a [u8],
+    /// Codewords after a pad start must follow the 253-state sequence.
+    strict_pad: bool,
     pos: usize,
     mode: Mode,
     data: Vec<u8>,
@@ -133,7 +136,7 @@ impl State<'_> {
             }
             129 => {
                 for (j, &p) in self.cw.iter().enumerate().skip(at + 1) {
-                    if p != pad_value(j + 1) {
+                    if self.strict_pad && p != pad_value(j + 1) {
                         return Err(BAD);
                     }
                 }
@@ -405,9 +408,13 @@ impl State<'_> {
     }
 }
 
-pub(super) fn parse(cw: &[u8]) -> Result<Parsed, Reject> {
+/// `strict_pad` enforces the standard pad sequence after the first pad
+/// codeword; it is the misdecode guard for codewords that Reed-Solomon had to
+/// correct. Some encoders write other pad values.
+pub(super) fn parse(cw: &[u8], strict_pad: bool) -> Result<Parsed, Reject> {
     let mut st = State {
         cw,
+        strict_pad,
         pos: 0,
         mode: Mode::Ascii,
         data: Vec::with_capacity(cw.len() * 2),

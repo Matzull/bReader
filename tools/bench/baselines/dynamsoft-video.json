@@ -89,17 +89,17 @@
     "batch_datamatrix_1080p": {
       "balanced": {
         "expected": 100,
-        "read": 87,
+        "read": 89,
         "false_positives": 0
       },
       "fast": {
         "expected": 100,
-        "read": 66,
+        "read": 67,
         "false_positives": 0
       },
       "tracker": {
         "expected": 100,
-        "read": 92,
+        "read": 95,
         "false_positives": 0
       }
     },

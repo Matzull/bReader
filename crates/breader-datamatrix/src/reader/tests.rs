@@ -110,6 +110,40 @@ fn reads_inverted_blurred_and_mirrored() {
 }
 
 #[test]
+fn uneven_module_pitch_is_followed_through_the_clock_tracks() {
+    // Columns and rows drift by up to 0.45 module against the homography.
+    let warp = |u: f32, v: f32| {
+        (
+            u + 0.45 * (0.31 * u).sin(),
+            v + 0.4 * (0.23 * v + 1.0).sin(),
+        )
+    };
+    for size in [
+        datamatrix::SymbolSize::Square32,
+        datamatrix::SymbolSize::Square40,
+        datamatrix::SymbolSize::Square44,
+    ] {
+        let m = encode_size(b"pitch", size);
+        let side = ((m.cols as f32 + 16.0) * 5.0) as usize;
+        let center = Point::new(side as f32 / 2.0, side as f32 / 2.0);
+        let r = Render {
+            w: side,
+            h: side,
+            quad: similarity_quad(m.rows, m.cols, center, 5.0, 0.0),
+            mirrored: false,
+            blur: 0,
+            invert: false,
+        };
+        let luma = r.draw_with(&m, warp);
+        for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+            let found = scan(&luma, side, side, effort);
+            assert_eq!(found.len(), 1, "{}x{} {effort:?}", m.rows, m.cols);
+            assert_eq!(found[0].data, m.payload, "{}x{} {effort:?}", m.rows, m.cols);
+        }
+    }
+}
+
+#[test]
 fn quad_is_in_original_coordinates() {
     let m = encode_size(b"quad", datamatrix::SymbolSize::Square24);
     let (luma, side) = render_scene(&m, 6.0, 15.0, false, 0, false);

@@ -1,6 +1,6 @@
 //! Perspective grid sampling from the binary image into a module grid.
 
-use breader_core::{BitMatrix, Perspective, Point};
+use breader_core::{BitMatrix, ImageView, Perspective, Point};
 
 use crate::plane::Plane;
 
@@ -206,10 +206,12 @@ impl Homography {
 }
 
 /// Module-to-image mapping used for sampling.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum Mapper {
     Corners(Perspective),
     Fitted(Homography),
+    /// A mapping with its module coordinates corrected along each axis.
+    Warped(Box<Warped>),
 }
 
 impl Mapper {
@@ -217,8 +219,164 @@ impl Mapper {
         match self {
             Self::Corners(h) => h.map(p),
             Self::Fitted(h) => h.map(p),
+            Self::Warped(w) => w.map(p),
         }
     }
+}
+
+/// Per-boundary offsets (in modules) of the true column and row boundaries
+/// relative to `base`, measured on the finder and timing patterns: a real
+/// print or a creased sheet does not keep a perfectly uniform module pitch,
+/// which a homography cannot follow.
+#[derive(Debug, Clone)]
+pub(crate) struct Warped {
+    base: Mapper,
+    du: Vec<f32>,
+    dv: Vec<f32>,
+}
+
+impl Warped {
+    fn at(d: &[f32], t: f32) -> f32 {
+        let last = d.len() - 1;
+        let t = t.clamp(0.0, last as f32);
+        let i = (t as usize).min(last - 1);
+        let f = t - i as f32;
+        d[i] * (1.0 - f) + d[i + 1] * f
+    }
+
+    fn map(&self, p: Point) -> Option<Point> {
+        self.base.map(Point::new(
+            p.x + Self::at(&self.du, p.x),
+            p.y + Self::at(&self.dv, p.y),
+        ))
+    }
+}
+
+/// Offset in modules (within half a module along `axis`) of the transition
+/// expected at module coordinates `at`, where the module before is
+/// `dark_before`.
+fn locate(
+    bin: Plane<'_>,
+    h: &Mapper,
+    at: Point,
+    axis: Point,
+    dark_before: bool,
+    step: f32,
+) -> Option<f32> {
+    let pixel = |p: Point| {
+        (p.x >= 0.0 && p.y >= 0.0 && (p.x as usize) < bin.width() && (p.y as usize) < bin.height())
+            .then(|| bin.get(p.x as usize, p.y as usize))
+    };
+    let mut best: Option<f32> = None;
+    let mut prev: Option<(f32, bool)> = None;
+    let mut s = -0.5f32;
+    while s <= 0.5 + 1e-6 {
+        let v = pixel(h.map(Point::new(at.x + axis.x * s, at.y + axis.y * s))?)?;
+        if let Some((ps, pv)) = prev
+            && pv == dark_before
+            && v != dark_before
+        {
+            let m = (ps + s) / 2.0;
+            if best.is_none_or(|b| m.abs() < b.abs()) {
+                best = Some(m);
+            }
+        }
+        prev = Some((s, v));
+        s += step;
+    }
+    best.filter(|s| s.abs() <= 0.42)
+}
+
+/// Corrects `h` with the column and row boundaries measured on the finders
+/// and the timing patterns. `None` when too few boundaries are found.
+pub(crate) fn timing_warp(bin: Plane<'_>, h: &Mapper, dim: usize, smooth: usize) -> Option<Mapper> {
+    let module = module_size(h, dim)?;
+    if module < 2.0 {
+        return None;
+    }
+    let step = (0.2 / module).clamp(0.02, 0.1);
+    // Boundary index, line coordinate and the shade before it, per axis.
+    let mut du = vec![(0.0f32, 0u32); dim + 1];
+    let mut dv = vec![(0.0f32, 0u32); dim + 1];
+    let finder_edges: [(usize, bool); 5] =
+        [(1, true), (2, false), (5, true), (6, false), (7, true)];
+    let mut lines: Vec<(bool, usize, f32, bool)> = Vec::new();
+    for horizontal in [true, false] {
+        for (c, dark) in finder_edges {
+            lines.push((horizontal, c, 3.5, dark));
+        }
+        for c in 8..=dim - 8 {
+            lines.push((horizontal, c, 6.5, (c - 1) % 2 == 0));
+        }
+    }
+    // Right finder along the top rows; bottom finder along the left columns.
+    for (c, dark) in [
+        (0usize, false),
+        (1, true),
+        (2, false),
+        (5, true),
+        (6, false),
+    ] {
+        lines.push((true, dim - 7 + c, 3.5, dark));
+        lines.push((false, dim - 7 + c, 3.5, dark));
+    }
+    for (horizontal, c, line, dark_before) in lines {
+        let (at, axis) = if horizontal {
+            (Point::new(c as f32, line), Point::new(1.0, 0.0))
+        } else {
+            (Point::new(line, c as f32), Point::new(0.0, 1.0))
+        };
+        if let Some(s) = locate(bin, h, at, axis, dark_before, step) {
+            let acc = if horizontal { &mut du } else { &mut dv };
+            acc[c].0 += s;
+            acc[c].1 += 1;
+        }
+    }
+    let finish = |acc: &[(f32, u32)]| -> Option<Vec<f32>> {
+        let known: Vec<(usize, f32)> = (1..dim)
+            .filter(|&i| acc[i].1 > 0)
+            .map(|i| (i, acc[i].0 / acc[i].1 as f32))
+            .collect();
+        if known.len() * 2 < dim {
+            return None;
+        }
+        let mut out = vec![0.0f32; dim + 1];
+        for (i, o) in out.iter_mut().enumerate() {
+            let below = known.iter().rev().find(|k| k.0 <= i);
+            let above = known.iter().find(|k| k.0 >= i);
+            *o = match (below, above) {
+                (Some(b), Some(a)) if a.0 != b.0 => {
+                    let f = (i - b.0) as f32 / (a.0 - b.0) as f32;
+                    b.1 * (1.0 - f) + a.1 * f
+                }
+                (Some(b), _) => b.1,
+                (_, Some(a)) => a.1,
+                _ => 0.0,
+            };
+        }
+        let src = out.clone();
+        for (i, o) in out.iter_mut().enumerate() {
+            let lo = i.saturating_sub(smooth);
+            let hi = (i + smooth).min(src.len() - 1);
+            *o = src[lo..=hi].iter().sum::<f32>() / (hi - lo + 1) as f32;
+        }
+        Some(out)
+    };
+    let (mut du, mut dv) = (finish(&du)?, finish(&dv)?);
+    // A mapping that is already warped keeps its corrections and adds the rest.
+    let base = match h {
+        Mapper::Warped(w) => {
+            for (a, b) in du.iter_mut().zip(&w.du) {
+                *a += b;
+            }
+            for (a, b) in dv.iter_mut().zip(&w.dv) {
+                *a += b;
+            }
+            w.base.clone()
+        }
+        _ => h.clone(),
+    };
+    Some(Mapper::Warped(Box::new(Warped { base, du, dv })))
 }
 
 /// Alignment pattern centers (row, column indices) that do not overlap a finder.
@@ -469,4 +627,105 @@ pub(crate) fn refine_finder(bin: Plane<'_>, c: Point, ex: Point, ey: Point) -> P
         }
     }
     best.1
+}
+
+/// Luma image and its scale relative to the binary plane, for sampling
+/// modules where the binarization lost them.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Gray<'a> {
+    pub img: ImageView<'a>,
+    /// Plane coordinates times this give image coordinates.
+    pub scale: (f32, f32),
+}
+
+impl Gray<'_> {
+    fn at(&self, p: Point) -> Option<f32> {
+        let (x, y) = (p.x * self.scale.0 - 0.5, p.y * self.scale.1 - 0.5);
+        let (w, h) = (self.img.width() as f32, self.img.height() as f32);
+        if x < -0.5 || y < -0.5 || x > w - 0.5 || y > h - 0.5 {
+            return None;
+        }
+        let (x, y) = (x.clamp(0.0, w - 1.0), y.clamp(0.0, h - 1.0));
+        let (x0, y0) = (x as usize, y as usize);
+        let (x1, y1) = (
+            (x0 + 1).min(self.img.width() - 1),
+            (y0 + 1).min(self.img.height() - 1),
+        );
+        let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+        let g = |x: usize, y: usize| f32::from(self.img.get(x, y));
+        Some(
+            (g(x0, y0) * (1.0 - fx) + g(x1, y0) * fx) * (1.0 - fy)
+                + (g(x0, y1) * (1.0 - fx) + g(x1, y1) * fx) * fy,
+        )
+    }
+}
+
+/// Half-width in modules of the window whose mean is the local threshold.
+const LOCAL_RADIUS: usize = 3;
+
+/// Samples the grid from the luma image: each module's value (the mean over
+/// its center and four nearby points) is compared with the mean of the
+/// modules around it, which tolerates uneven lighting and a binarization
+/// threshold that does not suit a symbol at a couple of pixels per module.
+pub(crate) fn sample_grid_local(
+    gray: Gray<'_>,
+    inverted: bool,
+    h: &Mapper,
+    dim: usize,
+    grid: &mut BitMatrix,
+) -> bool {
+    const OFFSETS: [(f32, f32); 5] = [
+        (0.0, 0.0),
+        (-0.2, -0.2),
+        (0.2, -0.2),
+        (-0.2, 0.2),
+        (0.2, 0.2),
+    ];
+    let mut vals = vec![0.0f32; dim * dim];
+    for r in 0..dim {
+        for c in 0..dim {
+            let mut sum = 0.0;
+            for (ox, oy) in OFFSETS {
+                let Some(p) = h.map(Point::new(c as f32 + 0.5 + ox, r as f32 + 0.5 + oy)) else {
+                    return false;
+                };
+                let Some(v) = gray.at(p) else {
+                    return false;
+                };
+                sum += v;
+            }
+            vals[r * dim + c] = sum / OFFSETS.len() as f32;
+        }
+    }
+    // Summed-area table for the window means.
+    let n = dim + 1;
+    let mut sat = vec![0.0f64; n * n];
+    for r in 0..dim {
+        for c in 0..dim {
+            sat[(r + 1) * n + c + 1] =
+                f64::from(vals[r * dim + c]) + sat[r * n + c + 1] + sat[(r + 1) * n + c]
+                    - sat[r * n + c];
+        }
+    }
+    grid.resize(dim, dim);
+    for r in 0..dim {
+        for c in 0..dim {
+            let (r0, r1) = (
+                r.saturating_sub(LOCAL_RADIUS),
+                (r + LOCAL_RADIUS + 1).min(dim),
+            );
+            let (c0, c1) = (
+                c.saturating_sub(LOCAL_RADIUS),
+                (c + LOCAL_RADIUS + 1).min(dim),
+            );
+            let area = ((r1 - r0) * (c1 - c0)) as f64;
+            let mean =
+                (sat[r1 * n + c1] - sat[r0 * n + c1] - sat[r1 * n + c0] + sat[r0 * n + c0]) / area;
+            let dark = (f64::from(vals[r * dim + c]) < mean) != inverted;
+            if dark {
+                grid.set(c, r, true);
+            }
+        }
+    }
+    true
 }

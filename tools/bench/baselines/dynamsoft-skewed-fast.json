@@ -4,8 +4,8 @@
   "groups": {
     "skewed-datamatrix": {
       "Data Matrix": {
-        "expected": 1323,
-        "read": 714,
+        "expected": 1324,
+        "read": 724,
         "false_positives": 0
       }
     }

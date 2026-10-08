@@ -3,8 +3,8 @@
 use std::cell::RefCell;
 
 use breader_core::{
-    BitMatrix, Content, DataMatrixMeta, Effort, FrameContext, Point, Quad, Symbol, SymbolMeta,
-    Symbology, SymbologyReader, SymbologySet,
+    BitMatrix, Content, DataMatrixMeta, Effort, FrameContext, Point, Quad, Reject, Symbol,
+    SymbolMeta, Symbology, SymbologyReader, SymbologySet,
 };
 
 use crate::check;
@@ -12,7 +12,8 @@ use crate::decode::{DecodedDm, decode_grid};
 use crate::detect::{Candidate, Detector};
 use crate::plane::Plane;
 use crate::sample::{
-    Hypothesis, Mapper, SampleScratch, analyze, precheck, refine, sample_grid, snap_layout,
+    Hypothesis, Mapper, SampleScratch, analyze, clock_warp, precheck, refine, sample_grid,
+    sample_grid_warped, snap_layout,
 };
 
 /// Data Matrix ECC 200 reader; handles both polarities itself.
@@ -136,12 +137,28 @@ impl Work {
         if !sample_grid(plane, &mapper, rows, cols, &mut self.grid) {
             return None;
         }
-        if !check::plausible(&self.grid, hyp) {
-            return None;
-        }
-        let decoded = decode_grid(&self.grid);
+        let plausible = check::plausible(&self.grid, hyp);
+        let mut decoded = if plausible {
+            let d = decode_grid(&self.grid);
+            if d.is_err() {
+                *decodes += 1;
+            }
+            d
+        } else {
+            Err(Reject::Sampling)
+        };
         if decoded.is_err() {
-            *decodes += 1;
+            // Retry through a mapping that follows the module pitch measured
+            // on the clock tracks.
+            if let Some(w) = clock_warp(plane, &mapper, hyp)
+                && sample_grid_warped(plane, &mapper, Some(&w), rows, cols, &mut self.grid)
+                && check::plausible(&self.grid, hyp)
+            {
+                decoded = decode_grid(&self.grid);
+                if decoded.is_err() {
+                    *decodes += 1;
+                }
+            }
         }
         let decoded = decoded.ok()?;
         Some(Found {

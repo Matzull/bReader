@@ -41,6 +41,12 @@ pub struct Render {
 
 impl Render {
     pub fn draw(&self, m: &Modules) -> Vec<u8> {
+        self.draw_with(m, |u, v| (u, v))
+    }
+
+    /// Draws with the module coordinates displaced by `warp`, a stand-in for
+    /// an uneven module pitch.
+    pub fn draw_with(&self, m: &Modules, warp: impl Fn(f32, f32) -> (f32, f32)) -> Vec<u8> {
         let d = m.dim as f32;
         let sq = [
             Point::new(0.0, 0.0),
@@ -59,11 +65,8 @@ impl Render {
                 for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
                     let p = Point::new(x as f32 + ox, y as f32 + oy);
                     let dark = inv.map(p).is_some_and(|q| {
-                        let (u, v) = if self.mirrored {
-                            (q.y, q.x)
-                        } else {
-                            (q.x, q.y)
-                        };
+                        let (u, v) = warp(q.x, q.y);
+                        let (u, v) = if self.mirrored { (v, u) } else { (u, v) };
                         u >= 0.0
                             && v >= 0.0
                             && u < d
