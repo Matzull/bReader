@@ -73,6 +73,27 @@ pub(crate) fn quiet_before(runs: &Runs, i: usize, bias: f32) -> f32 {
     if q > 0.0 { q + bias } else { 0.0 }
 }
 
+/// [`quiet_before`] for symbologies whose quiet zone may end at the profile
+/// border: a margin up to the border is taken as open, since the border, not
+/// the content, limits it. Only for symbologies that cannot read as a
+/// shorter valid symbol when the border cuts the symbol.
+pub(crate) fn quiet_before_open(runs: &Runs, i: usize, bias: f32) -> f32 {
+    if runs.open_before(i) {
+        f32::INFINITY
+    } else {
+        quiet_before(runs, i, bias)
+    }
+}
+
+/// [`quiet_after`] with the border rule of [`quiet_before_open`].
+pub(crate) fn quiet_after_open(runs: &Runs, i: usize, bias: f32) -> f32 {
+    if runs.open_after(i) {
+        f32::INFINITY
+    } else {
+        quiet_after(runs, i, bias)
+    }
+}
+
 /// Quiet zone after run `i` (a bar), bias removed.
 pub(crate) fn quiet_after(runs: &Runs, i: usize, bias: f32) -> f32 {
     let q = runs.space_after(i);

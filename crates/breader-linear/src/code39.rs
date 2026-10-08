@@ -4,7 +4,8 @@
 use breader_core::Symbology;
 
 use crate::common::{
-    MIN_MODULE, adjusted_width, adjusted_widths, quiet_after, quiet_before, split_wide,
+    MIN_MODULE, adjusted_width, adjusted_widths, quiet_after, quiet_after_open, quiet_before,
+    quiet_before_open, split_wide,
 };
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::runs::Runs;
@@ -125,7 +126,7 @@ struct Read {
 /// bias and whether the quiet zone before it is short.
 fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32, bool)> {
     let raw = adjusted_widths::<9>(runs, j, 0.0)?;
-    if runs.space_before(j) < QUIET_SCREEN * raw.iter().sum::<f32>() {
+    if runs.space_before_open(j) < QUIET_SCREEN * raw.iter().sum::<f32>() {
         return None;
     }
     if split_wide(&raw, 3)?.wide_mask != STAR_MASK {
@@ -142,9 +143,10 @@ fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32, bool)> {
     if start.ch != STAR {
         return None;
     }
-    let quiet = quiet_before(runs, j, bias);
-    let short = quiet < FULL_QUIET * start.narrow;
-    (quiet >= QUIET * start.narrow).then_some((start, bias, short))
+    // A margin that runs into the border is accepted whatever its length, but
+    // its measured length still decides whether it is short.
+    let short = quiet_before(runs, j, bias) < FULL_QUIET * start.narrow;
+    (quiet_before_open(runs, j, bias) >= QUIET * start.narrow).then_some((start, bias, short))
 }
 
 fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
@@ -172,11 +174,10 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
         read.narrow_sum += c.narrow;
         read.count += 1;
         if c.ch == STAR {
-            let quiet = quiet_after(runs, at + 8, bias);
-            if quiet < QUIET * narrow {
+            if quiet_after_open(runs, at + 8, bias) < QUIET * narrow {
                 return None;
             }
-            read.short_quiet |= quiet < FULL_QUIET * narrow;
+            read.short_quiet |= quiet_after(runs, at + 8, bias) < FULL_QUIET * narrow;
             read.last_bar = at + 8;
             return Some(read);
         }
@@ -410,16 +411,63 @@ mod tests {
             };
             decode_all(&Code39Decoder, &r.profile(&modules), &opts())
         };
-        // Narrow elements are one module wide here.
+        // Narrow elements are one module wide here. A neighboring bar limits
+        // the quiet zone by content.
+        let near = |left: usize, right: usize| {
+            let p = Render::px(3.0).profile(&with_neighbours(&modules, left, right));
+            decode_all(&Code39Decoder, &p, &opts())
+        };
         let full = at(8.0, 8.0);
         assert_eq!((full.len(), full[0].short_quiet), (1, false));
-        for (left, right) in [(5.0, 12.0), (12.0, 5.0), (4.2, 4.2)] {
-            let hits = at(left, right);
+        assert_eq!(
+            (near(12, 12).len(), near(12, 12)[0].short_quiet),
+            (1, false)
+        );
+        for (left, right) in [(5, 12), (12, 5), (5, 5)] {
+            let hits = near(left, right);
             assert_eq!(hits.len(), 1, "{left} {right}");
             assert!(hits[0].short_quiet, "{left} {right}");
         }
-        for (left, right) in [(3.0, 12.0), (12.0, 3.0), (3.0, 3.0)] {
-            assert!(at(left, right).is_empty(), "{left} {right}");
+        for (left, right) in [(3, 12), (12, 3), (3, 3)] {
+            assert!(near(left, right).is_empty(), "{left} {right}");
+        }
+    }
+
+    #[test]
+    fn a_quiet_zone_ending_at_the_profile_border_is_open_but_flagged_short() {
+        let modules = code39_modules("QUIET", 3, 1);
+        for (left, right) in [(3.0, 12.0), (12.0, 3.0), (1.0, 1.0), (2.0, 4.0)] {
+            let r = Render {
+                quiet_left: left,
+                quiet_right: right,
+                ..Render::px(3.0)
+            };
+            let hits = decode_all(&Code39Decoder, &r.profile(&modules), &opts());
+            assert_eq!(texts(&hits), [b"QUIET".to_vec()], "{left} {right}");
+            assert!(hits[0].short_quiet, "{left} {right}");
+        }
+    }
+
+    #[test]
+    fn a_symbol_cut_by_the_border_is_not_read_shorter() {
+        let modules = code39_modules("CUT BY THE BORDER", 3, 1);
+        let r = Render {
+            quiet_left: 4.0,
+            quiet_right: 4.0,
+            ..Render::px(3.0)
+        };
+        let p = r.profile(&modules);
+        assert_eq!(decode_all(&Code39Decoder, &p, &opts()).len(), 1);
+        for (depth, cut) in border_cuts(&p, 12.0, modules.len() as f32 * 3.0) {
+            for hit in decode_all(&Code39Decoder, &cut, &opts()) {
+                assert_eq!(hit.text, b"CUT BY THE BORDER", "depth {depth}");
+            }
+            if depth > 9 {
+                assert!(
+                    decode_all(&Code39Decoder, &cut, &opts()).is_empty(),
+                    "depth {depth}"
+                );
+            }
         }
     }
 

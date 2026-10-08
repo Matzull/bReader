@@ -5,12 +5,12 @@
     "blur": {
       "Code 128": {
         "expected": 2,
-        "read": 1,
+        "read": 2,
         "false_positives": 0
       },
       "Code 39": {
         "expected": 2,
-        "read": 1,
+        "read": 2,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -20,7 +20,7 @@
       },
       "EAN-13": {
         "expected": 3,
-        "read": 2,
+        "read": 3,
         "false_positives": 0
       },
       "EAN-8": {

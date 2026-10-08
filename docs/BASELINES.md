@@ -96,6 +96,21 @@ Four changes after the failure triage in [FAILURES.md](FAILURES.md): Code 39 qui
 
 Synthetic sets and skewed-datamatrix are unchanged.
 
+## Edge relocation and border quiet zone (2026-10-08)
+
+Two linear-reader changes after the zxing-cpp samples triage ([FAILURES-ZXING-SAMPLES.md](FAILURES-ZXING-SAMPLES.md)): the half-level edge reference is blended with the extremes of a window scaled by the local run width, and a quiet zone that ends at the profile border is open for EAN/UPC, Code 128 and Code 39 (not ITF). Read counts, 0 false positives everywhere:
+
+| Set | Fast | Balanced | Exhaustive |
+|---|---|---|---|
+| zxing-samples (470) | 245 -> 248 -> 256 | 292 -> 313 -> 321 | 297 -> 319 -> 327 |
+| challenging-images (442) | 322 -> 322 -> 322 | 395 -> 400 -> 400 | 406 -> 413 -> 413 |
+| synth seed 1 (286) | 242 -> 244 -> 244 | 280 -> 283 -> 283 | 281 -> 284 -> 284 |
+| synth seed 2024 (831) | 718 -> 725 -> 725 | 808 -> 816 -> 816 | 811 -> 819 -> 819 |
+| skewed-datamatrix (1323) | 714 | 1000 | 1010 |
+| video (277 symbols): fast / balanced / tracker | 100 -> 101 | 240 -> 244 | 246 -> 253 |
+
+Each cell is before -> after edge relocation -> after both changes (video: before -> after both). The window levels of the edge relocation may move a reference level at most 0.25 of the local level difference; without that limit the plain blend gained a little more in total but lost the `upca-3` group of zxing-samples, synth-2024 `illumination` ITF and the video `EAN_13-distance` (see FAILURES-ZXING-SAMPLES.md). The latency of the decode call was compared with interleaved runs of the base, edge-relocation-only and final builds (3 rounds, median p50): challenging-images Balanced 16.85 / 16.89 / 17.00 ms, Exhaustive 38.7 / 40.4 / 40.6 ms, synth-2024 Balanced 5.38 / 5.44 / 5.44 ms, zxing-samples Exhaustive 4.56 / 5.04 / 5.11 ms (more symbols read, so more work per image).
+
 ## v1 targets (confirmed 2026-10-07)
 
 | Metric | Target |
@@ -144,17 +159,17 @@ Read count / false positives per symbology (release build, no GT overrides besid
 | Symbology | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing | zxing-cpp 3.1.1 |
 |---|---|---|---|---|---|---|
 | QR Code | 138 | 95 / 0 | 102 / 0 | 102 / 0 | 119 / 0 | 125 / 1 |
-| EAN-13 | 65 | 24 / 0 | 34 / 0 | 34 / 0 | 43 / 4 | 45 / 4 |
-| EAN-8 | 9 | 4 / 0 | 5 / 0 | 5 / 0 | 8 / 6 | 9 / 0 |
-| UPC-A | 76 | 19 / 0 | 39 / 0 | 40 / 0 | 50 / 0 | 50 / 0 |
-| UPC-E | 29 | 13 / 0 | 16 / 0 | 18 / 0 | 18 / 17 | 20 / 0 |
-| Code 128 | 22 | 10 / 0 | 14 / 0 | 14 / 0 | 21 / 0 | 22 / 0 |
+| EAN-13 | 65 | 24 / 0 | 39 / 0 | 40 / 0 | 43 / 4 | 45 / 4 |
+| EAN-8 | 9 | 7 / 0 | 8 / 0 | 8 / 0 | 8 / 6 | 9 / 0 |
+| UPC-A | 76 | 21 / 0 | 51 / 0 | 53 / 0 | 50 / 0 | 50 / 0 |
+| UPC-E | 29 | 14 / 0 | 20 / 0 | 21 / 0 | 18 / 17 | 20 / 0 |
+| Code 128 | 22 | 15 / 0 | 19 / 0 | 19 / 0 | 21 / 0 | 22 / 0 |
 | Code 39 | 14 | 7 / 0 | 9 / 0 | 9 / 0 | 11 / 3 | 12 / 0 |
 | ITF | 20 | 1 / 0 | 1 / 0 | 1 / 0 | 17 / 0 | 20 / 0 |
 | Data Matrix | 97 | 72 / 0 | 72 / 0 | 74 / 0 | 78 / 2 | 93 / 0 |
-| **Total** | 470 | 245 / 0 | 292 / 0 | 297 / 0 | 365 / 32 | 396 / 5 |
+| **Total** | 470 | 256 / 0 | 321 / 0 | 327 / 0 | 365 / 32 | 396 / 5 |
 
-Cells are reads / false positives. Read rate: breader 52.1 % / 62.1 % / 63.2 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13).
+Cells are reads / false positives. Read rate: breader 54.5 % / 68.3 % / 69.6 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13).
 
 Latency: to be measured on an idle machine.
 
