@@ -101,6 +101,16 @@ pub fn code39_full_ascii(data: &[u8]) -> Option<Vec<u8>> {
 
 type Key = (Symbology, Vec<u8>);
 
+/// Canonical key of a dataset label. Unlike reads, labels may also carry UTF-8 that was read
+/// as Latin-1 and encoded again; that is repaired here only, so a read with the same flaw
+/// still counts as wrong.
+pub fn canonical_label(sym: Symbology, data: &[u8]) -> Key {
+    match std::str::from_utf8(data) {
+        Ok(s) => canonical(sym, undo_latin1_utf8(s).as_bytes()),
+        Err(_) => canonical(sym, data),
+    }
+}
+
 /// Repairs UTF-8 text that was read as Latin-1 and encoded again (`â\u{80}\u{94}` for an em
 /// dash), a flaw some dataset labels carry. Text that is not such a double encoding is returned
 /// unchanged.
@@ -112,14 +122,14 @@ fn undo_latin1_utf8(s: &str) -> String {
     String::from_utf8(bytes).unwrap_or_else(|_| s.to_string())
 }
 
-/// Canonical comparison key: whitespace trimmed, UTF-8 read as Latin-1 repaired, UPC-A and UPC-E (expanded to UPC-A) folded into
+/// Canonical comparison key: whitespace trimmed, UPC-A and UPC-E (expanded to UPC-A) folded into
 /// EAN-13 with a leading 0,
 /// the dataset's `{GS}` notation turned into ASCII 29 and a leading GS1 FNC1 separator dropped.
 /// Valid UTF-8 is compared as trimmed text, anything else as raw bytes.
 pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
     let trimmed: Vec<u8> = match std::str::from_utf8(data) {
         Ok(s) => {
-            let s = undo_latin1_utf8(s.trim()).replace("{GS}", "\u{1d}");
+            let s = s.trim().replace("{GS}", "\u{1d}");
             s.strip_prefix('\u{1d}').unwrap_or(&s).as_bytes().to_vec()
         }
         Err(_) => data.trim_ascii().to_vec(),
@@ -153,7 +163,7 @@ pub fn score(found: &[Decoded], expected: &[Expected], stats: &mut Stats) {
         .collect();
     let exp_keys: Vec<Option<Key>> = expected
         .iter()
-        .map(|e| e.symbology.map(|s| canonical(s, &e.data)))
+        .map(|e| e.symbology.map(|s| canonical_label(s, &e.data)))
         .collect();
     let is_match = |i: usize, key: &Key| found_keys[i] == *key || alt_keys[i].contains(key);
     let mut used = vec![false; found.len()];
@@ -221,9 +231,21 @@ mod tests {
         assert_eq!((s.expected, s.read, s.false_positives), (1, 1, 0));
         // Genuine Latin-1 text is not touched.
         assert_eq!(
-            canonical(Symbology::Qr, "caf\u{e9}".as_bytes()).1,
+            canonical_label(Symbology::Qr, "caf\u{e9}".as_bytes()).1,
             "caf\u{e9}".as_bytes()
         );
+        // A read with the double encoding does not match the real text.
+        let mut st = Stats::default();
+        let found = vec![Decoded::new(
+            Symbology::Qr,
+            "way\u{e2}\u{80}\u{94}in short".as_bytes().to_vec(),
+        )];
+        score(
+            &found,
+            &[exp(Symbology::Qr, "way\u{2014}in short")],
+            &mut st,
+        );
+        assert_eq!(st.totals().false_positives, 1);
     }
 
     #[test]

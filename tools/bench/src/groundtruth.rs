@@ -4,7 +4,7 @@ use std::path::Path;
 use breader::Symbology;
 use serde::{Deserialize, Serialize};
 
-use crate::matching::canonical;
+use crate::matching::canonical_label;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Annotations {
@@ -236,7 +236,7 @@ fn quads_overlap(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
 fn same_symbol(a: &Barcode, b: &Barcode) -> bool {
     let key = |x: &Barcode| match map_symbology(&x.format) {
         Some(s) => {
-            let (s, d) = canonical(s, &x.data());
+            let (s, d) = canonical_label(s, &x.data());
             (s.name().to_string(), d)
         }
         None => {
