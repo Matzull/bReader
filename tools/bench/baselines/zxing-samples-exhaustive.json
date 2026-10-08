@@ -9,21 +9,21 @@
     "code128-1": {
       "Code 128": {
         "expected": 6,
-        "read": 4,
+        "read": 6,
         "false_positives": 0
       }
     },
     "code128-2": {
       "Code 128": {
         "expected": 14,
-        "read": 12,
+        "read": 13,
         "false_positives": 0
       }
     },
     "code128-3": {
       "Code 128": {
         "expected": 2,
-        "read": 0,
+        "read": 2,
         "false_positives": 0
       }
     },
@@ -37,7 +37,7 @@
     "code39-2": {
       "Code 39": {
         "expected": 3,
-        "read": 0,
+        "read": 1,
         "false_positives": 0
       }
     },
@@ -96,7 +96,7 @@
     "ean13-2": {
       "EAN-13": {
         "expected": 16,
-        "read": 6,
+        "read": 7,
         "false_positives": 0
       }
     },
@@ -110,21 +110,21 @@
     "ean13-4": {
       "EAN-13": {
         "expected": 20,
-        "read": 4,
+        "read": 8,
         "false_positives": 0
       }
     },
     "ean13-extension-1": {
       "EAN-13": {
         "expected": 5,
-        "read": 4,
+        "read": 5,
         "false_positives": 0
       }
     },
     "ean8-1": {
       "EAN-8": {
         "expected": 9,
-        "read": 5,
+        "read": 8,
         "false_positives": 0
       }
     },
@@ -215,7 +215,7 @@
     "upca-2": {
       "UPC-A": {
         "expected": 26,
-        "read": 16,
+        "read": 18,
         "false_positives": 0
       }
     },
@@ -229,21 +229,21 @@
     "upca-4": {
       "UPC-A": {
         "expected": 13,
-        "read": 4,
+        "read": 9,
         "false_positives": 0
       }
     },
     "upca-5": {
       "UPC-A": {
         "expected": 20,
-        "read": 10,
+        "read": 12,
         "false_positives": 0
       }
     },
     "upca-extension-1": {
       "UPC-A": {
         "expected": 6,
-        "read": 4,
+        "read": 6,
         "false_positives": 0
       }
     },
@@ -257,7 +257,7 @@
     "upce-2": {
       "UPC-E": {
         "expected": 15,
-        "read": 11,
+        "read": 13,
         "false_positives": 0
       }
     },

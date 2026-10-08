@@ -94,7 +94,49 @@ class BreaderEngine:
         self.reader = breader.Reader(effort)
 
     def read(self, gray):
-        return [(BR_FORMATS[s.symbology], s.data, []) for s in self.reader.scan(gray) if s.symbology in BR_FORMATS]
+        out = []
+        for s in self.reader.scan(gray):
+            if s.symbology in BR_FORMATS:
+                fmt = BR_FORMATS[s.symbology]
+                full = code39_full_ascii(s.data) if fmt == "Code 39" else None
+                out.append((fmt, s.data, [full] if full not in (None, s.data) else []))
+        return out
+
+
+def code39_full_ascii(data):
+    """Code 39 Full ASCII expansion (ISO/IEC 16388); None when a shift pair is invalid."""
+    out = bytearray()
+    it = iter(data)
+    for c in it:
+        if c not in b"$%/+":
+            out.append(c)
+            continue
+        n = next(it, None)
+        if n is None or not 65 <= n <= 90:
+            return None
+        k = n - 65
+        if c == ord("$"):
+            out.append(k + 1)
+        elif c == ord("+"):
+            out.append(ord("a") + k)
+        elif c == ord("/"):
+            if k <= 14:
+                out.append(ord("!") + k)
+            elif n == ord("Z"):
+                out.append(ord(":"))
+            else:
+                return None
+        elif k <= 4:
+            out.append(0x1B + k)
+        elif k <= 9:
+            out.append(ord(";") + k - 5)
+        elif k <= 14:
+            out.append(ord("[") + k - 10)
+        elif k <= 19:
+            out.append(ord("{") + k - 15)
+        else:
+            out.append({20: 0, 21: ord("@"), 22: ord("`")}.get(k, 0x7F))
+    return bytes(out)
 
 
 def map_symbology(name):

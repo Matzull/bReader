@@ -12,6 +12,8 @@ Coordinates of ground-truth quads (`annotations.json`) are in EXIF-corrected ori
 | 2. Identical-text merge | `aggregate.rs::group` links hits by geometry: near-parallel (< 15 deg), along-axis offset < 0.25 length and across offset <= 2 scanline steps, or centers within 0.2 length. Hits carry the scanline step | challenging-images Code 128: Fast 26 -> 27, Balanced 34 -> 35, Exhaustive 29 -> 45; video `batch_EAN13` Balanced 21 -> 22 |
 | 3. Weak Code 128 start | `start_of` returns a weak start, which counts as the one weak character | Code 128 on challenging-images: a further +2 at every effort (Fast 29, Balanced 37, Exhaustive 47 of 60) |
 | ITF 0 of 4 | Not a defect: default `allowed_lengths = [14]`; the four symbols have 10, 10, 16 and 8 digits | With any length allowed: 3 of 4 read at every effort (the second `0328056306` in `air-travel-luggage-bag` is not read); the default is unchanged |
+| E. Edge relocation reference | `EdgeDetector::refine_edges` blends the neighbouring-run levels with the extremes of a window of 8 mean run widths (8..64 samples), shift limited to 0.25 of the local level difference | zxing-samples Balanced 292 -> 313, Exhaustive 297 -> 319; challenging-images Balanced 395 -> 400 (Code 128 37 -> 41), Exhaustive 406 -> 413; synth-2024 Balanced 808 -> 816; see [FAILURES-ZXING-SAMPLES.md](FAILURES-ZXING-SAMPLES.md) |
+| Q. Border quiet zone | EAN/UPC, Code 128, Code 39: a quiet zone reaching the profile border (>= 1 sample) is open; Code 39 still flags `short_quiet`; ITF unchanged | zxing-samples Balanced 313 -> 321, Exhaustive 319 -> 327 (EAN-8 +3, Code 128 +5) |
 
 Not done: class 4 and below.
 

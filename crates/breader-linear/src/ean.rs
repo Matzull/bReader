@@ -361,7 +361,7 @@ fn plausible_start(runs: &Runs, j: usize) -> bool {
         return false;
     }
     w.iter().all(|&x| x > 0.45 * mean && x < 1.9 * mean)
-        && runs.space_before(j) >= QUIET_EAN13 * mean * 0.8
+        && runs.space_before_open(j) >= QUIET_EAN13 * mean * 0.8
 }
 
 struct Read {
@@ -376,8 +376,8 @@ fn read_layout(runs: &Runs, j: usize, layout: &Layout, started: &mut bool) -> Op
     let cal = calibrate(runs, j, layout.guards)?;
     *started = true;
     let last = j + layout.total - 1;
-    if runs.space_before(j) < layout.quiet * cal.start()
-        || runs.space_after(last) < layout.quiet * cal.end()
+    if runs.space_before_open(j) < layout.quiet * cal.start()
+        || runs.space_after_open(last) < layout.quiet * cal.end()
     {
         return None;
     }
@@ -1057,14 +1057,56 @@ mod tests {
         let modules = ean13_modules("5901234123457");
         let ok = Render::px(3.0);
         assert_eq!(decode(&ok.profile(&modules)).len(), 1);
-        for (l, r) in [(1.0, 12.0), (12.0, 1.0), (2.0, 2.0)] {
-            let p = Render {
-                quiet_left: l,
-                quiet_right: r,
-                ..ok
-            }
-            .profile(&modules);
+        // A neighboring bar limits the quiet zone by content.
+        for (l, r) in [(1, 12), (12, 1), (2, 2)] {
+            let p = ok.profile(&with_neighbours(&modules, l, r));
             assert!(decode(&p).is_empty(), "quiet {l}/{r}");
+        }
+        let p = ok.profile(&with_neighbours(&modules, 12, 12));
+        assert_eq!(decode(&p).len(), 1);
+    }
+
+    #[test]
+    fn a_quiet_zone_ending_at_the_profile_border_is_open() {
+        for text in ["5901234123457", "0036000291452"] {
+            let modules = ean13_modules(text);
+            for (l, r) in [(1.0, 12.0), (12.0, 1.0), (2.0, 2.0), (1.0, 1.0)] {
+                let p = Render {
+                    quiet_left: l,
+                    quiet_right: r,
+                    ..Render::px(3.0)
+                }
+                .profile(&modules);
+                assert_eq!(decode(&p).len(), 1, "{text} quiet {l}/{r}");
+            }
+        }
+        let modules = ean8_modules("73513537");
+        let r = Render {
+            quiet_left: 1.0,
+            quiet_right: 2.0,
+            ..Render::px(3.0)
+        };
+        assert_eq!(decode(&r.profile(&modules)).len(), 1);
+    }
+
+    #[test]
+    fn a_symbol_cut_by_the_border_is_not_read_shorter() {
+        let text = "5901234123457";
+        let r = Render {
+            quiet_left: 4.0,
+            quiet_right: 4.0,
+            ..Render::px(3.0)
+        };
+        let p = r.profile(&ean13_modules(text));
+        assert_eq!(decode(&p).len(), 1);
+        let symbol_px = 95.0 * 3.0;
+        for (depth, cut) in border_cuts(&p, 12.0, symbol_px) {
+            for hit in decode(&cut) {
+                assert_eq!(hit.text, text.as_bytes(), "depth {depth}");
+            }
+            if depth > 9 {
+                assert!(decode(&cut).is_empty(), "depth {depth}");
+            }
         }
     }
 

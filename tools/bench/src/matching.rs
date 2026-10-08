@@ -68,6 +68,37 @@ fn upce_to_upca(e: &[u8]) -> Option<Vec<u8>> {
     Some(v)
 }
 
+/// Code 39 Full ASCII expansion (ISO/IEC 16388): datasets may label the expanded text of a
+/// symbol that the reader returns as plain Code 39. `None` when a shift pair is invalid.
+pub fn code39_full_ascii(data: &[u8]) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(data.len());
+    let mut it = data.iter().copied();
+    while let Some(c) = it.next() {
+        if !matches!(c, b'$' | b'%' | b'/' | b'+') {
+            out.push(c);
+            continue;
+        }
+        let n = it.next()?;
+        let k = n.checked_sub(b'A').filter(|&k| k < 26)?;
+        out.push(match (c, n) {
+            (b'$', _) => k + 1,
+            (b'+', _) => b'a' + k,
+            (b'/', b'A'..=b'O') => b'!' + k,
+            (b'/', b'Z') => b':',
+            (b'%', b'A'..=b'E') => 0x1b + k,
+            (b'%', b'F'..=b'J') => b';' + (k - 5),
+            (b'%', b'K'..=b'O') => b'[' + (k - 10),
+            (b'%', b'P'..=b'T') => b'{' + (k - 15),
+            (b'%', b'U') => 0,
+            (b'%', b'V') => b'@',
+            (b'%', b'W') => b'`',
+            (b'%', b'X'..=b'Z') => 0x7f,
+            _ => return None,
+        });
+    }
+    Some(out)
+}
+
 type Key = (Symbology, Vec<u8>);
 
 /// Canonical comparison key: whitespace trimmed, UPC-A and UPC-E (expanded to UPC-A) folded into
@@ -164,6 +195,21 @@ mod tests {
             label: String::new(),
             data: text.as_bytes().to_vec(),
         }
+    }
+
+    #[test]
+    fn code39_full_ascii_expansion() {
+        assert_eq!(
+            code39_full_ascii(b"E+X+T+E+N+D+E+D /A%J/J/C").as_deref(),
+            Some(&b"Extended !?*#"[..])
+        );
+        assert_eq!(
+            code39_full_ascii(b"$A%U%V%W%X/Z%P%T").as_deref(),
+            Some(&b"\x01\0@`\x7f:{\x7f"[..])
+        );
+        assert_eq!(code39_full_ascii(b"AB-12").as_deref(), Some(&b"AB-12"[..]));
+        assert_eq!(code39_full_ascii(b"/P"), None);
+        assert_eq!(code39_full_ascii(b"AB+"), None);
     }
 
     #[test]

@@ -38,7 +38,7 @@
     "batch_EAN13_1080p": {
       "balanced": {
         "expected": 28,
-        "read": 22,
+        "read": 25,
         "false_positives": 0
       },
       "fast": {
@@ -48,19 +48,19 @@
       },
       "tracker": {
         "expected": 28,
-        "read": 21,
+        "read": 28,
         "false_positives": 0
       }
     },
     "batch_code39_1080p": {
       "balanced": {
         "expected": 32,
-        "read": 28,
+        "read": 29,
         "false_positives": 0
       },
       "fast": {
         "expected": 32,
-        "read": 25,
+        "read": 26,
         "false_positives": 0
       },
       "tracker": {

@@ -124,6 +124,13 @@ struct Read {
 
 /// Checks the start pattern at run `j`; returns the bar/space bias and the
 /// module estimate.
+///
+/// The quiet zone is measured as is, also where it ends at the profile
+/// border (`quiet_before`, not `quiet_before_open`). The other symbologies
+/// treat such a margin as open, because a symbol cut by the border fails on
+/// its start, stop or check character. Interleaved 2 of 5 has none of them
+/// in the data: the start pattern also occurs inside a longer symbol, and
+/// the cut symbol, with its stop pattern, is a valid shorter code.
 fn start_of(runs: &Runs, j: usize) -> Option<(f32, f32)> {
     let raw = adjusted_widths::<4>(runs, j, 0.0)?;
     let mean = raw.iter().sum::<f32>() / 4.0;
@@ -347,6 +354,48 @@ mod tests {
         assert_eq!(at(11.0, 11.0), 1);
         assert_eq!(at(8.0, 14.0), 0);
         assert_eq!(at(14.0, 8.0), 0);
+    }
+
+    /// Unlike the other symbologies, ITF keeps its full quiet zone when the
+    /// margin ends at the profile border: a start pattern inside a longer
+    /// symbol, or a symbol cut short, reads as a shorter valid code, and only
+    /// the quiet zone tells these apart.
+    #[test]
+    fn a_margin_ending_at_the_border_does_not_open_the_quiet_zone() {
+        let text = with_gs1_check("1234567890123");
+        let modules = itf_modules(&text, 3);
+        for (left, right) in [(1.0, 14.0), (14.0, 1.0), (4.0, 4.0), (9.0, 9.0)] {
+            let r = Render {
+                quiet_left: left,
+                quiet_right: right,
+                ..Render::px(3.0)
+            };
+            let p = r.profile(&modules);
+            assert!(
+                decode_all(&ItfDecoder, &p, &opts()).is_empty(),
+                "{left} {right}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_symbol_cut_by_the_border_is_not_read_shorter() {
+        let digits = "12345678901234567890";
+        let modules = itf_modules(digits, 3);
+        let r = Render {
+            quiet_left: 11.0,
+            quiet_right: 11.0,
+            ..Render::px(3.0)
+        };
+        let p = r.profile(&modules);
+        let any = any_length();
+        assert_eq!(decode_all(&ItfDecoder, &p, &any).len(), 1);
+        for (depth, cut) in border_cuts(&p, 33.0, modules.len() as f32 * 3.0) {
+            assert!(
+                decode_all(&ItfDecoder, &cut, &any).is_empty(),
+                "depth {depth}"
+            );
+        }
     }
 
     #[test]

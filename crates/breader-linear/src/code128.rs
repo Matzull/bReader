@@ -3,7 +3,9 @@
 
 use breader_core::Symbology;
 
-use crate::common::{MIN_MODULE, adjusted_width, adjusted_widths, quiet_after, quiet_before};
+use crate::common::{
+    MIN_MODULE, adjusted_width, adjusted_widths, quiet_after_open, quiet_before_open,
+};
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::runs::Runs;
 
@@ -183,7 +185,7 @@ fn start_pattern(runs: &Runs, at: usize) -> Option<usize> {
     let raw = runs.widths().get(at..at + 6)?;
     let total: f32 = raw.iter().sum();
     if !(total.is_finite() && total / 11.0 >= MIN_MODULE)
-        || runs.space_before(at) < 0.8 * QUIET * total / 11.0
+        || runs.space_before_open(at) < 0.8 * QUIET * total / 11.0
     {
         return None;
     }
@@ -221,7 +223,7 @@ fn start_of(runs: &Runs, j: usize) -> Option<(CharMatch, f32)> {
         return None;
     }
     let bias = start_bias(runs, j, usize::from(start.value));
-    if quiet_before(runs, j, bias) < QUIET * start.module {
+    if quiet_before_open(runs, j, bias) < QUIET * start.module {
         return None;
     }
     Some((start, bias))
@@ -257,7 +259,9 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
             }
             let final_bar = adjusted_width(runs, at + 6, bias)?;
             let ratio = final_bar / module;
-            if !(1.3..=3.0).contains(&ratio) || quiet_after(runs, at + 6, bias) < QUIET * module {
+            if !(1.3..=3.0).contains(&ratio)
+                || quiet_after_open(runs, at + 6, bias) < QUIET * module
+            {
                 return None;
             }
             read.last_bar = at + 6;
@@ -730,8 +734,51 @@ mod tests {
             decode_all(&Code128Decoder, &r.profile(&modules), &opts()).len()
         };
         assert_eq!(at(6.0, 6.0), 1);
-        assert_eq!(at(3.0, 12.0), 0);
-        assert_eq!(at(12.0, 3.0), 0);
+        // Content limits the quiet zone here; a border does not (below).
+        let near = |left: usize, right: usize| {
+            let p = Render::px(3.0).profile(&with_neighbours(&modules, left, right));
+            decode_all(&Code128Decoder, &p, &opts()).len()
+        };
+        assert_eq!(near(12, 12), 1);
+        assert_eq!(near(3, 12), 0);
+        assert_eq!(near(12, 3), 0);
+    }
+
+    #[test]
+    fn a_quiet_zone_ending_at_the_profile_border_is_open() {
+        let modules = encode(START_B, "Quiet");
+        for (left, right) in [(3.0, 12.0), (12.0, 3.0), (1.0, 1.0), (2.0, 4.0)] {
+            let r = Render {
+                quiet_left: left,
+                quiet_right: right,
+                ..Render::px(3.0)
+            };
+            let hits = decode_all(&Code128Decoder, &r.profile(&modules), &opts());
+            assert_eq!(texts(&hits), [b"Quiet".to_vec()], "{left} {right}");
+        }
+    }
+
+    #[test]
+    fn a_symbol_cut_by_the_border_is_not_read_shorter() {
+        let modules = encode(START_B, "Cut by the border");
+        let r = Render {
+            quiet_left: 4.0,
+            quiet_right: 4.0,
+            ..Render::px(3.0)
+        };
+        let p = r.profile(&modules);
+        assert_eq!(decode_all(&Code128Decoder, &p, &opts()).len(), 1);
+        for (depth, cut) in border_cuts(&p, 12.0, modules.len() as f32 * 3.0) {
+            for hit in decode_all(&Code128Decoder, &cut, &opts()) {
+                assert_eq!(hit.text, b"Cut by the border", "depth {depth}");
+            }
+            if depth > 9 {
+                assert!(
+                    decode_all(&Code128Decoder, &cut, &opts()).is_empty(),
+                    "depth {depth}"
+                );
+            }
+        }
     }
 
     #[test]

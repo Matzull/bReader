@@ -96,6 +96,21 @@ Four changes after the failure triage in [FAILURES.md](FAILURES.md): Code 39 qui
 
 Synthetic sets and skewed-datamatrix are unchanged.
 
+## Edge relocation and border quiet zone (2026-10-08)
+
+Two linear-reader changes after the zxing-cpp samples triage ([FAILURES-ZXING-SAMPLES.md](FAILURES-ZXING-SAMPLES.md)): the half-level edge reference is blended with the extremes of a window scaled by the local run width, and a quiet zone that ends at the profile border is open for EAN/UPC, Code 128 and Code 39 (not ITF). Read counts, 0 false positives everywhere:
+
+| Set | Fast | Balanced | Exhaustive |
+|---|---|---|---|
+| zxing-samples (470) | 245 -> 248 -> 256 | 292 -> 313 -> 321 | 297 -> 319 -> 327 |
+| challenging-images (442) | 322 -> 322 -> 322 | 395 -> 400 -> 400 | 406 -> 413 -> 413 |
+| synth seed 1 (286) | 242 -> 244 -> 244 | 280 -> 283 -> 283 | 281 -> 284 -> 284 |
+| synth seed 2024 (831) | 718 -> 725 -> 725 | 808 -> 816 -> 816 | 811 -> 819 -> 819 |
+| skewed-datamatrix (1323) | 714 | 1000 | 1010 |
+| video (277 symbols): fast / balanced / tracker | 100 -> 101 | 240 -> 244 | 246 -> 253 |
+
+Each cell is before -> after edge relocation -> after both changes (video: before -> after both). The window levels of the edge relocation may move a reference level at most 0.25 of the local level difference; without that limit the plain blend gained a little more in total but lost the `upca-3` group of zxing-samples, synth-2024 `illumination` ITF and the video `EAN_13-distance` (see FAILURES-ZXING-SAMPLES.md). The latency of the decode call was compared with interleaved runs of the base, edge-relocation-only and final builds (3 rounds, median p50): challenging-images Balanced 16.85 / 16.89 / 17.00 ms, Exhaustive 38.7 / 40.4 / 40.6 ms, synth-2024 Balanced 5.38 / 5.44 / 5.44 ms, zxing-samples Exhaustive 4.56 / 5.04 / 5.11 ms (more symbols read, so more work per image).
+
 ## v1 targets (confirmed 2026-10-07)
 
 | Metric | Target |
@@ -144,17 +159,17 @@ Read count / false positives per symbology (release build, no GT overrides besid
 | Symbology | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing | zxing-cpp 3.1.1 |
 |---|---|---|---|---|---|---|
 | QR Code | 138 | 95 / 0 | 115 / 0 | 115 / 0 | 119 / 0 | 125 / 1 |
-| EAN-13 | 65 | 24 / 0 | 34 / 0 | 34 / 0 | 43 / 4 | 45 / 4 |
-| EAN-8 | 9 | 4 / 0 | 5 / 0 | 5 / 0 | 8 / 6 | 9 / 0 |
-| UPC-A | 76 | 19 / 0 | 43 / 0 | 45 / 0 | 50 / 0 | 50 / 0 |
-| UPC-E | 29 | 13 / 0 | 16 / 0 | 20 / 0 | 18 / 17 | 20 / 0 |
-| Code 128 | 22 | 10 / 0 | 16 / 0 | 16 / 0 | 21 / 0 | 22 / 0 |
-| Code 39 | 14 | 7 / 0 | 10 / 0 | 10 / 0 | 11 / 3 | 12 / 0 |
+| EAN-13 | 65 | 24 / 0 | 39 / 0 | 40 / 0 | 43 / 4 | 45 / 4 |
+| EAN-8 | 9 | 7 / 0 | 8 / 0 | 8 / 0 | 8 / 6 | 9 / 0 |
+| UPC-A | 76 | 21 / 0 | 53 / 0 | 56 / 0 | 50 / 0 | 50 / 0 |
+| UPC-E | 29 | 14 / 0 | 20 / 0 | 22 / 0 | 18 / 17 | 20 / 0 |
+| Code 128 | 22 | 15 / 0 | 21 / 0 | 21 / 0 | 21 / 0 | 22 / 0 |
+| Code 39 | 14 | 7 / 0 | 11 / 0 | 11 / 0 | 11 / 3 | 12 / 0 |
 | ITF | 20 | 1 / 0 | 2 / 0 | 2 / 0 | 17 / 0 | 20 / 0 |
 | Data Matrix | 97 | 72 / 0 | 79 / 0 | 80 / 0 | 78 / 2 | 93 / 0 |
-| **Total** | 470 | 245 / 0 | 320 / 0 | 327 / 0 | 365 / 32 | 396 / 5 |
+| **Total** | 470 | 256 / 0 | 348 / 0 | 355 / 0 | 365 / 32 | 396 / 5 |
 
-Cells are reads / false positives. Read rate: breader 52.1 % / 68.1 % / 69.6 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13).
+Cells are reads / false positives. Read rate: breader 54.5 % / 74.0 % / 75.5 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13). Counts include the linear fixes, the up-scale retry and the edge/border-quiet-zone changes (2026-10-09). A Code 39 read also matches its Full ASCII expansion (`code39-2` labels the expanded text while breader defaults to plain Code 39).
 
 Balanced and Exhaustive include the up-scale retry (3x Catmull-Rom copy of frames up to 600 px that yielded nothing); with the linear fixes and before it they read 292 and 297 (QR 102/102, UPC-A 39/40, UPC-E 16/18, Code 128 14/14, ITF 1/1, Data Matrix 72/74, the rest unchanged). The retry also adds one QR read on challenging-images (225 -> 226 of 234 QR at Balanced and Exhaustive) and nothing on synth. Fast has the retry off; enabled it would read 308 here and nothing more on challenging-images. Latency on this set, p50 / p95 ms, same session, interleaved runs: Balanced 1.8 / 7.3 before, 4.7 / 21.0 after; Exhaustive 4.5 / 15.8 before, 11.7 / 44.5 after (most of the 932 images are small, and the negative and unsupported-symbology ones all take the retry); challenging-images Balanced 16.9 / 119 before, 17.0 / 119 after, Exhaustive 38.0 / 277 before, 41.0 / 338 after. A blank 600x600 frame costs +15 ms at Balanced and +26 ms at Exhaustive, a noise-filled one +142 and +340 ms.
 

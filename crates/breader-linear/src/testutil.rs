@@ -478,6 +478,37 @@ pub fn itf_modules(digits: &str, wide: usize) -> Vec<bool> {
     runs_to_modules(&widths)
 }
 
+/// `modules` with a block of bars `left` and `right` spaces away from it
+/// (0: no block on that side). Gives a quiet zone limited by content.
+pub fn with_neighbours(modules: &[bool], left: usize, right: usize) -> Vec<bool> {
+    const BLOCK: usize = 12;
+    let mut out = Vec::new();
+    if left > 0 {
+        out.extend([true; BLOCK]);
+        out.extend(vec![false; left]);
+    }
+    out.extend_from_slice(modules);
+    if right > 0 {
+        out.extend(vec![false; right]);
+        out.extend([true; BLOCK]);
+    }
+    out
+}
+
+/// Cuts a rendered profile, symmetric in quiet zone, `quiet_px` samples at
+/// each end: from the left and from the right, every sample deeper into the
+/// symbol. Returns the depth with the cut profile. Models a symbol that the
+/// image border or the end of a scanline truncates.
+pub fn border_cuts(profile: &[u8], quiet_px: f32, symbol_px: f32) -> Vec<(usize, Vec<u8>)> {
+    let quiet = quiet_px as usize;
+    let mut out = Vec::new();
+    for depth in 1..symbol_px as usize {
+        out.push((depth, profile[quiet + depth..].to_vec()));
+        out.push((depth, profile[..profile.len() - quiet - depth].to_vec()));
+    }
+    out
+}
+
 /// ITF-14 payload: 13 digits plus the GS1 check digit.
 pub fn with_gs1_check(body: &str) -> String {
     format!("{body}{}", check_digit(body))

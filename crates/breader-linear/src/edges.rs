@@ -54,6 +54,9 @@ pub struct EdgeParams {
     /// Relocate each edge to the half-level crossing between the extremes of
     /// its neighboring runs.
     pub refine: bool,
+    /// With `refine`, blend the reference levels with the extremes of a window
+    /// scaled by the local run width (see `EdgeDetector::refine_edges`).
+    pub window: bool,
 }
 
 impl EdgeParams {
@@ -61,6 +64,7 @@ impl EdgeParams {
     pub const fn fine() -> Self {
         let mut p = Self::new();
         p.refine = true;
+        p.window = true;
         p
     }
 
@@ -69,6 +73,7 @@ impl EdgeParams {
         let mut p = Self::new();
         p.smooth = true;
         p.refine = true;
+        p.window = true;
         p
     }
 
@@ -76,6 +81,13 @@ impl EdgeParams {
     #[cfg(test)]
     pub const fn raw(mut self) -> Self {
         self.refine = false;
+        self
+    }
+
+    /// The same variant relocating with the neighboring runs only.
+    #[cfg(test)]
+    pub const fn local(mut self) -> Self {
+        self.window = false;
         self
     }
 
@@ -88,6 +100,7 @@ impl EdgeParams {
             max_relative: 0.3,
             smooth: false,
             refine: false,
+            window: false,
         }
     }
 }
@@ -99,6 +112,16 @@ impl Default for EdgeParams {
 }
 
 const BLOCK: usize = 16;
+/// Half-width of the window used for the second reference level, in mean run
+/// widths around the edge, and its limits in samples.
+const WINDOW_RUNS: f32 = 8.0;
+const WINDOW_MIN: f32 = 8.0;
+const WINDOW_MAX: f32 = 64.0;
+/// Edges on each side whose spacing gives the mean run width.
+const WINDOW_SPAN: usize = 4;
+/// Largest shift of a reference level from its local value, as a fraction of
+/// the local level difference.
+const WINDOW_SHIFT: f32 = 0.25;
 /// Half-width of the search for the half-level crossing of an edge.
 const CROSSING_REACH: usize = 3;
 /// Smallest distance kept between neighboring edges after relocation.
@@ -110,6 +133,20 @@ const RANGE_REACH: usize = 2;
 /// A block whose range stays below this fraction of the line's range is
 /// treated as flat when estimating noise.
 const FLAT_BLOCK: f32 = 0.6;
+
+/// Half-width in samples of the window around edge `k`, scaled by the mean
+/// run width of its neighborhood.
+fn window_reach(items: &[Edge], k: usize) -> usize {
+    let a = k.saturating_sub(WINDOW_SPAN);
+    let b = (k + WINDOW_SPAN).min(items.len() - 1);
+    let mean = (items[b].pos - items[a].pos) / (b - a) as f32;
+    (WINDOW_RUNS * mean).clamp(WINDOW_MIN, WINDOW_MAX) as usize
+}
+
+/// Mean of a local and a window level, kept within `cap` of the local one.
+fn blend(local: f32, window: f32, cap: f32) -> i32 {
+    (0.5 * (local + window)).clamp(local - cap, local + cap) as i32
+}
 
 fn low(samples: &[u8]) -> u8 {
     samples.iter().fold(255, |m, &v| m.min(v))
@@ -197,17 +234,30 @@ impl EdgeDetector {
             }
         }
         if params.refine {
-            Self::refine_edges(profile, &mut out.items);
+            Self::refine_edges(profile, &mut out.items, params.window);
         }
     }
 
     /// Moves every edge to where the profile crosses the middle between the
     /// extremes on either side. Gradient peaks are pulled around by
     /// neighboring edges when bars and spaces are narrow or unevenly inked;
-    /// the half-level crossing is not. The levels come from the samples up to
-    /// `PLATEAU_REACH` away, limited by the neighboring edges, so narrow runs
-    /// use their own peak as reference.
-    fn refine_edges(profile: &[u8], items: &mut [Edge]) {
+    /// the half-level crossing is not.
+    ///
+    /// The reference levels average two estimates. The local one takes the
+    /// extremes of the samples up to `PLATEAU_REACH` away, limited by the
+    /// neighboring edges, so it follows uneven illumination but a narrow run
+    /// only reaches its own peak: blur lifts narrow bars and sinks narrow
+    /// spaces, which puts the crossing of an edge between a narrow and a wide
+    /// run at a different level than one between two wide runs. The window one
+    /// takes the extremes over a window of `WINDOW_RUNS` mean run widths on
+    /// each side, which is the contrast the wide runs of the symbol reach and
+    /// removes that dependence on the width, but ignores a gradient steeper
+    /// than the window and mistakes a glare veil over a bar for blur. The
+    /// mean keeps both errors small, and the shift from the local level is
+    /// limited to `WINDOW_SHIFT` of the local level difference; with either
+    /// alone, or without the limit, groups of images that read before stop
+    /// reading.
+    fn refine_edges(profile: &[u8], items: &mut [Edge], window: bool) {
         let last = profile.len() - 1;
         for k in 1..items.len().saturating_sub(1) {
             let e = items[k];
@@ -226,7 +276,25 @@ impl EdgeDetector {
             } else {
                 (high(&profile[p..=c]), low(&profile[c..=n]))
             };
-            let twice_mid = i32::from(before) + i32::from(after);
+            let (before, after) = if window {
+                let reach = window_reach(items, k);
+                let (a, b) = (c.saturating_sub(reach), (c + reach).min(last));
+                let (win_low, win_high) = (low(&profile[a..=b]), high(&profile[a..=b]));
+                let (win_before, win_after) = if e.rising {
+                    (win_low, win_high)
+                } else {
+                    (win_high, win_low)
+                };
+                let (before, after) = (f32::from(before), f32::from(after));
+                let cap = WINDOW_SHIFT * (after - before).abs();
+                (
+                    blend(before, f32::from(win_before), cap),
+                    blend(after, f32::from(win_after), cap),
+                )
+            } else {
+                (i32::from(before), i32::from(after))
+            };
+            let twice_mid = before + after;
             let mid = twice_mid as f32 / 2.0;
             let lo = c.saturating_sub(CROSSING_REACH);
             let hi = (c + CROSSING_REACH).min(last - 1);
@@ -492,5 +560,115 @@ mod tests {
             *v = (i32::from(*v) + noise).clamp(0, 255) as u8;
         }
         assert_eq!(detect(&p).len(), 6);
+    }
+
+    /// Edge errors (detected minus true position, px) over random symbols of
+    /// runs 2.5 to 6 px wide whose edges blur with a 20-80 % rise of `rise` px.
+    /// `shade` multiplies the profile by a function of the relative position.
+    fn symbol_errors(
+        params: &EdgeParams,
+        rise: f32,
+        shade: impl Fn(f32) -> f32,
+        seed: u64,
+    ) -> Vec<f32> {
+        // The 20-80 % rise of a Gaussian edge is 1.683 sigma.
+        let sigma = rise / 1.683;
+        let mut rng = crate::testutil::Rng(seed);
+        let mut errors = Vec::new();
+        for _ in 0..60 {
+            let widths: Vec<f32> = (0..30).map(|_| 2.5 + rng.unit() * 3.5).collect();
+            let lead = 20.0 + rng.unit();
+            let mut p = render(&widths, lead, 25.0, 225.0, sigma);
+            let n = p.len() as f32;
+            for (i, v) in p.iter_mut().enumerate() {
+                *v = (f32::from(*v) * shade(i as f32 / n))
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
+            }
+            let mut out = Edges::default();
+            EdgeDetector::default().detect(&p, params, &mut out);
+            if out.len() != widths.len() {
+                continue;
+            }
+            let mut x = lead;
+            for (edge, w) in out.as_slice().iter().zip(&widths) {
+                x += w;
+                errors.push(edge.pos - x);
+            }
+        }
+        errors
+    }
+
+    fn mean_abs(errors: &[f32]) -> f32 {
+        errors.iter().map(|e| e.abs()).sum::<f32>() / errors.len().max(1) as f32
+    }
+
+    #[test]
+    fn window_levels_improve_edges_of_heavily_blurred_symbols() {
+        for rise in [1.5, 2.0, 2.5, 3.0] {
+            let local = symbol_errors(&EdgeParams::fine().local(), rise, |_| 1.0, 7);
+            let blended = symbol_errors(&EdgeParams::fine(), rise, |_| 1.0, 7);
+            let (ml, mb) = (mean_abs(&local), mean_abs(&blended));
+            assert!(local.len() > 300 && blended.len() >= local.len(), "{rise}");
+            assert!(mb < ml, "rise {rise}: {mb} vs {ml}");
+        }
+    }
+
+    #[test]
+    fn window_levels_hold_under_an_illumination_gradient() {
+        let shade = |t: f32| 0.45 + 0.55 * t;
+        for rise in [1.5, 2.5] {
+            let local = symbol_errors(&EdgeParams::fine().local(), rise, shade, 11);
+            let blended = symbol_errors(&EdgeParams::fine(), rise, shade, 11);
+            let (ml, mb) = (mean_abs(&local), mean_abs(&blended));
+            assert!(local.len() > 300 && blended.len() >= local.len());
+            // Mild blur: no worse than the local levels by more than the
+            // limit allows; heavy blur: clearly better.
+            let limit = if rise > 2.0 { 0.85 } else { 1.15 };
+            assert!(mb < limit * ml, "rise {rise}: {mb} vs {ml}");
+        }
+    }
+
+    /// Mean signed width error (px) of the thin runs in a symbol that has
+    /// one wide bar and one wide space and thin bars (or thin spaces) between
+    /// wide spaces (bars) otherwise. Blur attenuates the peak of a thin run,
+    /// so with the neighboring runs as only reference its crossings sit at a
+    /// level the wide runs never take and the run is measured too wide.
+    fn thin_width_error(params: &EdgeParams, thin_bars: bool) -> f32 {
+        let (thin, wide) = (3.0, 9.0);
+        // Run 0 is a space, odd runs are bars.
+        let mut widths = vec![wide, wide, wide];
+        for _ in 0..12 {
+            widths.extend(if thin_bars {
+                [thin, wide]
+            } else {
+                [wide, thin]
+            });
+        }
+        let first_thin = if thin_bars { 3 } else { 4 };
+        let p = render(&widths, 30.0, 25.0, 225.0, 2.0 / 1.683);
+        let mut out = Edges::default();
+        EdgeDetector::default().detect(&p, params, &mut out);
+        // The last run is a space: its end is not an edge.
+        assert_eq!(out.len(), widths.len() - 1, "{params:?}");
+        let e = out.as_slice();
+        let errors: Vec<f32> = (first_thin..widths.len() - 1)
+            .step_by(2)
+            .map(|k| e[k].pos - e[k - 1].pos - thin)
+            .collect();
+        errors.iter().sum::<f32>() / errors.len() as f32
+    }
+
+    #[test]
+    fn window_levels_reduce_the_width_bias_of_thin_runs() {
+        for thin_bars in [true, false] {
+            let local = thin_width_error(&EdgeParams::fine().local(), thin_bars);
+            let blended = thin_width_error(&EdgeParams::fine(), thin_bars);
+            assert!(local > 0.0, "{thin_bars}: {local}");
+            assert!(
+                blended.abs() < 0.9 * local.abs(),
+                "thin bars {thin_bars}: {blended} vs {local}"
+            );
+        }
     }
 }

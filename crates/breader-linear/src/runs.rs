@@ -15,6 +15,10 @@ pub struct Runs {
     trail: f32,
 }
 
+/// Smallest margin to the profile border, in samples, that is trusted as a
+/// light area rather than as the border cutting through an element.
+const OPEN_MARGIN: f32 = 1.0;
+
 impl Runs {
     pub fn from_edges(edges: &Edges, out: &mut Self) {
         out.widths.clear();
@@ -104,6 +108,37 @@ impl Runs {
             0.0
         } else {
             self.widths[i - 1]
+        }
+    }
+
+    /// Whether the light area before run `i` is the margin up to the profile
+    /// start, long enough to be more than the edge estimate's jitter. Such a
+    /// margin is a lower bound of the quiet zone: the symbol may continue
+    /// the image's background past the border.
+    pub fn open_before(&self, i: usize) -> bool {
+        i == 0 && self.first_is_bar && self.lead >= OPEN_MARGIN
+    }
+
+    /// The counterpart of [`Self::open_before`] at the profile end.
+    pub fn open_after(&self, i: usize) -> bool {
+        i + 1 == self.len() && self.is_bar(i) && self.trail >= OPEN_MARGIN
+    }
+
+    /// [`Self::space_before`], infinite where the margin is open.
+    pub fn space_before_open(&self, i: usize) -> f32 {
+        if self.open_before(i) {
+            f32::INFINITY
+        } else {
+            self.space_before(i)
+        }
+    }
+
+    /// [`Self::space_after`], infinite where the margin is open.
+    pub fn space_after_open(&self, i: usize) -> f32 {
+        if self.open_after(i) {
+            f32::INFINITY
+        } else {
+            self.space_after(i)
         }
     }
 
@@ -202,5 +237,21 @@ mod tests {
         let mut rev = Runs::default();
         Runs::reverse_from(&r, &mut rev);
         assert!(rev.is_empty());
+    }
+
+    #[test]
+    fn margins_to_the_border_are_open_but_margins_to_a_bar_are_not() {
+        let r = Runs::from_widths(true, &[2.0, 1.0, 2.0], 5.0, 5.0);
+        assert!(r.open_before(0) && r.open_after(2));
+        assert!(r.space_before_open(0).is_infinite() && r.space_after_open(2).is_infinite());
+        // Inner runs and short margins keep their measured widths.
+        assert!(!r.open_before(2) && !r.open_after(0));
+        assert_eq!(r.space_before_open(2), 1.0);
+        let touching = Runs::from_widths(true, &[2.0, 1.0, 2.0], 0.4, 0.4);
+        assert!(!touching.open_before(0) && !touching.open_after(2));
+        assert_eq!(touching.space_before_open(0), 0.4);
+        // A profile that starts or ends inside a bar has no margin there.
+        let in_bar = Runs::from_widths(false, &[1.0, 2.0, 1.0], 5.0, 5.0);
+        assert!(!in_bar.open_before(0) && !in_bar.open_after(2));
     }
 }

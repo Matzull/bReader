@@ -10,7 +10,8 @@ pub use crate::baselines::{RqrrEngine, RxingEngine};
 pub struct Decoded {
     pub symbology: Symbology,
     pub data: Vec<u8>,
-    /// Other forms a dataset may label instead of `data`: charset-decoded UTF-8 text.
+    /// Other forms a dataset may label instead of `data`: charset-decoded UTF-8 text, or the
+    /// Code 39 Full ASCII expansion.
     pub alts: Vec<Vec<u8>>,
 }
 
@@ -66,10 +67,15 @@ impl Engine for BreaderEngine {
                     .is_err()
                     .then(|| charset::decode(Charset::ShiftJis, &s.data))
                     .flatten();
+                let full_ascii = (s.symbology == Symbology::Code39)
+                    .then(|| crate::matching::code39_full_ascii(&s.data))
+                    .flatten()
+                    .and_then(|v| String::from_utf8(v).ok());
                 let alts = s
                     .text
                     .into_iter()
                     .chain(sjis)
+                    .chain(full_ascii)
                     .map(String::into_bytes)
                     .filter(|t| *t != s.data)
                     .collect();
