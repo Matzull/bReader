@@ -53,7 +53,9 @@ A `Pass` is `{ preprocessor: Option<usize>, binarizer: usize, inverted: bool }`.
 | Balanced | original + first preprocessor | first two | yes |
 | Exhaustive | all | all | yes |
 
-Fine-grained options override the preset (`try_invert`, later per-stage lists). The pipeline stops early when `max_symbols` is reached or the `time_budget` expires; the budget is checked between passes, never inside one.
+Fine-grained options override the preset (`try_invert`, `upscale_retry`, later per-stage lists). The pipeline stops early when `max_symbols` is reached or the `time_budget` expires; the budget is checked between passes, never inside one.
+
+**Up-scale retry.** After the last regular pass, if the frame produced no symbol and `max(w, h) <= ScanOptions::upscale_max_side()` (600 for Balanced and Exhaustive, 0 for Fast), the pipeline applies its `upscale` preprocessor (`Upscale`, Catmull-Rom 3x) to the original frame and runs the same pass list on that copy as if it were a new frame, with its own `FrameContext` and a nested `Scratch`. Readers therefore see an ordinary frame (1D readers included); the pipeline maps each symbol's quad back to the original coordinates by the size ratio before the post-processors run. The `time_budget` and `max_symbols` apply across both scans. The preprocessor is registered with `PipelineBuilder::upscale`, not in the regular preprocessor list, so it never takes part in `Exhaustive` passes. `Tracker` disables the retry. Measured: +28 reads on the zxing-cpp samples at Balanced, 0 false positives; running it also when something was found gained one more read and is not done.
 
 ### 2.3 FrameContext and caching
 

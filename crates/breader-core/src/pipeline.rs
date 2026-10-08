@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::{
-    Binarizer, Effort, Error, Escalation, FrameContext, ImageView, Pass, PostProcessor,
+    Binarizer, Effort, Error, Escalation, FrameContext, ImageView, Pass, Point, PostProcessor,
     Preprocessor, ScanOptions, Scratch, Symbol, SymbologyReader,
 };
 
@@ -12,6 +12,7 @@ pub struct PipelineBuilder {
     binarizers: Vec<Box<dyn Binarizer>>,
     readers: Vec<Box<dyn SymbologyReader>>,
     post: Vec<Box<dyn PostProcessor>>,
+    upscale: Option<Box<dyn Preprocessor>>,
 }
 
 impl std::fmt::Debug for PipelineBuilder {
@@ -59,6 +60,15 @@ impl PipelineBuilder {
         self
     }
 
+    /// Sets the preprocessor of the up-scale retry: when no regular pass finds
+    /// a symbol in a small frame (see [`ScanOptions::upscale_max_side`]), the
+    /// frame is enlarged with it and scanned once more. It is not part of the
+    /// regular pass list.
+    pub fn upscale(mut self, p: impl Preprocessor + 'static) -> Self {
+        self.upscale = Some(Box::new(p));
+        self
+    }
+
     /// Adds a symbology reader; readers run in registration order on every pass.
     pub fn reader(mut self, r: impl SymbologyReader + 'static) -> Self {
         self.readers.push(Box::new(r));
@@ -81,6 +91,7 @@ impl PipelineBuilder {
             binarizers: self.binarizers,
             readers: self.readers,
             post: self.post,
+            upscale: self.upscale,
         })
     }
 }
@@ -92,6 +103,7 @@ pub struct Pipeline {
     binarizers: Vec<Box<dyn Binarizer>>,
     readers: Vec<Box<dyn SymbologyReader>>,
     post: Vec<Box<dyn PostProcessor>>,
+    upscale: Option<Box<dyn Preprocessor>>,
 }
 
 impl std::fmt::Debug for Pipeline {
@@ -144,6 +156,10 @@ impl Pipeline {
 
     /// Scans `image` and returns the symbols found, in discovery order.
     /// `scratch` carries reusable buffers between calls.
+    ///
+    /// When every regular pass comes back empty and the frame is small
+    /// enough, one final conditional pass rescans an up-scaled copy; the
+    /// symbols it finds are mapped back to the coordinates of `image`.
     pub fn scan(
         &self,
         image: ImageView<'_>,
@@ -151,6 +167,8 @@ impl Pipeline {
         scratch: &mut Scratch,
     ) -> Vec<Symbol> {
         let start = Instant::now();
+        let mut upscaled = std::mem::take(&mut scratch.upscaled);
+        let mut inner = scratch.retry.take().unwrap_or_default();
         let mut ctx = FrameContext::new(
             image,
             options,
@@ -158,7 +176,6 @@ impl Pipeline {
             &self.binarizers,
             scratch,
         );
-        let mut symbols = Vec::new();
         let readers: Vec<&dyn SymbologyReader> = self
             .readers
             .iter()
@@ -166,6 +183,52 @@ impl Pipeline {
             .filter(|r| r.symbologies().intersects(options.symbologies))
             .collect();
 
+        let mut symbols = Vec::new();
+        self.run_passes(&mut ctx, &readers, start, &mut symbols);
+
+        if let Some(up) = &self.upscale {
+            let limit = options.upscale_max_side();
+            let small = image.width().max(image.height()) <= limit;
+            let in_budget = options.time_budget.is_none_or(|b| start.elapsed() < b);
+            if small && in_budget && symbols.is_empty() {
+                up.apply(image, &mut upscaled);
+                let (sx, sy) = (
+                    image.width() as f32 / upscaled.width() as f32,
+                    image.height() as f32 / upscaled.height() as f32,
+                );
+                let mut big = FrameContext::new(
+                    upscaled.view(),
+                    options,
+                    &self.preprocessors,
+                    &self.binarizers,
+                    &mut inner,
+                );
+                self.run_passes(&mut big, &readers, start, &mut symbols);
+                for s in &mut symbols {
+                    for c in &mut s.quad.corners {
+                        *c = Point::new(c.x * sx, c.y * sy);
+                    }
+                }
+            }
+        }
+
+        for p in &self.post {
+            p.process(&ctx, &mut symbols);
+        }
+        scratch.upscaled = upscaled;
+        scratch.retry = Some(inner);
+        symbols
+    }
+
+    /// Runs the regular passes of `ctx`, appending to `symbols`.
+    fn run_passes(
+        &self,
+        ctx: &mut FrameContext<'_>,
+        readers: &[&dyn SymbologyReader],
+        start: Instant,
+        symbols: &mut Vec<Symbol>,
+    ) {
+        let options = ctx.options();
         let mut gray_done: Vec<(Option<usize>, bool)> = Vec::new();
         let mut found = 0;
         for pass in self.passes(options) {
@@ -178,12 +241,12 @@ impl Pipeline {
             if gray_new {
                 gray_done.push(gray_key);
             }
-            for reader in &readers {
+            for reader in readers {
                 if reader.handles_inversion() && pass.inverted {
                     continue;
                 }
                 if reader.uses_binary() || gray_new {
-                    reader.scan(&mut ctx, &mut symbols);
+                    reader.scan(ctx, symbols);
                 }
             }
             symbols.retain(|s| options.symbologies.contains(s.symbology));
@@ -201,11 +264,6 @@ impl Pipeline {
                 break;
             }
         }
-
-        for p in &self.post {
-            p.process(&ctx, &mut symbols);
-        }
-        symbols
     }
 }
 
@@ -359,5 +417,114 @@ mod tests {
             ..ScanOptions::default()
         };
         assert!(pipeline.scan(img, &options, &mut Scratch::new()).is_empty());
+    }
+
+    /// Triples every pixel.
+    struct Triple;
+    impl Preprocessor for Triple {
+        fn id(&self) -> &'static str {
+            "triple"
+        }
+        fn apply(&self, src: ImageView<'_>, dst: &mut crate::ImageBuffer) {
+            dst.resize(src.width() * 3, src.height() * 3);
+            for y in 0..dst.height() {
+                for x in 0..dst.width() {
+                    dst.row_mut(y)[x] = src.get(x / 3, y / 3);
+                }
+            }
+        }
+    }
+
+    /// Reports a symbol only on frames at least 60 px wide, with its corners
+    /// at (30, 30)..(60, 60) of the frame it was given.
+    struct OnlyBig(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    impl SymbologyReader for OnlyBig {
+        fn name(&self) -> &'static str {
+            "only-big"
+        }
+        fn symbologies(&self) -> SymbologySet {
+            SymbologySet::EMPTY.with(Symbology::Code39)
+        }
+        fn scan(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if ctx.image().width() < 60 || !out.is_empty() {
+                return;
+            }
+            out.push(Symbol {
+                symbology: Symbology::Code39,
+                data: vec![1],
+                text: None,
+                segments: Vec::new(),
+                content: Content::Unparsed,
+                quad: Quad::new([
+                    Point::new(30.0, 30.0),
+                    Point::new(60.0, 30.0),
+                    Point::new(60.0, 60.0),
+                    Point::new(30.0, 60.0),
+                ]),
+                orientation_deg: 0.0,
+                aim_id: *b"]A0",
+                meta: SymbolMeta::Linear(LinearMeta::default()),
+                quality: 1.0,
+            });
+        }
+    }
+
+    fn retry_pipeline() -> (Pipeline, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .binarizer(Threshold)
+            .upscale(Triple)
+            .reader(OnlyBig(calls.clone()))
+            .build()
+            .unwrap();
+        (pipeline, calls)
+    }
+
+    #[test]
+    fn upscale_retry_maps_geometry_back() {
+        let (pipeline, _) = retry_pipeline();
+        let pixels = [255u8; 24 * 20];
+        let img = ImageView::from_packed(&pixels, 24, 20).unwrap();
+        let mut scratch = Scratch::new();
+        for _ in 0..2 {
+            let found = pipeline.scan(img, &ScanOptions::default(), &mut scratch);
+            assert_eq!(found.len(), 1);
+            let c = found[0].quad.corners;
+            assert_eq!((c[0].x, c[0].y), (10.0, 10.0));
+            assert_eq!((c[2].x, c[2].y), (20.0, 20.0));
+        }
+    }
+
+    #[test]
+    fn upscale_retry_respects_option_and_size() {
+        let (pipeline, calls) = retry_pipeline();
+        let pixels = [255u8; 24 * 20];
+        let img = ImageView::from_packed(&pixels, 24, 20).unwrap();
+        let mut scratch = Scratch::new();
+        let with = |upscale_retry| ScanOptions {
+            upscale_retry,
+            ..ScanOptions::default()
+        };
+        assert!(pipeline.scan(img, &with(Some(0)), &mut scratch).is_empty());
+        assert!(pipeline.scan(img, &with(Some(23)), &mut scratch).is_empty());
+        assert_eq!(pipeline.scan(img, &with(Some(24)), &mut scratch).len(), 1);
+        let fast = ScanOptions::with_effort(Effort::Fast);
+        assert!(pipeline.scan(img, &fast, &mut scratch).is_empty());
+        let fast_on = ScanOptions {
+            upscale_retry: Some(600),
+            ..fast
+        };
+        assert_eq!(pipeline.scan(img, &fast_on, &mut scratch).len(), 1);
+
+        // A frame that already yields a symbol is not rescanned.
+        let wide = [255u8; 60 * 20];
+        let img = ImageView::from_packed(&wide, 60, 20).unwrap();
+        calls.store(0, std::sync::atomic::Ordering::Relaxed);
+        let found = pipeline.scan(img, &ScanOptions::default(), &mut scratch);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].quad.corners[0].x, 30.0);
+        // Default effort: one binarizer, two polarities, one reader call each.
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 2);
     }
 }

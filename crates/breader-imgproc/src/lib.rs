@@ -6,11 +6,13 @@ mod luma;
 mod otsu;
 mod pack;
 mod simd;
+mod upscale;
 
 pub use downscale::Downscale;
 pub use local::LocalBinarizer;
 pub use luma::{luma_view, to_luma};
 pub use otsu::OtsuBinarizer;
+pub use upscale::Upscale;
 
 /// Images below this many pixels stay single-threaded: dispatch costs more
 /// than the kernels save.

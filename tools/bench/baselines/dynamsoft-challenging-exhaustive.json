@@ -35,7 +35,7 @@
       },
       "QR Code": {
         "expected": 234,
-        "read": 225,
+        "read": 226,
         "false_positives": 0
       },
       "UPC-A": {

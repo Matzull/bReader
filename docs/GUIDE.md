@@ -30,6 +30,7 @@ Input is converted to an 8-bit luma plane. `Luma8`, `Nv12`, `Nv21` and `I420` ar
 | `escalation` | `escalation` | by effort | When to stop running passes, see [Escalation](#escalation). |
 | `max_symbols` | `max_symbols` | `0` | Stop after this many symbols (0 = unlimited). The result is truncated to this count. |
 | `time_budget` | `time_budget_ms` | none | Checked between passes. A pass in progress is never interrupted, so a scan can overshoot by one pass. |
+| `upscale_retry` | `upscale_max_side` | by effort | Largest `max(width, height)` of a frame that is rescanned 3x up-scaled when nothing was found, see [Up-scale retry](#up-scale-retry). `Some(0)` disables; `None`: 600 for `Balanced` and `Exhaustive`, off for `Fast`. |
 | `min_line_agreement` | `min_line_agreement` | `2` | Independent scanlines that must produce the same 1D result. 1 reads more and raises false positives. |
 | `ean_addon` | `ean_addon` | `Ignore` | `Ignore`, `Optional` (report the EAN-2/EAN-5 add-on if present, accept the symbol without it) or `Required`. |
 | `code39.full_ascii` | `code39_full_ascii` | `false` | Decode Code 39 Full ASCII escape pairs. |
@@ -78,6 +79,10 @@ Use `UntilFound` with `max_symbols = 1` for "read one code as fast as possible".
 ## Time budget
 
 `time_budget` bounds latency softly: it is compared with the elapsed time before each pass. Combine it with `Exhaustive` to get "best effort within N ms"; passes are ordered cheap first, so a tight budget behaves like a lower effort.
+
+## Up-scale retry
+
+Small images often hold symbols with modules of about one pixel (thumbnails, icons, screenshots of codes) that no regular pass can sample. When every regular pass of a frame returns no symbol and the frame is at most `upscale_retry` pixels on its longer side (600 by default for `Balanced` and `Exhaustive`), the pipeline enlarges it 3x with a cubic (Catmull-Rom) kernel and runs the regular passes once more on the copy. Corners are reported in the coordinates of the original frame. The retry never runs when something was found, so multi-symbol images are not rescanned, and it costs time only on small frames without a symbol: a blank 600x600 frame takes about 15 ms more at `Balanced` (a noise-filled one about 140 ms), so lower the limit (or set 0) when most of your small frames are expected to be empty. `Tracker` turns it off.
 
 ## Parallelism (rayon)
 

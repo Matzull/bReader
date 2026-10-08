@@ -33,6 +33,10 @@ pub struct Scratch {
     images: Vec<ImageEntry>,
     binaries: Vec<BinaryEntry>,
     inverted: BitMatrix,
+    /// Up-scaled copy of the frame for the retry pass.
+    pub(crate) upscaled: ImageBuffer,
+    /// Buffers of the nested scan over `upscaled`.
+    pub(crate) retry: Option<Box<Scratch>>,
 }
 
 impl Scratch {
@@ -141,6 +145,7 @@ impl<'a> FrameContext<'a> {
             images,
             binaries,
             inverted: inv,
+            ..
         } = &mut *self.scratch;
         let idx = match binaries
             .iter()

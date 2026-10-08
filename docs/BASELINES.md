@@ -129,18 +129,20 @@ Read count / false positives per symbology (release build, no GT overrides besid
 
 | Symbology | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing | zxing-cpp 3.1.1 |
 |---|---|---|---|---|---|---|
-| QR Code | 138 | 95 / 0 | 102 / 0 | 102 / 0 | 119 / 0 | 125 / 1 |
+| QR Code | 138 | 95 / 0 | 115 / 0 | 115 / 0 | 119 / 0 | 125 / 1 |
 | EAN-13 | 65 | 24 / 0 | 34 / 0 | 34 / 0 | 43 / 4 | 45 / 4 |
 | EAN-8 | 9 | 4 / 0 | 5 / 0 | 5 / 0 | 8 / 6 | 9 / 0 |
-| UPC-A | 76 | 19 / 0 | 39 / 0 | 40 / 0 | 50 / 0 | 50 / 0 |
-| UPC-E | 29 | 13 / 0 | 16 / 0 | 18 / 0 | 18 / 17 | 20 / 0 |
-| Code 128 | 22 | 10 / 0 | 14 / 0 | 14 / 0 | 21 / 0 | 22 / 0 |
+| UPC-A | 76 | 19 / 0 | 43 / 0 | 45 / 0 | 50 / 0 | 50 / 0 |
+| UPC-E | 29 | 13 / 0 | 17 / 0 | 20 / 0 | 18 / 17 | 20 / 0 |
+| Code 128 | 22 | 10 / 0 | 16 / 0 | 16 / 0 | 21 / 0 | 22 / 0 |
 | Code 39 | 14 | 5 / 0 | 8 / 0 | 8 / 0 | 11 / 3 | 12 / 0 |
-| ITF | 20 | 1 / 0 | 1 / 0 | 1 / 0 | 17 / 0 | 20 / 0 |
-| Data Matrix | 97 | 72 / 0 | 72 / 0 | 74 / 0 | 78 / 2 | 93 / 0 |
-| **Total** | 470 | 243 / 0 | 291 / 0 | 296 / 0 | 365 / 32 | 396 / 5 |
+| ITF | 20 | 1 / 0 | 2 / 0 | 2 / 0 | 17 / 0 | 20 / 0 |
+| Data Matrix | 97 | 72 / 0 | 79 / 0 | 80 / 0 | 78 / 2 | 93 / 0 |
+| **Total** | 470 | 243 / 0 | 319 / 0 | 325 / 0 | 365 / 32 | 396 / 5 |
 
-Cells are reads / false positives. Read rate: breader 51.7 % / 61.9 % / 63.0 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13).
+Cells are reads / false positives. Read rate: breader 51.7 % / 67.9 % / 69.1 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13).
+
+Balanced and Exhaustive include the up-scale retry (3x Catmull-Rom copy of frames up to 600 px that yielded nothing); before it they read 291 and 296 (QR 102/102, UPC-A 39/40, UPC-E 16/18, Code 128 14/14, ITF 1/1, Data Matrix 72/74, the rest unchanged). The retry also adds one QR read on challenging-images (225 -> 226 of 234 QR at Balanced and Exhaustive) and nothing on synth. Fast has the retry off; enabled it would read 308 here and nothing more on challenging-images. Latency on this set, p50 / p95 ms, same session, interleaved runs: Balanced 1.8 / 7.3 before, 4.7 / 21.0 after; Exhaustive 4.5 / 15.8 before, 11.7 / 44.5 after (most of the 932 images are small, and the negative and unsupported-symbology ones all take the retry); challenging-images Balanced 16.9 / 119 before, 17.0 / 119 after, Exhaustive 38.0 / 277 before, 41.0 / 338 after. A blank 600x600 frame costs +15 ms at Balanced and +26 ms at Exhaustive, a noise-filled one +142 and +340 ms.
 
 Latency: to be measured on an idle machine.
 

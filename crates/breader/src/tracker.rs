@@ -103,6 +103,8 @@ impl Tracker {
             if readers.iter().all(|(e, _)| *e != effort) {
                 let mut o = options.clone();
                 o.effort = effort;
+                // ROI crops and strips are small by construction; never up-scale them.
+                o.upscale_retry = Some(0);
                 readers.push((effort, Reader::with_options(o)));
             }
         }

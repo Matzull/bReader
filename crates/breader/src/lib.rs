@@ -67,7 +67,7 @@ pub mod modules {
     pub use breader_content::{ContentClassifier, Dedup, TextDecoder};
     #[cfg(feature = "datamatrix")]
     pub use breader_datamatrix::DataMatrixReader;
-    pub use breader_imgproc::{Downscale, LocalBinarizer, OtsuBinarizer};
+    pub use breader_imgproc::{Downscale, LocalBinarizer, OtsuBinarizer, Upscale};
     #[cfg(feature = "linear")]
     pub use breader_linear::LinearReader;
     #[cfg(feature = "qr")]
@@ -75,13 +75,14 @@ pub mod modules {
 }
 
 /// The standard pipeline for the enabled features: local and Otsu binarizers,
-/// a 2x downscale preprocessor, the QR, Data Matrix and linear readers, then dedup, text
+/// a 2x downscale preprocessor, a 3x up-scale for the retry pass, the QR, Data Matrix and linear readers, then dedup, text
 /// decoding and content classification.
 pub fn default_pipeline() -> Pipeline {
     let builder = Pipeline::builder()
         .binarizer(modules::LocalBinarizer::default())
         .binarizer(modules::OtsuBinarizer)
-        .preprocessor(modules::Downscale::new(2));
+        .preprocessor(modules::Downscale::new(2))
+        .upscale(modules::Upscale);
     #[cfg(feature = "qr")]
     let builder = builder.reader(modules::QrReader);
     #[cfg(feature = "datamatrix")]

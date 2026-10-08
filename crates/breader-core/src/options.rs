@@ -76,6 +76,9 @@ impl Default for ItfOptions {
     }
 }
 
+/// Default largest side, in pixels, of a frame eligible for the up-scale retry.
+pub const DEFAULT_UPSCALE_MAX_SIDE: usize = 600;
+
 /// Options for one scan; see `docs/GUIDE.md` for a field-by-field guide.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScanOptions {
@@ -91,6 +94,9 @@ pub struct ScanOptions {
     pub max_symbols: usize,
     /// Checked between passes; a pass in progress is never interrupted.
     pub time_budget: Option<Duration>,
+    /// Largest `max(width, height)` for which a frame that yields nothing is
+    /// rescanned up-scaled; 0 disables. Overrides the effort preset when set.
+    pub upscale_retry: Option<usize>,
     /// Minimum independent scanlines that must agree on a 1D result.
     pub min_line_agreement: u16,
     /// EAN/UPC add-on handling.
@@ -110,6 +116,7 @@ impl Default for ScanOptions {
             escalation: None,
             max_symbols: 0,
             time_budget: None,
+            upscale_retry: None,
             min_line_agreement: 2,
             ean_addon: EanAddonPolicy::default(),
             code39: Code39Options::default(),
@@ -131,6 +138,15 @@ impl ScanOptions {
     pub fn invert_enabled(&self) -> bool {
         self.try_invert
             .unwrap_or(!matches!(self.effort, Effort::Fast))
+    }
+
+    /// Effective up-scale retry limit: the override, or 0 for `Fast` and
+    /// [`DEFAULT_UPSCALE_MAX_SIDE`] otherwise.
+    pub fn upscale_max_side(&self) -> usize {
+        self.upscale_retry.unwrap_or(match self.effort {
+            Effort::Fast => 0,
+            Effort::Balanced | Effort::Exhaustive => DEFAULT_UPSCALE_MAX_SIDE,
+        })
     }
 
     /// Effective escalation: the override, or `UntilFound` for `Fast` and `All` otherwise.
