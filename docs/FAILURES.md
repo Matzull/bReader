@@ -1,8 +1,19 @@
 # Failure triage
 
-Date 2026-10-08, commit 32c3ec0 (Balanced unless noted). Investigation only: measurements were taken on a scratch copy of the workspace with temporary debug output and env-var switches; nothing in `crates/` or `tools/` was changed. "zxing-cpp" = 3.1.1 Python package, default options, used as a black-box reader.
+Date 2026-10-08, commit 32c3ec0 (Balanced unless noted). The measurements were taken on a scratch copy of the workspace with temporary debug output and env-var switches. Classes 1 to 3 of section 5 have since been fixed (see Status below); the tables describe the state before the fixes. "zxing-cpp" = 3.1.1 Python package, default options, used as a black-box reader.
 
 Coordinates of ground-truth quads (`annotations.json`) are in EXIF-corrected orientation; 10 of the 68 images carry an EXIF orientation (`barcode-with-shadow-1`, `batch-scanning-1/2`, `custom-scan-parameters-4`, `multiple-symbologies-multiple-barcodes-9`, `retail-1/2/3`, `single-symbology-multiple-barcodes-1`, `tiny-barcodes-4`), but the bench decodes the raw pixels. Matching is by text only, so this is harmless today; any position-based check must apply the orientation.
+
+## Status of the fixes
+
+| Class | Change | Result (before -> after) |
+|---|---|---|
+| 1. Code 39 quiet zone | `QUIET` 7 -> 4 modules; a symbol with either quiet zone below 7 modules and no check character needs one more agreeing line (`LineHit::short_quiet`) | `batch_code39`: Fast 9 -> 25, Balanced 11 -> 28, tracker 13 -> 30 of 32; zxing-samples Code 39 Fast 5 -> 7, Balanced and Exhaustive 8 -> 9. The extra-line safeguard costs one read in the video (28 instead of 29 at Balanced, 25 instead of 26 at Fast); without it 0 false positives were measured as well |
+| 2. Identical-text merge | `aggregate.rs::group` links hits by geometry: near-parallel (< 15 deg), along-axis offset < 0.25 length and across offset <= 2 scanline steps, or centers within 0.2 length. Hits carry the scanline step | challenging-images Code 128: Fast 26 -> 27, Balanced 34 -> 35, Exhaustive 29 -> 45; video `batch_EAN13` Balanced 21 -> 22 |
+| 3. Weak Code 128 start | `start_of` returns a weak start, which counts as the one weak character | Code 128 on challenging-images: a further +2 at every effort (Fast 29, Balanced 37, Exhaustive 47 of 60) |
+| ITF 0 of 4 | Not a defect: default `allowed_lengths = [14]`; the four symbols have 10, 10, 16 and 8 digits | With any length allowed: 3 of 4 read at every effort (the second `0328056306` in `air-travel-luggage-bag` is not read); the default is unchanged |
+
+Not done: class 4 and below.
 
 ## 1. Summary
 
@@ -96,6 +107,6 @@ No wrong labels found among the failing symbols: the Code 39 values match the pr
 
 Other observations for the architect:
 
-- ITF reads 0 of 4 in challenging-images at Balanced in this build (zxing-cpp 4 of 4). Not analysed here.
+- ITF reads 0 of 4 in challenging-images at Balanced (zxing-cpp 4 of 4) because of the default length list `[14]`; see Status.
 - `zxing-samples` has 9 false positives at Balanced already before any change (2 Code 39 `3PRM8N` and `-12345678`, Data Matrix garbage); they are independent of the experiments above (identical counts with and without them).
 - The bench loads by content (`custom-scan-parameters-4.png` is a JPEG); any custom tool must do the same.

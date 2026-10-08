@@ -74,6 +74,7 @@ fn scan_profile<D: LinearDecoder>(
     profile: &[u8],
     line: &Scanline,
     index: u32,
+    step: f32,
     opts: &LineOptions,
     stage: &mut Stage,
 ) {
@@ -113,10 +114,12 @@ fn scan_profile<D: LinearDecoder>(
                 from: line.point_at(hit.start),
                 to: line.point_at(hit.end),
                 line: index,
+                step,
                 module: hit.module,
                 quality: hit.quality,
                 aim: hit.aim,
                 checksum_verified: hit.checksum_verified,
+                short_quiet: hit.short_quiet,
                 inverted: hit.inverted,
             });
         }
@@ -125,6 +128,7 @@ fn scan_profile<D: LinearDecoder>(
 
 /// Pre-sampled profiles of the column and oblique lines of a plan.
 struct Sources<'a> {
+    plan: ScanPlan,
     columns: &'a [u8],
     height: usize,
     oblique: &'a [u8],
@@ -159,10 +163,11 @@ fn scan_line(
     profile: &mut Vec<u8>,
     stage: &mut Stage,
 ) {
+    let step = sources.plan.line_spacing(line);
     if line.from.x == line.to.x {
         let h = sources.height;
         let column = &sources.columns[cursor.column * h..(cursor.column + 1) * h];
-        scan_profile(&DECODERS, column, line, index, sources.opts, stage);
+        scan_profile(&DECODERS, column, line, index, step, sources.opts, stage);
     } else if Oblique::is_oblique(line) {
         let range = sources.offsets[cursor.slanted]..sources.offsets[cursor.slanted + 1];
         scan_profile(
@@ -170,12 +175,13 @@ fn scan_line(
             &sources.oblique[range],
             line,
             index,
+            step,
             sources.opts,
             stage,
         );
     } else {
         profile::sample(img, line, false, profile);
-        scan_profile(&DECODERS, profile, line, index, sources.opts, stage);
+        scan_profile(&DECODERS, profile, line, index, step, sources.opts, stage);
     }
 }
 
@@ -302,6 +308,7 @@ fn refine<D: LinearDecoder>(
                 &work.profile,
                 &line,
                 *next_index,
+                step,
                 opts,
                 &mut work.stage,
             );
@@ -406,6 +413,7 @@ impl LinearReader {
             .collect();
         profile::sample_oblique_batch(&img, &oblique, false, &mut work.offsets, &mut work.oblique);
         let sources = Sources {
+            plan,
             columns: &work.columns,
             height: img.height(),
             oblique: &work.oblique,

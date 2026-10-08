@@ -489,6 +489,7 @@ impl EanDecoder {
                 *b"]E0"
             },
             checksum_verified: true,
+            short_quiet: false,
             inverted: false,
         }
     }

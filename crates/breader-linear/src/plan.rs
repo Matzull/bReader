@@ -121,6 +121,19 @@ impl ScanPlan {
         (self.extent(angle_deg) / count as f32).clamp(2.0, max_spacing(self.effort, angle_deg))
     }
 
+    /// Spacing to the neighbouring lines of the plan for one of its lines.
+    pub fn line_spacing(&self, line: &Scanline) -> f32 {
+        if line.from.x == line.to.x {
+            return self.spacing(90.0);
+        }
+        if line.from.y == line.to.y {
+            return self.spacing(0.0);
+        }
+        let (dx, dy) = line.direction();
+        let angle = dy.atan2(dx).to_degrees().rem_euclid(180.0);
+        self.spacing(if is_axis(angle) { angle + 0.01 } else { angle })
+    }
+
     fn extent(&self, angle_deg: f32) -> f32 {
         let (s, c) = angle_deg.to_radians().sin_cos();
         self.width as f32 * s.abs() + self.height as f32 * c.abs()

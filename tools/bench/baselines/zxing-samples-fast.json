@@ -30,7 +30,7 @@
     "code39-1": {
       "Code 39": {
         "expected": 6,
-        "read": 2,
+        "read": 3,
         "false_positives": 0
       }
     },
@@ -44,7 +44,7 @@
     "code39-3": {
       "Code 39": {
         "expected": 5,
-        "read": 3,
+        "read": 4,
         "false_positives": 0
       }
     },

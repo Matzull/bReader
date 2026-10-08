@@ -82,6 +82,20 @@ Timings on this machine vary up to 2x between runs; compare engines in the same 
 
 zxing-cpp in the same session on challenging-images: 341/392 = 87.0 %, 1 FP, 23.3 / 330.2 / 400.4 ms.
 
+## Linear reader fixes (2026-10-08)
+
+Four changes after the failure triage in [FAILURES.md](FAILURES.md): Code 39 quiet zone of 4 modules (symbols below 7 modules and without a check character need one more agreeing line), geometric grouping of equal-text hits in the aggregator, a weak Code 128 start character, and no change for ITF (default length list). Read counts, false positives 0 everywhere; latency not re-measured.
+
+| Set | Fast | Balanced | Exhaustive |
+|---|---|---|---|
+| challenging-images, all symbologies (442) | 319 -> 322 | 392 -> 395 | 388 -> 406 |
+| challenging-images, Code 128 (60) | 26 -> 29 | 34 -> 37 | 29 -> 47 |
+| zxing-samples, Code 39 (14) | 5 -> 7 | 8 -> 9 | 8 -> 9 |
+| video `batch_code39` (32) | 9 -> 25 | 11 -> 28 | not run (tracker 13 -> 30) |
+| video `batch_EAN13` (28) | 3 -> 3 | 21 -> 22 | not run (tracker 21) |
+
+Synthetic sets and skewed-datamatrix are unchanged.
+
 ## v1 targets (confirmed 2026-10-07)
 
 | Metric | Target |
@@ -135,12 +149,12 @@ Read count / false positives per symbology (release build, no GT overrides besid
 | UPC-A | 76 | 19 / 0 | 39 / 0 | 40 / 0 | 50 / 0 | 50 / 0 |
 | UPC-E | 29 | 13 / 0 | 16 / 0 | 18 / 0 | 18 / 17 | 20 / 0 |
 | Code 128 | 22 | 10 / 0 | 14 / 0 | 14 / 0 | 21 / 0 | 22 / 0 |
-| Code 39 | 14 | 5 / 0 | 8 / 0 | 8 / 0 | 11 / 3 | 12 / 0 |
+| Code 39 | 14 | 7 / 0 | 9 / 0 | 9 / 0 | 11 / 3 | 12 / 0 |
 | ITF | 20 | 1 / 0 | 1 / 0 | 1 / 0 | 17 / 0 | 20 / 0 |
 | Data Matrix | 97 | 72 / 0 | 72 / 0 | 74 / 0 | 78 / 2 | 93 / 0 |
-| **Total** | 470 | 243 / 0 | 291 / 0 | 296 / 0 | 365 / 32 | 396 / 5 |
+| **Total** | 470 | 245 / 0 | 292 / 0 | 297 / 0 | 365 / 32 | 396 / 5 |
 
-Cells are reads / false positives. Read rate: breader 51.7 % / 61.9 % / 63.0 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13).
+Cells are reads / false positives. Read rate: breader 52.1 % / 62.1 % / 63.2 %, rxing 77.7 %, zxing-cpp 84.3 %. breader has zero false positives at every effort. The other engines' false positives were not triaged. rxing (`TryHarder`, multi) panics on one image (`aztec-1/gs1-figure-4.15.1-2-31x31.png`) and loops on another (`itf-1/#220.png`, abandoned after 30 s); both count as no read. zxing-cpp is the Python package with default options (a UPC-A read can come back as EAN-13).
 
 Latency: to be measured on an idle machine.
 

@@ -13,11 +13,16 @@ pub(crate) struct PlacedHit {
     pub to: Point,
     /// Index of the scanline that produced the hit.
     pub line: u32,
+    /// Distance in pixels between the scanline and its neighbours in the
+    /// plan, or between the refinement lines for refined hits.
+    pub step: f32,
     /// Estimated module width in pixels of the scanned image.
     pub module: f32,
     pub quality: f32,
     pub aim: [u8; 3],
     pub checksum_verified: bool,
+    /// See `LineHit::short_quiet`.
+    pub short_quiet: bool,
     /// Light bars on a dark background. Hits of different polarity never
     /// read the same symbol.
     pub inverted: bool,
@@ -37,12 +42,52 @@ impl PlacedHit {
             && self.inverted == other.inverted
             && self.text == other.text
     }
+
+    /// True when `other` can be another view of the same physical symbol:
+    /// the same text, and either a neighbouring parallel line or a segment
+    /// centered on almost the same spot.
+    fn adjacent(&self, other: &Self) -> bool {
+        if !self.same_symbol(other) {
+            return false;
+        }
+        let len = self.length().max(other.length());
+        let (a, b) = (self.center(), other.center());
+        let (dx, dy) = (b.x - a.x, b.y - a.y);
+        if dx.hypot(dy) < CLOSE * len {
+            return true;
+        }
+        let (ux, uy) = self.unit();
+        let (vx, vy) = other.unit();
+        if (ux * vx + uy * vy).abs() < PARALLEL_COS {
+            return false;
+        }
+        let along = (dx * ux + dy * uy).abs();
+        let across = (dx * uy - dy * ux).abs();
+        along < ALONG * len && across <= LINE_GAP * self.step.max(other.step)
+    }
+
+    fn unit(&self) -> (f32, f32) {
+        let len = self.length().max(1e-6);
+        (
+            (self.to.x - self.from.x) / len,
+            (self.to.y - self.from.y) / len,
+        )
+    }
 }
 
 fn mid(a: Point, b: Point) -> Point {
     Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
 }
 
+/// Centers closer than this fraction of the segment length belong to the
+/// same symbol whatever the angle.
+const CLOSE: f32 = 0.2;
+/// Cosine of the largest angle between lines that can be neighbours.
+const PARALLEL_COS: f32 = 0.966;
+/// Largest offset of the centers along the lines, as a fraction of the length.
+const ALONG: f32 = 0.25;
+/// Largest offset across the lines, in scanline steps.
+const LINE_GAP: f32 = 2.0;
 /// Segments closer than this many pixels count as touching.
 const TOUCH: f32 = 1.0;
 /// ITF has no check digit in general and any even digit string is a valid
@@ -166,11 +211,20 @@ impl Aggregator {
             .copied()
             .filter(|&m| self.hits[m].line < settings.plan_lines)
             .collect();
-        if min >= 2 && distinct_lines(&self.hits, &sparse) < 2 {
+        let mut need = if min >= 2 && distinct_lines(&self.hits, &sparse) < 2 {
             min + 1
         } else {
             min
+        };
+        // A short quiet zone is only trusted with a check character or with
+        // one more agreeing line.
+        if members
+            .iter()
+            .any(|&m| self.hits[m].short_quiet && !self.hits[m].checksum_verified)
+        {
+            need += 1;
         }
+        need
     }
 
     /// Groups hits by symbol identity and proximity, applies the agreement
@@ -217,7 +271,7 @@ impl Aggregator {
             while g < self.groups.len() {
                 let linked = self.groups[g].members.iter().any(|&m| {
                     let (a, b) = (&self.hits[i], &self.hits[m]);
-                    a.same_symbol(b) && a.center().distance(b.center()) < a.length().max(b.length())
+                    a.adjacent(b)
                 });
                 if !linked {
                     g += 1;
@@ -415,6 +469,7 @@ mod tests {
             from: Point::new(x0, y),
             to: Point::new(x1, y),
             line,
+            step: 6.0,
             module: 3.0,
             quality: 0.5,
             aim: if sym == Symbology::Ean8 {
@@ -423,6 +478,7 @@ mod tests {
                 *b"]E0"
             },
             checksum_verified: true,
+            short_quiet: false,
             inverted: false,
         }
     }
@@ -521,6 +577,24 @@ mod tests {
     }
 
     #[test]
+    fn a_short_quiet_zone_needs_one_more_line_unless_checked() {
+        let t = "CODE39";
+        let lines = |n: u32, checked: bool| {
+            (0..n)
+                .map(|i| {
+                    let mut h = hit(Symbology::Code39, t, 10.0 + 3.0 * i as f32, 0.0, 100.0, i);
+                    h.short_quiet = true;
+                    h.checksum_verified = checked;
+                    h
+                })
+                .collect::<Vec<_>>()
+        };
+        assert!(run(lines(2, false), &settings(2)).is_empty());
+        assert_eq!(run(lines(3, false), &settings(2)).len(), 1);
+        assert_eq!(run(lines(2, true), &settings(2)).len(), 1);
+    }
+
+    #[test]
     fn itf_needs_three_lines_whatever_the_setting() {
         let t = "12345678901231";
         let lines = |n: u32| {
@@ -592,6 +666,88 @@ mod tests {
             hit(Symbology::Ean8, t, 20.0, 900.0, 1000.0, 1),
         ];
         assert_eq!(run(hits, &settings(2)).len(), 2);
+    }
+
+    #[test]
+    fn identical_neighbours_stay_separate_symbols() {
+        let t = "73513537";
+        // Side by side, closer than one symbol length.
+        let mut hits = Vec::new();
+        for (i, x) in [0.0, 150.0].into_iter().enumerate() {
+            for k in 0..3 {
+                let line = (i * 3 + k) as u32;
+                hits.push(hit(
+                    Symbology::Ean8,
+                    t,
+                    10.0 + 6.0 * k as f32,
+                    x,
+                    x + 100.0,
+                    line,
+                ));
+            }
+        }
+        assert_eq!(run(hits, &settings(2)).len(), 2);
+        // Stacked, with a gap of several scanline steps.
+        let mut hits = Vec::new();
+        for (i, y) in [10.0, 90.0].into_iter().enumerate() {
+            for k in 0..3 {
+                let line = (i * 3 + k) as u32;
+                hits.push(hit(
+                    Symbology::Ean8,
+                    t,
+                    y + 6.0 * k as f32,
+                    0.0,
+                    100.0,
+                    line,
+                ));
+            }
+        }
+        assert_eq!(run(hits, &settings(2)).len(), 2);
+        // Rotated copies around a common center, as in a pinwheel.
+        let mut hits = Vec::new();
+        for i in 0..6u32 {
+            let a = (i as f32 * 30.0).to_radians();
+            let (s, c) = a.sin_cos();
+            for k in 0..2u32 {
+                let mut h = hit(Symbology::Ean8, t, 0.0, 0.0, 0.0, i * 2 + k);
+                let (cx, cy) = (150.0 * c, 150.0 * s);
+                let o = 6.0 * k as f32;
+                h.from = Point::new(cx - 50.0 * c - o * s, cy - 50.0 * s + o * c);
+                h.to = Point::new(cx + 50.0 * c - o * s, cy + 50.0 * s + o * c);
+                hits.push(h);
+            }
+        }
+        assert_eq!(run(hits, &settings(2)).len(), 6);
+    }
+
+    #[test]
+    fn one_tall_symbol_is_one_group_however_many_lines_read_it() {
+        let t = "73513537";
+        // 40 lines six pixels apart, far taller than the symbol is long.
+        let hits: Vec<_> = (0..40)
+            .map(|k| hit(Symbology::Ean8, t, 10.0 + 6.0 * k as f32, 0.0, 100.0, k))
+            .collect();
+        let out = run(hits, &settings(2));
+        assert_eq!(out.len(), 1);
+        let SymbolMeta::Linear(meta) = &out[0].meta else {
+            panic!("linear meta expected");
+        };
+        assert_eq!(meta.lines_agreeing, 40);
+        // The same with a diagonal symbol and reversed reading directions.
+        let hits: Vec<_> = (0..20u32)
+            .map(|k| {
+                let mut h = hit(Symbology::Ean8, t, 0.0, 0.0, 0.0, k);
+                let o = 6.0 * k as f32;
+                let (s, c) = 30.0f32.to_radians().sin_cos();
+                h.from = Point::new(100.0 * c - o * s, 100.0 * s + o * c);
+                h.to = Point::new(-o * s, o * c);
+                if k % 2 == 1 {
+                    std::mem::swap(&mut h.from, &mut h.to);
+                }
+                h
+            })
+            .collect();
+        assert_eq!(run(hits, &settings(2)).len(), 1);
     }
 
     #[test]
