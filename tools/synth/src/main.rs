@@ -93,8 +93,19 @@ fn generate_class(
     let dir = out.join(class.name());
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut images = Vec::new();
-    for i in 0..count {
-        let (img, annotations) = scene::generate(class, i, seed);
+    let extra = if class == Class::Datamatrix {
+        0
+    } else {
+        count.div_ceil(9)
+    };
+    for i in 0..count + extra {
+        let (img, annotations) = if i < count {
+            scene::generate(class, i, seed)
+        } else if let Some(g) = scene::generate_extra(class, i - count, seed) {
+            g
+        } else {
+            break;
+        };
         let file = format!("{}_{:04}.png", class.name().replace('-', "_"), i + 1);
         img.save(dir.join(&file))
             .map_err(|e| format!("{file}: {e}"))?;

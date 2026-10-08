@@ -26,6 +26,7 @@ version = "0.1.0"
 dependencies = [
  "breader-content",
  "breader-core",
+ "breader-datamatrix",
  "breader-imgproc",
  "breader-linear",
  "breader-qr",
@@ -43,6 +44,14 @@ dependencies = [
 [[package]]
 name = "breader-core"
 version = "0.1.0"
+
+[[package]]
+name = "breader-datamatrix"
+version = "0.1.0"
+dependencies = [
+ "breader-core",
+ "breader-ecc",
+]
 
 [[package]]
 name = "breader-ecc"

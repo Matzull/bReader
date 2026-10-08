@@ -5,7 +5,7 @@ Workflows live in `.github/workflows/`. All use `contents: read` only.
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `ci.yml` | push, pull request | `lint`: fmt, clippy (`--workspace --all-targets --all-features -D warnings`), cargo-deny. `test`: `cargo test --workspace` and with `--features breader/rayon` on ubuntu x86_64, ubuntu arm64, macOS arm64, Windows. `regression`: synthetic bench gate. `python-wheels` / `python-test`: abi3 wheels (linux x86_64 and aarch64, macOS arm64, Windows x64) and pytest against the installed wheel. |
-| `datasets.yml` | weekly (Mon 05:00 UTC), manual | Restores `data/dynamsoft` from a cache keyed on the upstream commit (fetches on a miss), installs ffmpeg, and runs the bench gate on `challenging-images` plus the video-bench gate. |
+| `datasets.yml` | weekly (Mon 05:00 UTC), manual | Restores `data/dynamsoft` from a cache keyed on the upstream commit (fetches on a miss), installs ffmpeg, and runs the bench gate on `challenging-images` and `skewed-datamatrix` plus the video-bench gate. |
 | `fuzz.yml` | nightly (03:00 UTC), manual | Nightly toolchain, runs every target from `cargo fuzz list` for 300 s (manual runs can change it), caches `fuzz/corpus`, uploads `fuzz/artifacts` when something crashes. |
 
 The Dynamsoft datasets have no stated license, so they are only fetched by the scheduled or manual job, never on every push.
@@ -19,6 +19,7 @@ The Dynamsoft datasets have no stated license, so they are only fetched by the s
 | `synth-seed1-{fast,balanced,exhaustive}.json` | `data/synth` (`synth data/synth`, seed 1, 20 per class) | `bench data/synth --effort E` |
 | `synth-seed2024-{...}.json` | `data/synth-2024` (60 per class, seed 2024) | `bench data/synth-2024 --effort E` |
 | `dynamsoft-challenging-{...}.json` | `data/dynamsoft/challenging-images` | `bench data/dynamsoft/challenging-images --effort E` |
+| `dynamsoft-skewed-{...}.json` | `data/dynamsoft/skewed-datamatrix` | `bench data/dynamsoft/skewed-datamatrix --effort E` |
 | `dynamsoft-video.json` | `data/dynamsoft/video-based-testing` | `video-bench data/dynamsoft/video-based-testing` |
 
 A baseline stores, per dataset (or video) and per symbology (or engine), the expected count, the read count and the false positives. The effort is part of the key: a baseline only applies to the effort it was recorded at.
@@ -36,7 +37,7 @@ Higher read counts and entries not yet in the baseline only print a notice. Late
 ```sh
 tools/check-regression.sh              # synthetic sets, generated into data/ when missing
 tools/fetch-datasets.sh                # once, needs git
-tools/check-regression.sh --dynamsoft  # also challenging-images and videos (needs ffmpeg)
+tools/check-regression.sh --dynamsoft  # also challenging-images, skewed-datamatrix and videos (needs ffmpeg)
 ```
 
 Or one at a time:

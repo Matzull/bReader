@@ -63,6 +63,7 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "CODE128" => Some(Symbology::Code128),
         "CODE39" | "CODE39EXTENDED" => Some(Symbology::Code39),
         "ITF" | "INTERLEAVED2OF5" => Some(Symbology::Itf),
+        "DATAMATRIX" => Some(Symbology::DataMatrix),
         _ => None,
     }
 }
@@ -78,8 +79,13 @@ pub struct Overrides {
 #[derive(Debug, Clone, Deserialize)]
 pub struct OverrideEntry {
     pub file: String,
-    pub from: LabelRef,
+    /// Label to replace; when absent the entry adds `to` as a missing label.
+    #[serde(default)]
+    pub from: Option<LabelRef>,
     pub to: LabelRef,
+    /// Corners of an added label (image coordinates), informational.
+    #[serde(default)]
+    pub points: Vec<[f64; 2]>,
     #[allow(dead_code)]
     pub reason: String,
 }
@@ -103,10 +109,25 @@ pub fn apply_overrides(ann: &mut Annotations, dataset_dir: &str, overrides: &Ove
     let mut applied = 0;
     for entry in entries {
         for img in ann.images.iter_mut().filter(|i| i.file == entry.file) {
+            let Some(from) = &entry.from else {
+                let exists = img
+                    .barcodes
+                    .iter()
+                    .any(|b| b.format == entry.to.format && b.text == entry.to.text);
+                if !exists {
+                    img.barcodes.push(Barcode {
+                        text: entry.to.text.clone(),
+                        format: entry.to.format.clone(),
+                        points: entry.points.clone(),
+                    });
+                    applied += 1;
+                }
+                continue;
+            };
             if let Some(b) = img
                 .barcodes
                 .iter_mut()
-                .find(|b| b.format == entry.from.format && b.text == entry.from.text)
+                .find(|b| b.format == from.format && b.text == from.text)
             {
                 b.format = entry.to.format.clone();
                 b.text = entry.to.text.clone();
@@ -236,7 +257,7 @@ mod tests {
       "format": "barcode-benchmark/1.0",
       "dataset": "Verified Collection",
       "total_images": 2,
-      "total_barcodes": 3,
+      "total_barcodes": 4,
       "images": [
         {"file": "a.jpg", "barcodes": [
           {"text": "0328056306", "format": "ITF",
@@ -244,7 +265,8 @@ mod tests {
           {"text": "hello", "format": "QR_CODE", "points": [[1,2],[3,4],[5,6],[7,8]]}
         ]},
         {"file": "b.jpg", "barcodes": [
-          {"text": "ab12", "format": "DATAMATRIX", "points": []}
+          {"text": "ab12", "format": "PDF417", "points": []},
+          {"text": "dm", "format": "DATAMATRIX", "points": []}
         ]}
       ]
     }"#;
@@ -259,7 +281,8 @@ mod tests {
         assert_eq!(a[0].data, b"0328056306");
         assert_eq!(a[1].symbology, Some(Symbology::Qr));
         assert_eq!(map["b.jpg"][0].symbology, None);
-        assert_eq!(map["b.jpg"][0].label, "DATAMATRIX");
+        assert_eq!(map["b.jpg"][0].label, "PDF417");
+        assert_eq!(map["b.jpg"][1].symbology, Some(Symbology::DataMatrix));
     }
 
     #[test]
@@ -358,6 +381,19 @@ mod tests {
         assert_eq!(apply_overrides(&mut ann, "ds", &ov), 1);
         assert_eq!(ann.images[0].barcodes[0].text, "2");
         assert_eq!(apply_overrides(&mut ann, "ds", &ov), 0);
+    }
+
+    #[test]
+    fn overrides_can_add_a_missing_label_once() {
+        let ov = parse_overrides(
+            r#"{"datasets": {"ds": [{"file": "a.jpg",
+                "to": {"format": "DATAMATRIX", "text": "n"}, "reason": "r"}]}}"#,
+        )
+        .unwrap();
+        let mut ann = ann_of(vec![]);
+        assert_eq!(apply_overrides(&mut ann, "ds", &ov), 1);
+        assert_eq!(apply_overrides(&mut ann, "ds", &ov), 0);
+        assert_eq!(ann.images[0].barcodes.len(), 1);
     }
 
     #[test]

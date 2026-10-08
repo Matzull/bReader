@@ -1,6 +1,6 @@
 //! Barcode and QR code reader.
 //!
-//! Supported symbologies: QR Code, EAN-13, EAN-8, UPC-A, UPC-E, Code 128,
+//! Supported symbologies: QR Code, Data Matrix (ECC 200, rectangular and DMRE), EAN-13, EAN-8, UPC-A, UPC-E, Code 128,
 //! Code 39 and Interleaved 2 of 5. GS1 element strings and character sets
 //! are interpreted by the content post-processors.
 //!
@@ -33,7 +33,7 @@
 //!
 //! # Cargo features
 //!
-//! - `qr`, `linear` (default): the QR and 1D readers.
+//! - `qr`, `linear`, `datamatrix` (default): the QR, 1D and Data Matrix readers.
 //! - `image`: `Reader::scan_file` and `FileError`, decoding PNG and JPEG with the `image` crate.
 //! - `rayon`: multi-threaded kernels and scanning with identical output. Bound
 //!   the thread count by running scans inside `rayon::ThreadPool::install`.
@@ -65,6 +65,8 @@ pub use breader_content::{Gs1Error, charset, gs1};
 /// Ready-made pipeline modules, for building custom pipelines.
 pub mod modules {
     pub use breader_content::{ContentClassifier, Dedup, TextDecoder};
+    #[cfg(feature = "datamatrix")]
+    pub use breader_datamatrix::DataMatrixReader;
     pub use breader_imgproc::{Downscale, LocalBinarizer, OtsuBinarizer};
     #[cfg(feature = "linear")]
     pub use breader_linear::LinearReader;
@@ -73,7 +75,7 @@ pub mod modules {
 }
 
 /// The standard pipeline for the enabled features: local and Otsu binarizers,
-/// a 2x downscale preprocessor, the QR and linear readers, then dedup, text
+/// a 2x downscale preprocessor, the QR, Data Matrix and linear readers, then dedup, text
 /// decoding and content classification.
 pub fn default_pipeline() -> Pipeline {
     let builder = Pipeline::builder()
@@ -82,6 +84,8 @@ pub fn default_pipeline() -> Pipeline {
         .preprocessor(modules::Downscale::new(2));
     #[cfg(feature = "qr")]
     let builder = builder.reader(modules::QrReader);
+    #[cfg(feature = "datamatrix")]
+    let builder = builder.reader(modules::DataMatrixReader);
     #[cfg(feature = "linear")]
     let builder = builder.reader(modules::LinearReader);
     builder

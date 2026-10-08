@@ -7,15 +7,16 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-default = ["qr", "linear"]
+default = ["qr", "linear", "datamatrix"]
 qr = ["dep:breader-qr"]
 linear = ["dep:breader-linear"]
+datamatrix = ["dep:breader-datamatrix"]
 image = ["dep:image"]
 # Multi-threaded kernels and scanning on rayon's global pool; results are
 # identical to the single-threaded build. To bound the threads, run the scan
 # inside `rayon::ThreadPoolBuilder::new().num_threads(n).build()?.install(..)`
 # or set `RAYON_NUM_THREADS`.
-rayon = ["breader-imgproc/rayon", "breader-linear?/rayon", "breader-qr?/rayon"]
+rayon = ["breader-imgproc/rayon", "breader-linear?/rayon", "breader-qr?/rayon", "breader-datamatrix?/rayon"]
 
 [dependencies]
 breader-core.workspace = true
@@ -23,6 +24,7 @@ breader-imgproc.workspace = true
 breader-content.workspace = true
 breader-qr = { workspace = true, optional = true }
 breader-linear = { workspace = true, optional = true }
+breader-datamatrix = { workspace = true, optional = true }
 image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg"] }
 
 [dev-dependencies]

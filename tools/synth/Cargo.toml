@@ -11,6 +11,7 @@ name = "synth"
 path = "src/main.rs"
 
 [dependencies]
+datamatrix = { version = "0.3", default-features = false }
 barcoders = { version = "2", default-features = false, features = ["std"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 imageproc = { version = "0.27", default-features = false }

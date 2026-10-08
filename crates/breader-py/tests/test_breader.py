@@ -155,7 +155,7 @@ def test_bad_input_raises_value_error(image, kwargs):
 def test_default_options():
     o = Reader().options
     assert o["effort"] == "balanced" and o["escalation"] is None
-    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf"]
+    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix"]
     assert o["itf_lengths"] == (14,) and o["min_line_agreement"] == 2
     o["effort"] = "x"
     assert Reader().options["effort"] == "balanced"
@@ -348,5 +348,29 @@ def test_synth_clean_matches_rust_bench():
                 read += 1
                 found.remove(w)
         fp += len(found)
-    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1, 20 images): 20/20, 0 false positives.
-    assert (read, expected, fp) == (20, 20, 0)
+    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 23/23 (20 images plus 3 with Data Matrix), 0 false positives.
+    assert (read, expected, fp) == (23, 23, 0)
+
+
+def test_datamatrix_meta_on_synth():
+    from PIL import Image
+
+    base = SYNTH_DIR / "datamatrix"
+    if not (base / "annotations.json").exists():
+        pytest.skip("synthetic dataset not generated (set BREADER_SYNTH_DIR)")
+    ann = json.loads((base / "annotations.json").read_text())
+    r = Reader()
+    seen = 0
+    for img in ann["images"][:8]:
+        want = {b["text"] for b in img["barcodes"]}
+        for s in r.scan(np.asarray(Image.open(base / img["file"]).convert("L"))):
+            assert s.symbology == "datamatrix"
+            assert s.text in want
+            assert s.aim_id.startswith("]d")
+            m = s.meta
+            assert m["kind"] == "datamatrix"
+            assert m["rows"] >= 8 and m["cols"] >= 10
+            assert isinstance(m["mirrored"], bool) and m["errors_corrected"] >= 0
+            assert m["structured_append"] is None
+            seen += 1
+    assert seen >= 6

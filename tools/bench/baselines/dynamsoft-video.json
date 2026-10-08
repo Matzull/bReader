@@ -88,35 +88,35 @@
     },
     "batch_datamatrix_1080p": {
       "balanced": {
-        "expected": 0,
-        "read": 0,
+        "expected": 100,
+        "read": 87,
         "false_positives": 0
       },
       "fast": {
-        "expected": 0,
-        "read": 0,
+        "expected": 100,
+        "read": 66,
         "false_positives": 0
       },
       "tracker": {
-        "expected": 0,
-        "read": 0,
+        "expected": 100,
+        "read": 92,
         "false_positives": 0
       }
     },
     "batch_inverted_datamatrix_1080p": {
       "balanced": {
-        "expected": 0,
-        "read": 0,
+        "expected": 102,
+        "read": 96,
         "false_positives": 0
       },
       "fast": {
-        "expected": 0,
+        "expected": 102,
         "read": 0,
         "false_positives": 0
       },
       "tracker": {
-        "expected": 0,
-        "read": 0,
+        "expected": 102,
+        "read": 96,
         "false_positives": 0
       }
     },
@@ -190,18 +190,18 @@
     },
     "wide_to_close_datamatrix_1080p": {
       "balanced": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "fast": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "tracker": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       }
     }

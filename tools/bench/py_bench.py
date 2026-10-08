@@ -24,7 +24,7 @@ try:
 except ImportError:
     breader = None
 
-SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF"]
+SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix"]
 
 ALIASES = {
     "QRCODE": "QR Code",
@@ -38,6 +38,7 @@ ALIASES = {
     "CODE39EXTENDED": "Code 39",
     "ITF": "ITF",
     "INTERLEAVED2OF5": "ITF",
+    "DATAMATRIX": "Data Matrix",
 }
 
 BR_FORMATS = {
@@ -49,6 +50,7 @@ BR_FORMATS = {
     "code128": "Code 128",
     "code39": "Code 39",
     "itf": "ITF",
+    "datamatrix": "Data Matrix",
 }
 
 
@@ -71,6 +73,7 @@ class ZxingEngine:
             bf.Code39Std: "Code 39",
             bf.ITF: "ITF",
             bf.ITF14: "ITF",
+            bf.DataMatrix: "Data Matrix",
         }
 
     def read(self, gray):
@@ -219,6 +222,13 @@ def apply_overrides(ann, dir_name, overrides):
     for entry in overrides.get(dir_name, []):
         for img in ann["images"]:
             if img["file"] != entry["file"]:
+                continue
+            if "from" not in entry:
+                # An entry without "from" adds a label the dataset is missing.
+                to = entry["to"]
+                if not any(b["format"] == to["format"] and b["text"] == to["text"] for b in img["barcodes"]):
+                    img["barcodes"].append({"format": to["format"], "text": to["text"], "points": entry.get("points", [])})
+                    applied += 1
                 continue
             for b in img["barcodes"]:
                 if b["format"] == entry["from"]["format"] and b["text"] == entry["from"]["text"]:

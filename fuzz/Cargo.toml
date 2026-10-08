@@ -15,6 +15,7 @@ breader-content = { path = "../crates/breader-content" }
 breader-ecc = { path = "../crates/breader-ecc" }
 breader-linear = { path = "../crates/breader-linear" }
 breader-qr = { path = "../crates/breader-qr" }
+breader-datamatrix = { path = "../crates/breader-datamatrix" }
 
 [workspace]
 
@@ -73,6 +74,13 @@ bench = false
 [[bin]]
 name = "content_pipeline"
 path = "fuzz_targets/content_pipeline.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dm_grid"
+path = "fuzz_targets/dm_grid.rs"
 test = false
 doc = false
 bench = false

@@ -24,8 +24,13 @@ fn split(line: &str) -> Option<(&str, String)> {
             .replace("\"\"", "\""),
         None => rest.to_owned(),
     };
-    // Some labels carry literal quotes around the payload.
-    Some((fmt, value.trim_matches('"').to_owned()))
+    // Some labels carry literal (straight or typographic) quotes around the payload.
+    Some((
+        fmt,
+        value
+            .trim_matches(|c| matches!(c, '"' | '\u{201c}' | '\u{201d}'))
+            .to_owned(),
+    ))
 }
 
 pub fn parse(text: &str) -> Expected {
@@ -75,10 +80,11 @@ mod tests {
     #[test]
     fn parses_bom_nbsp_quotes_and_unsupported() {
         let e = parse(
-            "\u{feff}Format,Value\nEAN_13,\u{a0}2004567540106\nEAN_13,\"\"\"3605972842046\"\"\"\nDATAMATRIX\u{a0},x\nUPC_A,\"123457347\"",
+            "\u{feff}Format,Value\nEAN_13,\u{a0}2004567540106\nEAN_13,\"\"\"3605972842046\"\"\"\nPDF417\u{a0},x\nDATAMATRIX\u{a0},y\nUPC_A,\"123457347\"\nDataMatrix,\u{201c}ae-1534\u{201d}",
         );
         assert_eq!(e.unsupported, 1);
-        assert_eq!(e.codes.len(), 3);
+        assert_eq!(e.codes.len(), 5);
+        assert!(e.codes.keys().any(|k| k.1 == b"ae-1534"));
         assert!(e.codes.keys().any(|k| k.1 == b"2004567540106"));
         assert!(e.codes.keys().any(|k| k.1 == b"3605972842046"));
     }

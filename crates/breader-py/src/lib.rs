@@ -30,6 +30,7 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::Code128 => "code128",
         Symbology::Code39 => "code39",
         Symbology::Itf => "itf",
+        Symbology::DataMatrix => "datamatrix",
         _ => s.name(),
     }
 }
@@ -240,7 +241,7 @@ impl Symbol {
         self.quality
     }
 
-    /// Symbology specific details as a dict with a "kind" key ("qr" or "linear").
+    /// Symbology specific details as a dict with a "kind" key ("qr", "linear" or "datamatrix").
     #[getter]
     fn meta<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let d = PyDict::new(py);
@@ -259,6 +260,15 @@ impl Symbol {
                 d.set_item("addon", m.addon.as_deref())?;
                 d.set_item("checksum_verified", m.checksum_verified)?;
                 d.set_item("lines_agreeing", m.lines_agreeing)?;
+            }
+            SymbolMeta::DataMatrix(m) => {
+                d.set_item("kind", "datamatrix")?;
+                d.set_item("rows", m.rows)?;
+                d.set_item("cols", m.cols)?;
+                d.set_item("errors_corrected", m.errors_corrected)?;
+                d.set_item("mirrored", m.mirrored)?;
+                d.set_item("eci", m.eci.clone())?;
+                d.set_item("structured_append", m.structured_append)?;
             }
             _ => d.set_item("kind", "unknown")?,
         }

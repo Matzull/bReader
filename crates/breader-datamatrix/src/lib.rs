@@ -2,11 +2,18 @@
 
 #![forbid(unsafe_code)]
 
+mod check;
 mod decode;
 mod detect;
+#[doc(hidden)]
+pub mod fuzzing;
 mod place;
+mod plane;
 mod reader;
 mod sample;
 mod spec;
 
 pub use reader::DataMatrixReader;
+
+#[cfg(test)]
+mod testutil;

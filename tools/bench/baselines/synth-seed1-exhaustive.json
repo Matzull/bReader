@@ -13,6 +13,11 @@
         "read": 1,
         "false_positives": 0
       },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "EAN-13": {
         "expected": 3,
         "read": 2,
@@ -50,6 +55,11 @@
         "read": 2,
         "false_positives": 0
       },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "EAN-13": {
         "expected": 3,
         "read": 3,
@@ -76,6 +86,13 @@
         "false_positives": 0
       }
     },
+    "datamatrix": {
+      "Data Matrix": {
+        "expected": 20,
+        "read": 19,
+        "false_positives": 0
+      }
+    },
     "illumination": {
       "Code 128": {
         "expected": 2,
@@ -85,6 +102,11 @@
       "Code 39": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "EAN-13": {
@@ -124,6 +146,11 @@
         "read": 2,
         "false_positives": 0
       },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "EAN-13": {
         "expected": 3,
         "read": 3,
@@ -161,6 +188,11 @@
         "read": 2,
         "false_positives": 0
       },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "EAN-13": {
         "expected": 3,
         "read": 3,
@@ -196,6 +228,11 @@
       "Code 39": {
         "expected": 6,
         "read": 6,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 14,
+        "read": 14,
         "false_positives": 0
       },
       "EAN-13": {
@@ -236,6 +273,11 @@
         "read": 2,
         "false_positives": 0
       },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "EAN-13": {
         "expected": 3,
         "read": 3,
@@ -273,6 +315,11 @@
         "read": 2,
         "false_positives": 0
       },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "EAN-13": {
         "expected": 3,
         "read": 3,
@@ -308,6 +355,11 @@
       "Code 39": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "EAN-13": {

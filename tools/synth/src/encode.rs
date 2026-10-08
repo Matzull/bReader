@@ -3,6 +3,7 @@ use barcoders::sym::code128::Code128;
 use barcoders::sym::ean8::EAN8;
 use barcoders::sym::ean13::EAN13;
 use barcoders::sym::tf::TF;
+use datamatrix::{DataMatrix, SymbolList, SymbolSize};
 use qrcode::QrCode;
 use qrcode::types::{Color, EcLevel, Version};
 use rand::Rng;
@@ -17,6 +18,7 @@ pub enum Sym {
     Code128,
     Code39,
     Itf,
+    DataMatrix,
 }
 
 impl Sym {
@@ -52,6 +54,7 @@ impl Sym {
             Sym::Code128 => "CODE_128",
             Sym::Code39 => "CODE_39",
             Sym::Itf => "ITF",
+            Sym::DataMatrix => "DATAMATRIX",
         }
     }
 }
@@ -230,14 +233,90 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             let t = to_text(&d);
             (t.clone(), TF::interleaved(&t).expect(fail).encode())
         }
-        Sym::Qr => unreachable!("QR is not linear"),
+        Sym::Qr | Sym::DataMatrix => unreachable!("not linear"),
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
 }
 
+/// Data Matrix shape family of the `datamatrix` class and of the extra images.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DmShape {
+    Square,
+    Rect,
+    Dmre,
+}
+
+const DM_RECT: [SymbolSize; 6] = [
+    SymbolSize::Rect8x18,
+    SymbolSize::Rect8x32,
+    SymbolSize::Rect12x26,
+    SymbolSize::Rect12x36,
+    SymbolSize::Rect16x36,
+    SymbolSize::Rect16x48,
+];
+
+const DM_DMRE: [SymbolSize; 18] = [
+    SymbolSize::Rect8x48,
+    SymbolSize::Rect8x64,
+    SymbolSize::Rect8x80,
+    SymbolSize::Rect8x96,
+    SymbolSize::Rect8x120,
+    SymbolSize::Rect8x144,
+    SymbolSize::Rect12x64,
+    SymbolSize::Rect12x88,
+    SymbolSize::Rect16x64,
+    SymbolSize::Rect20x36,
+    SymbolSize::Rect20x44,
+    SymbolSize::Rect20x64,
+    SymbolSize::Rect22x48,
+    SymbolSize::Rect24x48,
+    SymbolSize::Rect24x64,
+    SymbolSize::Rect26x40,
+    SymbolSize::Rect26x48,
+    SymbolSize::Rect26x64,
+];
+
+fn dm_payload(rng: &mut ChaCha8Rng, len: usize) -> String {
+    match rng.random_range(0..3u8) {
+        0 => to_text(&digits(rng, len)),
+        1 => pick_string(rng, &pool("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ -./"), len),
+        _ => pick_string(rng, &pool(BYTE_ASCII), len),
+    }
+}
+
+pub fn encode_dm(rng: &mut ChaCha8Rng, shape: DmShape) -> Encoded {
+    let (list, max_len) = match shape {
+        DmShape::Square => (SymbolList::default().enforce_square(), 40usize),
+        DmShape::Rect => (SymbolList::with_whitelist(DM_RECT), 24),
+        DmShape::Dmre => (SymbolList::with_whitelist(DM_DMRE), 40),
+    };
+    let mut len = rng.random_range(4..=max_len);
+    loop {
+        let text = dm_payload(rng, len);
+        if !text.trim().is_empty()
+            && text.trim() == text
+            && let Ok(dm) = DataMatrix::encode(text.as_bytes(), list.clone())
+        {
+            let bm = dm.bitmap();
+            return Encoded {
+                text,
+                format: Sym::DataMatrix.label(),
+                modules: bm.bits().to_vec(),
+                cols: bm.width(),
+                rows: bm.height(),
+                cell_h: 1.0,
+                qz_x: 2.0,
+                qz_y: 2.0,
+            };
+        }
+        len = (len * 4 / 5).max(1);
+    }
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
+        Sym::DataMatrix => encode_dm(rng, DmShape::Square),
         Sym::Qr => encode_qr(rng),
         _ => encode_linear(rng, sym),
     }
@@ -271,7 +350,7 @@ mod tests {
     fn all_symbologies_encode_many_times() {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         for _ in 0..200 {
-            for s in Sym::ALL {
+            for s in Sym::ALL.into_iter().chain([Sym::DataMatrix]) {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);
                 assert!(!e.text.is_empty());

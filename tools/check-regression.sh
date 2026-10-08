@@ -2,7 +2,7 @@
 # Runs the regression gate against the versioned baselines in tools/bench/baselines.
 # Usage: tools/check-regression.sh [--dynamsoft]
 #   Synthetic sets (data/synth seed 1, data/synth-2024 seed 2024) are generated when missing.
-#   --dynamsoft also gates data/dynamsoft/challenging-images and the videos (needs
+#   --dynamsoft also gates data/dynamsoft/challenging-images, skewed-datamatrix and the videos (needs
 #   tools/fetch-datasets.sh and ffmpeg).
 set -euo pipefail
 
@@ -31,6 +31,9 @@ for effort in fast balanced exhaustive; do
         echo "=== dynamsoft challenging-images, $effort"
         gate "$bin/bench" data/dynamsoft/challenging-images --effort "$effort" \
             --check "$base/dynamsoft-challenging-$effort.json"
+        echo "=== dynamsoft skewed-datamatrix, $effort"
+        gate "$bin/bench" data/dynamsoft/skewed-datamatrix --effort "$effort" \
+            --check "$base/dynamsoft-skewed-$effort.json"
     fi
 done
 if [ "$dynamsoft" = 1 ]; then

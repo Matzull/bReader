@@ -91,3 +91,23 @@ zxing-cpp in the same session on challenging-images: 341/392 = 87.0 %, 1 FP, 23.
 | Read rate, synth | ≥ 82 % overall, ≥ zxing-cpp in every class |
 | Latency, Balanced | p50 ≤ zxing-cpp on both datasets |
 | Latency, Fast, 1080p frame | p50 ≤ 10 ms |
+
+## Data Matrix (2026-10-08)
+
+Release build, same machine. Balanced unless noted; false positives 0 everywhere. zxing-cpp 3.1.1 with default options.
+
+| Set | Expected | breader Fast | breader Balanced | breader Exhaustive | zxing-cpp |
+|---|---|---|---|---|---|
+| challenging-images | 50 | 40 | 44 | 44 | 44 |
+| skewed-datamatrix | 1323 | 714 | 1000 | 1010 | 861 |
+| synth seed 1 (all classes) | 58 | | 57 | | 56 |
+| synth seed 2024 (all classes) | 137 | | 136 | | 135 |
+| video `batch_datamatrix` | 100 | 66 | 87 | | |
+| video `batch_inverted_datamatrix` | 102 | 0 | 96 | | |
+| video `wide_to_close_datamatrix` | 2 | 2 | 2 | | |
+
+Fast searches dark-on-light symbols only. Latency (challenging-images p50 / p95 ms): Fast 4.5 / 31, Balanced 16.4 / 118, Exhaustive 37.8 / 272; without the Data Matrix reader Fast is 2.2 / 25 and Balanced 9.5 / 88. skewed-datamatrix p50: Fast 32, Balanced 156, Exhaustive 285, zxing-cpp 282.
+
+Ground truth: `skewed-datamatrix` leaves some clearly visible symbols unlabeled (each read is a valid `case-N` payload next to its printed caption, far from every annotation). Ten of them are added through `tools/bench/gt-overrides.json` (an entry without `from` adds a label), each checked on a crop of the image. The `wide_to_close_datamatrix` video label is wrapped in typographic quotes, which the video-bench CSV reader now strips.
+
+Misses on challenging-images (6 of 50): two cans whose symbols sit inside a dark ring that merges with them (`datamatrix-2`), two dot-peened symbols on rough metal (`datamatrix-3`), one blurred 14x14 with clock tracks that do not alternate cleanly (`healthcare-2`), and a symbol of about 2.7 px modules (`tiny-barcodes-4`).

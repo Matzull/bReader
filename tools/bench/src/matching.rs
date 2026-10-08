@@ -88,12 +88,25 @@ pub fn score(found: &[Decoded], expected: &[Expected], stats: &mut Stats) {
         if let Some(i) = (0..found.len()).find(|&i| !used[i] && found_keys[i] == *key) {
             used[i] = true;
             entry.read += 1;
+        } else if std::env::var_os("BENCH_SHOW_FP").is_some() {
+            eprintln!(
+                "missed: {} {:?}",
+                sym.name(),
+                String::from_utf8_lossy(&key.1)
+            );
         }
     }
 
     for (i, key) in found_keys.iter().enumerate() {
         if used[i] || exp_keys.iter().flatten().any(|e| e == key) {
             continue;
+        }
+        if std::env::var_os("BENCH_SHOW_FP").is_some() {
+            eprintln!(
+                "false positive: {} {:?}",
+                found[i].0.name(),
+                String::from_utf8_lossy(&key.1)
+            );
         }
         stats
             .per_symbology

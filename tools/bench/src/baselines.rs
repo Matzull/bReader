@@ -17,6 +17,7 @@ fn map_rxing(format: &BarcodeFormat) -> Option<Symbology> {
         BarcodeFormat::CODE_128 => Some(Symbology::Code128),
         BarcodeFormat::CODE_39 => Some(Symbology::Code39),
         BarcodeFormat::ITF => Some(Symbology::Itf),
+        BarcodeFormat::DATA_MATRIX => Some(Symbology::DataMatrix),
         _ => None,
     }
 }

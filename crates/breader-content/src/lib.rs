@@ -223,6 +223,14 @@ mod tests {
             let c = full_pipeline(with(Symbology::Qr, b"17250131", aim));
             assert_eq!(c.content, Content::Gs1(vec![gs1("17", "250131")]));
         }
+        for aim in [b"]d2", b"]d5"] {
+            let c = full_pipeline(with(Symbology::DataMatrix, b"17250131", aim));
+            assert_eq!(c.content, Content::Gs1(vec![gs1("17", "250131")]));
+        }
+        for aim in [b"]d1", b"]d3"] {
+            let c = full_pipeline(with(Symbology::DataMatrix, b"17250131", aim));
+            assert_eq!(c.content, Content::Text);
+        }
         let c = full_pipeline(with(Symbology::Qr, b"17250131", b"]Q1"));
         assert_eq!(c.content, Content::Text);
     }

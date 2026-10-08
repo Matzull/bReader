@@ -13,6 +13,11 @@
         "read": 1,
         "false_positives": 0
       },
+      "Data Matrix": {
+        "expected": 50,
+        "read": 44,
+        "false_positives": 0
+      },
       "EAN-13": {
         "expected": 18,
         "read": 17,

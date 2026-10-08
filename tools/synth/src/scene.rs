@@ -7,7 +7,7 @@ use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use crate::encode::{self, Sym};
+use crate::encode::{self, DmShape, Sym};
 use crate::negative;
 use crate::render::{self, Geometry, Pt, Rect, add_noise, uniform};
 
@@ -23,6 +23,7 @@ pub enum Class {
     Noise,
     Multi,
     Negative,
+    Datamatrix,
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +43,7 @@ struct Config {
 }
 
 impl Class {
-    pub const ALL: [Class; 10] = [
+    pub const ALL: [Class; 11] = [
         Class::Clean,
         Class::Rotated,
         Class::Perspective,
@@ -53,6 +54,7 @@ impl Class {
         Class::Noise,
         Class::Multi,
         Class::Negative,
+        Class::Datamatrix,
     ];
 
     pub fn name(self) -> &'static str {
@@ -67,6 +69,7 @@ impl Class {
             Class::Noise => "noise",
             Class::Multi => "multi",
             Class::Negative => "negative",
+            Class::Datamatrix => "datamatrix",
         }
     }
 
@@ -86,6 +89,7 @@ impl Class {
             Class::Noise => ((5.0, 8.0), (3.0, 4.0), (-10.0, 10.0), (0.0, 0.0)),
             Class::Multi => ((3.0, 5.0), (2.0, 3.5), (-20.0, 20.0), (0.0, 0.25)),
             Class::Negative => ((3.0, 8.0), (2.0, 4.0), (0.0, 360.0), (0.0, 0.3)),
+            Class::Datamatrix => ((3.0, 7.0), (2.0, 4.0), (-30.0, 30.0), (0.0, 0.25)),
         };
         Config {
             qr_module,
@@ -111,7 +115,7 @@ pub fn image_rng(seed: u64, class: Class, index: usize) -> ChaCha8Rng {
 
 fn geometry(cfg: &Config, sym: Sym, rng: &mut ChaCha8Rng) -> Geometry {
     let module_px = match sym {
-        Sym::Qr => uniform(rng, cfg.qr_module),
+        Sym::Qr | Sym::DataMatrix => uniform(rng, cfg.qr_module),
         _ => uniform(rng, cfg.lin_module),
     };
     Geometry {
@@ -137,10 +141,17 @@ fn rect_of(w: u32, h: u32) -> Rect {
     }
 }
 
-fn single(class: Class, index: usize, rng: &mut ChaCha8Rng) -> (GrayImage, Vec<Annotation>) {
+fn single(
+    class: Class,
+    sym: Sym,
+    shape: Option<DmShape>,
+    rng: &mut ChaCha8Rng,
+) -> (GrayImage, Vec<Annotation>) {
     let cfg = class.config();
-    let sym = Sym::CYCLE[index % Sym::CYCLE.len()];
-    let enc = encode::encode(rng, sym);
+    let enc = match shape {
+        Some(shape) => encode::encode_dm(rng, shape),
+        None => encode::encode(rng, sym),
+    };
     let light: u8 = rng.random_range(220..=255);
     let dark: u8 = rng.random_range(0..=45);
     let code = render::rasterize(&enc, dark, light);
@@ -165,7 +176,7 @@ fn single(class: Class, index: usize, rng: &mut ChaCha8Rng) -> (GrayImage, Vec<A
     (canvas, vec![ann])
 }
 
-fn multi(rng: &mut ChaCha8Rng) -> (GrayImage, Vec<Annotation>) {
+fn multi(rng: &mut ChaCha8Rng, with_dm: bool) -> (GrayImage, Vec<Annotation>) {
     let cfg = Class::Multi.config();
     let n = rng.random_range(2..=5usize);
     let (cols, rows) = match n {
@@ -183,6 +194,7 @@ fn multi(rng: &mut ChaCha8Rng) -> (GrayImage, Vec<Annotation>) {
     let mut anns = Vec::new();
     for &cell in cells.iter().take(n) {
         let sym = Sym::ALL[rng.random_range(0..Sym::ALL.len())];
+        let sym = if with_dm { Sym::DataMatrix } else { sym };
         let enc = encode::encode(rng, sym);
         let dark: u8 = rng.random_range(0..=45);
         let code = render::rasterize(&enc, dark, light);
@@ -220,29 +232,68 @@ fn jpeg_roundtrip(img: &GrayImage, quality: u8) -> GrayImage {
         .into_luma8()
 }
 
+/// Applies the class-specific degradation to a single-symbol image.
+fn degrade(class: Class, img: &mut GrayImage, rng: &mut ChaCha8Rng) {
+    match class {
+        Class::Blur => {
+            let sigma = rng.random_range(0.5..2.5) as f32;
+            *img = gaussian_blur_f32(img, sigma);
+        }
+        Class::Illumination => render::illuminate(img, rng),
+        Class::Inverted => render::invert(img),
+        Class::Noise => {
+            let sigma = rng.random_range(6.0..18.0);
+            add_noise(img, sigma, rng);
+            *img = jpeg_roundtrip(img, rng.random_range(30..=70));
+        }
+        _ => {}
+    }
+}
+
 pub fn generate(class: Class, index: usize, seed: u64) -> (GrayImage, Vec<Annotation>) {
     let mut rng = image_rng(seed, class, index);
     let rng = &mut rng;
     match class {
         Class::Negative => (negative::generate(index, rng), Vec::new()),
-        Class::Multi => multi(rng),
-        _ => {
-            let (mut img, anns) = single(class, index, rng);
-            match class {
-                Class::Blur => {
-                    let sigma = rng.random_range(0.5..2.5) as f32;
-                    img = gaussian_blur_f32(&img, sigma);
-                }
-                Class::Illumination => render::illuminate(&mut img, rng),
-                Class::Inverted => render::invert(&mut img),
-                Class::Noise => {
-                    let sigma = rng.random_range(6.0..18.0);
-                    add_noise(&mut img, sigma, rng);
-                    img = jpeg_roundtrip(&img, rng.random_range(30..=70));
-                }
-                _ => {}
+        Class::Multi => multi(rng, false),
+        Class::Datamatrix => {
+            let shape = [
+                DmShape::Square,
+                DmShape::Square,
+                DmShape::Rect,
+                DmShape::Dmre,
+            ][index % 4];
+            let (mut img, anns) = single(class, Sym::DataMatrix, Some(shape), rng);
+            if index % 5 == 4 {
+                render::invert(&mut img);
+            }
+            if index % 3 == 2 {
+                let sigma = rng.random_range(0.5..1.5) as f32;
+                img = gaussian_blur_f32(&img, sigma);
             }
             (img, anns)
+        }
+        _ => {
+            let sym = Sym::CYCLE[index % Sym::CYCLE.len()];
+            let (mut img, anns) = single(class, sym, None, rng);
+            degrade(class, &mut img, rng);
+            (img, anns)
+        }
+    }
+}
+
+/// Additional Data Matrix images of a class, generated after its regular
+/// images so the regular ones stay byte-identical to the pre-Data-Matrix sets.
+pub fn generate_extra(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Vec<Annotation>)> {
+    let mut rng = image_rng(seed.wrapping_add(0xD47A_5EED), class, j);
+    let rng = &mut rng;
+    match class {
+        Class::Negative | Class::Datamatrix => None,
+        Class::Multi => Some(multi(rng, true)),
+        _ => {
+            let (mut img, anns) = single(class, Sym::DataMatrix, Some(DmShape::Square), rng);
+            degrade(class, &mut img, rng);
+            Some((img, anns))
         }
     }
 }

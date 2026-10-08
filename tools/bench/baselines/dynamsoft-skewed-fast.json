@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "effort": "fast",
+  "groups": {
+    "skewed-datamatrix": {
+      "Data Matrix": {
+        "expected": 1323,
+        "read": 714,
+        "false_positives": 0
+      }
+    }
+  }
+}

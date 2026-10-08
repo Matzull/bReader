@@ -233,6 +233,9 @@ fn run_dataset(engine: &mut dyn Engine, ds: &Dataset) -> Stats {
             stats.errors += 1;
             Vec::new()
         });
+        if std::env::var_os("BENCH_SHOW_FP").is_some() {
+            eprintln!("image {}", path.display());
+        }
         matching::score(&found, expected, &mut stats);
     }
     stats

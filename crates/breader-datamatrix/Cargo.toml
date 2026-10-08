@@ -15,3 +15,7 @@ breader-ecc.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+datamatrix = { version = "0.3", default-features = false }
+breader-imgproc.workspace = true
