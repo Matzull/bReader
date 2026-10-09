@@ -88,8 +88,8 @@ fn symbology_key(name: &str) -> String {
 
 /// Maps a dataset's format name to the library symbology. `None` means the symbology is not
 /// supported (yet): such labels are counted as unsupported and excluded from the read rates
-/// (today PDF417 and MaxiCode). Supporting a new symbology only needs one more arm here,
-/// e.g. `"PDF417" => Some(Symbology::Pdf417)`; the test
+/// (today MaxiCode, Aztec and others). Supporting a new symbology only needs one more arm
+/// here; the test
 /// `every_library_symbology_has_a_mapping` fails until it is added.
 pub fn map_symbology(name: &str) -> Option<Symbology> {
     match symbology_key(name).as_str() {
@@ -102,6 +102,7 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "CODE39" | "CODE39EXTENDED" => Some(Symbology::Code39),
         "ITF" | "INTERLEAVED2OF5" => Some(Symbology::Itf),
         "DATAMATRIX" => Some(Symbology::DataMatrix),
+        "PDF417" => Some(Symbology::Pdf417),
         _ => None,
     }
 }
@@ -397,7 +398,7 @@ mod tests {
           {"text": "hello", "format": "QR_CODE", "points": [[1,2],[3,4],[5,6],[7,8]]}
         ]},
         {"file": "b.jpg", "barcodes": [
-          {"text": "ab12", "format": "PDF417", "points": []},
+          {"text": "ab12", "format": "MAXICODE", "points": []},
           {"text": "dm", "format": "DATAMATRIX", "points": []}
         ]}
       ]
@@ -413,7 +414,7 @@ mod tests {
         assert_eq!(a[0].data, b"0328056306");
         assert_eq!(a[1].symbology, Some(Symbology::Qr));
         assert_eq!(map["b.jpg"][0].symbology, None);
-        assert_eq!(map["b.jpg"][0].label, "PDF417");
+        assert_eq!(map["b.jpg"][0].label, "MAXICODE");
         assert_eq!(map["b.jpg"][1].symbology, Some(Symbology::DataMatrix));
     }
 

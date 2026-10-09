@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn parses_bom_nbsp_quotes_and_unsupported() {
         let e = parse(
-            "\u{feff}Format,Value\nEAN_13,\u{a0}2004567540106\nEAN_13,\"\"\"3605972842046\"\"\"\nPDF417\u{a0},x\nDATAMATRIX\u{a0},y\nUPC_A,\"123457347\"\nDataMatrix,\u{201c}ae-1534\u{201d}",
+            "\u{feff}Format,Value\nEAN_13,\u{a0}2004567540106\nEAN_13,\"\"\"3605972842046\"\"\"\nMAXICODE\u{a0},x\nDATAMATRIX\u{a0},y\nUPC_A,\"123457347\"\nDataMatrix,\u{201c}ae-1534\u{201d}",
         );
         assert_eq!(e.unsupported, 1);
         assert_eq!(e.codes.len(), 5);
