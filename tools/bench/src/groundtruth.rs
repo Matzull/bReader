@@ -103,6 +103,7 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "ITF" | "INTERLEAVED2OF5" => Some(Symbology::Itf),
         "DATAMATRIX" => Some(Symbology::DataMatrix),
         "PDF417" => Some(Symbology::Pdf417),
+        "AZTEC" | "AZTECCODE" => Some(Symbology::Aztec),
         _ => None,
     }
 }
@@ -455,7 +456,7 @@ mod tests {
 
     #[test]
     fn unsupported_symbologies_have_no_symbology() {
-        for n in ["MAXICODE", "AZTEC"] {
+        for n in ["MAXICODE", "MICROPDF417"] {
             assert_eq!(map_symbology(n), None, "{n}");
         }
         // PDF417 is unsupported only until the library has it; its arm in `map_symbology`

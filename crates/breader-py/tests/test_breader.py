@@ -155,7 +155,7 @@ def test_bad_input_raises_value_error(image, kwargs):
 def test_default_options():
     o = Reader().options
     assert o["effort"] == "balanced" and o["escalation"] is None and o["upscale_max_side"] is None
-    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417"]
+    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec"]
     assert o["itf_lengths"] == (14,) and o["min_line_agreement"] == 2
     o["effort"] = "x"
     assert Reader().options["effort"] == "balanced"

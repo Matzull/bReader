@@ -148,3 +148,15 @@ Product-level defaults and scope are owner decisions ([contributing](contributin
 
 2026-10-09. **No label is added for the PDF417 video.** Neither breader nor zxing-cpp reads any frame of `batch_rotated_small_pdf417_1080p` (modules far below a pixel), so no value can be verified; the video gate keeps 0 expected and 0 reads. `video-bench` gets an `ADDITIONS` list (video, format, payload, reason) for verified labels. Why: labels follow the images, not the engines.
 
+## D-030
+
+2026-10-09. **Aztec decoding choices** (ISO/IEC 24778, `breader-aztec` decode side). Generic `Gf2m<Q>` Reed-Solomon in `breader-ecc` for GF(16) to GF(4096) (first root alpha^1, errors and erasures reported separately, `Gf256` and `Gf929` unchanged); the guard is `2 * errors + erasures <= ec - reserve` with reserve 2 up to 7 check words and 1 up to 12, applied to the mode message too (so at most 1 correction compact, 2 full-range); only *data* codewords of all zeros or all ones are erasures (check codewords are not stuffed); at least 3 check codewords; a P/S shift followed by a latch or the Punct U/L code, a reserved FLG(7) and a message without data bytes are rejected; ECI digits are 4-bit Digit codes whatever the mode; default charset ISO/IEC 8859-1 (`Charset::Latin1`); the module grid is decoded only if the bullseye and orientation marks match (80 % and 10 of 12). Why: reject rather than guess; conventions confirmed against rxing's encoder. See [aztec](symbologies/aztec.md#as-built-decoding).
+
+## D-031
+
+2026-10-09. **Aztec Structured Append is not parsed; `AztecMeta` has no structured append field.** The sequence header lives in the Upper-mode data and nothing flags it, so recognizing it by shape would corrupt ordinary messages. Open: settle against the standard text before the reader ships, then add the field and the stripping together.
+
+## D-032
+
+2026-10-09. **Aztec AIM identifier and Runes.** `]z0` plain, `]z1` FNC1 first (GS1), `]z2` FNC1 second (one letter or two digits before it), `+3` when an ECI is present, `]zC` for a Rune; a Rune's payload is its value as decimal text and its mode message is XORed with `0xAAAAAAA`. Why: ISO/IEC 24778 as remembered. Open: no independent encoder makes Runes and the modifier table was not available as text, so both need a check against the standard or a reference symbol.
+

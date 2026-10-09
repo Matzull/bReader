@@ -92,6 +92,8 @@ pub enum SymbolMeta {
     DataMatrix(DataMatrixMeta),
     /// PDF417 details.
     Pdf417(Pdf417Meta),
+    /// Aztec Code details.
+    Aztec(AztecMeta),
 }
 
 /// Details of a decoded Data Matrix symbol.
@@ -109,6 +111,30 @@ pub struct DataMatrixMeta {
     pub eci: Vec<u32>,
     /// Structured Append: (position, total, file id) when present; position and total are 1-based.
     pub structured_append: Option<(u8, u8, u16)>,
+}
+
+/// Details of a decoded Aztec Code symbol.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AztecMeta {
+    /// Compact symbol (1 to 4 layers, or an Aztec Rune) rather than full-range.
+    pub compact: bool,
+    /// Number of data layers: 1 to 4 compact, 1 to 32 full-range, 0 for a Rune.
+    pub layers: u8,
+    /// Data codewords of the symbol, padding included (0 for a Rune).
+    pub data_codewords: u16,
+    /// Check codewords of the symbol (0 for a Rune).
+    pub ec_codewords: u16,
+    /// Codewords changed by Reed-Solomon correction that were not erasures,
+    /// mode message included.
+    pub errors_corrected: u32,
+    /// Data codewords that were invalid by construction and recovered as erasures.
+    pub erasures: u32,
+    /// The symbol was read mirrored (transposed).
+    pub mirrored: bool,
+    /// Value 0 to 255 of an Aztec Rune; the payload is its decimal text.
+    pub rune: Option<u8>,
+    /// ECI designators in order of appearance.
+    pub eci: Vec<u32>,
 }
 
 /// Details of a decoded PDF417 symbol.

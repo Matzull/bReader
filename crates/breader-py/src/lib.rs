@@ -32,6 +32,7 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::Itf => "itf",
         Symbology::DataMatrix => "datamatrix",
         Symbology::Pdf417 => "pdf417",
+        Symbology::Aztec => "aztec",
         _ => s.name(),
     }
 }
@@ -242,7 +243,7 @@ impl Symbol {
         self.quality
     }
 
-    /// Symbology specific details as a dict with a "kind" key ("qr", "linear", "datamatrix" or "pdf417").
+    /// Symbology specific details as a dict with a "kind" key ("qr", "linear", "datamatrix", "pdf417" or "aztec").
     #[getter]
     fn meta<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let d = PyDict::new(py);
@@ -296,6 +297,18 @@ impl Symbol {
                     }
                     None => d.set_item("macro", py.None())?,
                 }
+            }
+            SymbolMeta::Aztec(m) => {
+                d.set_item("kind", "aztec")?;
+                d.set_item("compact", m.compact)?;
+                d.set_item("layers", m.layers)?;
+                d.set_item("data_codewords", m.data_codewords)?;
+                d.set_item("ec_codewords", m.ec_codewords)?;
+                d.set_item("errors_corrected", m.errors_corrected)?;
+                d.set_item("erasures", m.erasures)?;
+                d.set_item("mirrored", m.mirrored)?;
+                d.set_item("rune", m.rune)?;
+                d.set_item("eci", m.eci.clone())?;
             }
             _ => d.set_item("kind", "unknown")?,
         }

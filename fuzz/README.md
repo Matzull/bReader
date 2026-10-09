@@ -24,13 +24,15 @@ cargo install cargo-fuzz --locked
 | `charset_decode`   | `charset::decode` for every `Charset`, including arbitrary ECI numbers            |
 | `rs_decode`        | Reed-Solomon `decode` over both fields; a successful decode must yield a codeword |
 | `rs929_decode`     | Reed-Solomon `decode` over GF(929): arbitrary blocks, and valid blocks with injected errors and erasures; a successful decode must yield a codeword and an exact correction count |
+| `rs2m_decode`      | Reed-Solomon `decode` over the five Aztec fields GF(16) to GF(4096): arbitrary blocks, and valid blocks with injected errors and erasures; a successful decode must yield a codeword and an exact correction count |
+| `aztec_grid`       | Aztec module grids (valid and arbitrary sides, transposed), bare high-level bit streams, and valid symbols and Runes built around arbitrary bytes (reaches the text layer) |
 | `pdf417_codewords` | PDF417 codeword matrices: arbitrary rows x columns, and valid symbols built around arbitrary data codewords (reaches the compaction layer) |
 | `pdf417_line` | PDF417 start pattern search, codeword walk and grid solver on arbitrary run widths of one line |
 | `content_pipeline` | `Dedup`, `TextDecoder` and `ContentClassifier` on synthetic symbols with arbitrary segments |
 
 Input layouts are documented at the top of each file in `fuzz_targets/`. The
 internal entry points are exposed through `#[doc(hidden)] pub mod fuzzing` in
-`breader-qr`, `breader-linear`, `breader-datamatrix` and `breader-pdf417`; they are thin wrappers and not public API.
+`breader-qr`, `breader-linear`, `breader-datamatrix`, `breader-pdf417` and `breader-aztec`; they are thin wrappers and not public API.
 
 ## Running
 

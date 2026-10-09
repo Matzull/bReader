@@ -17,7 +17,16 @@ dependencies = [
  "breader-datamatrix",
  "breader-imgproc",
  "breader-linear",
+ "breader-pdf417",
  "breader-qr",
+]
+
+[[package]]
+name = "breader-aztec"
+version = "0.1.0"
+dependencies = [
+ "breader-core",
+ "breader-ecc",
 ]
 
 [[package]]
@@ -49,6 +58,7 @@ name = "breader-fuzz"
 version = "0.0.0"
 dependencies = [
  "breader",
+ "breader-aztec",
  "breader-content",
  "breader-core",
  "breader-datamatrix",
@@ -79,6 +89,7 @@ version = "0.1.0"
 dependencies = [
  "breader-core",
  "breader-ecc",
+ "breader-linear",
 ]
 
 [[package]]

@@ -35,10 +35,11 @@ symbols = reader.scan(raw_bytes, width=640, height=480, format="nv12")
   - Any strides are accepted (`arr[::2, ::2]`, Fortran order, ...). Bad shapes, dtypes or sizes raise `ValueError`.
   - The GIL is released while scanning.
 - `Reader.scan_file(path)`: decode an image file with the Rust `image` crate (PNG and JPEG; for other formats decode with Pillow and use `read`) and scan it. Raises `OSError` on failure.
-- `Symbol`: `symbology` ("qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417"), `data` (bytes), `text` (str or None), `content` ("text", "binary", "url", "gs1", "unparsed"), `gs1` (list of `(AI, value)` or None), `gs1_hri` (e.g. `"(01)09506000134352"` or None), `corners`, `orientation`, `aim_id`, `quality`, `meta`. Symbols compare and hash on `(symbology, data)`.
+- `Symbol`: `symbology` ("qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec"), `data` (bytes), `text` (str or None), `content` ("text", "binary", "url", "gs1", "unparsed"), `gs1` (list of `(AI, value)` or None), `gs1_hri` (e.g. `"(01)09506000134352"` or None), `corners`, `orientation`, `aim_id`, `quality`, `meta`. Symbols compare and hash on `(symbology, data)`.
   - QR `meta`: `kind="qr"`, `version`, `ec_level`, `mask`, `errors_corrected`, `eci`, `mirrored`.
   - 1D `meta`: `kind="linear"`, `addon`, `checksum_verified`, `lines_agreeing`.
   - Data Matrix `meta`: `kind="datamatrix"`, `rows`, `cols`, `errors_corrected`, `mirrored`, `eci`, `structured_append`.
+  - Aztec `meta`: `kind="aztec"`, `compact`, `layers`, `data_codewords`, `ec_codewords`, `errors_corrected`, `erasures`, `mirrored`, `rune` (None, or the Rune value 0 to 255), `eci`.
   - PDF417 `meta`: `kind="pdf417"`, `rows`, `cols`, `ec_level`, `errors_corrected`, `erasures`, `compact`, `macro` (None, or a dict with `segment_index`, `file_id`, `last_segment`, `file_name`, `segment_count`, `timestamp`, `sender`, `addressee`, `file_size`, `checksum`).
 
 ## Options

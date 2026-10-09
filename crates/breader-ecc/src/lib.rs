@@ -1,4 +1,5 @@
-//! Reed-Solomon error correction over GF(256) and, for PDF417, GF(929).
+//! Reed-Solomon error correction over GF(256), the binary extension fields of
+//! Aztec Code (GF(16) to GF(4096)) and, for PDF417, GF(929).
 //!
 //! Block layout: `block[0]` is the highest-degree coefficient; the last
 //! `ec_len` symbols are check symbols. The code's generator polynomial has
@@ -6,7 +7,9 @@
 
 #![forbid(unsafe_code)]
 
+mod gf2m;
 mod gf929;
+pub use gf2m::{AZTEC_DATA_6, AZTEC_DATA_8, AZTEC_DATA_10, AZTEC_DATA_12, AZTEC_PARAM, Gf2m};
 pub use gf929::{Correction, Gf929, MAX_BLOCK_LEN, MAX_EC_LEN, PDF417_FIELD};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

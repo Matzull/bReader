@@ -185,6 +185,7 @@ checksum = "6099cdc01846bc367c4e7dd630dc5966dccf36b652fae7a74e17b640411a91b2"
 name = "breader"
 version = "0.1.0"
 dependencies = [
+ "breader-aztec",
  "breader-content",
  "breader-core",
  "breader-datamatrix",
@@ -194,6 +195,15 @@ dependencies = [
  "breader-qr",
  "image",
  "qrcode",
+]
+
+[[package]]
+name = "breader-aztec"
+version = "0.1.0"
+dependencies = [
+ "breader-core",
+ "breader-ecc",
+ "rxing",
 ]
 
 [[package]]

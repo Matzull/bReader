@@ -13,6 +13,7 @@ crates/
   breader-qr        QR detection, sampling and decoding
   breader-datamatrix  Data Matrix ECC 200 detection, sampling and decoding
   breader-pdf417    PDF417 detection, row sampling, grid votes and decoding (GF(929) Reed-Solomon)
+  breader-aztec     Aztec Code decoding (spiral, GF(16) to GF(4096) Reed-Solomon, high-level modes); detection pending
   breader-content   charset/ECI decoding, GS1 parsing, content classification, dedup
   breader           facade: Reader, default pipeline, feature flags
   breader-py        Python bindings (outside the workspace build, built with maturin)
@@ -110,7 +111,7 @@ Finder patterns, triplets, homography sampling, Reed-Solomon, retries (local thr
 
 ### 3.3 Error correction (`breader-ecc`)
 
-GF(256) arithmetic with log/antilog tables built at compile time (`const fn`), syndrome computation, Berlekamp–Massey, Chien search, Forney. Returns corrected count for metadata and quality. Reusable by Data Matrix and PDF417. PDF417 uses the prime field GF(929) (generator 3, roots 3^1 to 3^ec, `block[0]` the highest coefficient, check codewords the negated remainder as in ISO/IEC 15438) through `Gf929`: Berlekamp–Massey seeded with the erasure locator, Chien search and Forney, with `decode` reporting `errors` (changed codewords outside the erasure list) and `erasures` separately so that the caller applies its own bound ([PDF417](symbologies/pdf417.md)).
+GF(256) arithmetic with log/antilog tables built at compile time (`const fn`), syndrome computation, Berlekamp–Massey, Chien search, Forney. Returns corrected count for metadata and quality. Reusable by Data Matrix and PDF417. PDF417 uses the prime field GF(929) (generator 3, roots 3^1 to 3^ec, `block[0]` the highest coefficient, check codewords the negated remainder as in ISO/IEC 15438) through `Gf929`: Berlekamp–Massey seeded with the erasure locator, Chien search and Forney, with `decode` reporting `errors` (changed codewords outside the erasure list) and `erasures` separately so that the caller applies its own bound ([PDF417](symbologies/pdf417.md)). Aztec Code uses `Gf2m<Q>`, a binary extension field with `u16` symbols (GF(16), GF(64), GF(256), GF(1024), GF(4096), first root alpha^1) with the same erasure support and `errors` / `erasures` split ([Aztec](symbologies/aztec.md)).
 
 ### 3.4 Content (`breader-content`)
 
@@ -167,7 +168,7 @@ Stacked linear symbology read from gray profiles: seeds from the linear scan's p
 
 ### 3.7 Aztec Code (`breader-aztec`, milestone M10)
 
-Bullseye finder on the binary plane, mode message with orientation marks, layer spiral with a reference grid, Reed-Solomon over GF(16) to GF(4096). Design: [symbologies/aztec.md](symbologies/aztec.md).
+Bullseye finder on the binary plane, mode message with orientation marks, layer spiral with a reference grid, Reed-Solomon over GF(16) to GF(4096). Decoding is implemented; detection and the reader are next. Design: [symbologies/aztec.md](symbologies/aztec.md).
 
 ## 4. Facade (`breader`)
 
