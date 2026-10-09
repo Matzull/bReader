@@ -2,11 +2,14 @@
 //! generator and fault injection. Streams the encoder cannot produce (FNC1,
 //! Runes, hand-built token sequences) go through `build`.
 
+mod scene;
+
 pub(crate) use crate::build::*;
 use crate::spec::{self, Layout};
 use breader_core::BitMatrix;
 use rxing::aztec::encoder::aztec_encoder;
 use rxing::common::CharacterSet;
+pub(crate) use scene::*;
 
 /// xorshift64 generator.
 pub(crate) struct Rng(pub u64);

@@ -1,18 +1,21 @@
-//! Aztec Code reader (ISO/IEC 24778), decoding side: layout tables, mode
-//! message, spiral codeword extraction, Reed-Solomon correction with a
-//! misdecode guard, bit unstuffing and the high-level encodation modes.
-//! Detection, sampling and the reader come later.
+//! Aztec Code reader (ISO/IEC 24778): bullseye detection, core fit,
+//! orientation and layer sampling with the reference grid, then the decoder
+//! (layout tables, mode message, spiral codeword extraction, Reed-Solomon
+//! correction with a misdecode guard, bit unstuffing and the high-level
+//! encodation modes).
 
 #![forbid(unsafe_code)]
-// The bullseye detector, sampler and reader use the rest of `spec` and
-// `decode` later.
-#![cfg_attr(not(test), allow(dead_code))]
 
 mod build;
 mod decode;
+mod detect;
 #[doc(hidden)]
 pub mod fuzzing;
+mod reader;
+mod sample;
 mod spec;
 
 #[cfg(test)]
 mod testutil;
+
+pub use reader::AztecReader;

@@ -9,6 +9,9 @@
 
 /// Side of an Aztec Rune (a compact symbol without data layers).
 pub(crate) const RUNE_SIZE: usize = 11;
+/// Side of the core around the center that holds the bullseye, the
+/// orientation marks and the mode message of either kind of symbol.
+pub(crate) const CORE_SIZE: usize = 15;
 /// Largest layer count of a compact symbol.
 pub(crate) const MAX_COMPACT_LAYERS: usize = 4;
 /// Largest layer count of a full-range symbol.
@@ -127,6 +130,27 @@ pub(crate) fn mode_positions(compact: bool) -> Vec<(i32, i32)> {
 pub(crate) fn on_grid_line(size: usize, x: usize, y: usize) -> bool {
     let c = size / 2;
     x.abs_diff(c).is_multiple_of(16) || y.abs_diff(c).is_multiple_of(16)
+}
+
+/// The orientation marks around the mode ring at Chebyshev distance `r`
+/// from the center (5 compact, 7 full-range): module offsets and whether
+/// they are dark. Three dark modules at the top-left corner, two at the
+/// top-right, one at the bottom-right, none at the bottom-left.
+pub(crate) fn orientation_marks(r: i32) -> [(i32, i32, bool); 12] {
+    [
+        (-r, -r, true),
+        (-r + 1, -r, true),
+        (-r, -r + 1, true),
+        (r, -r, true),
+        (r, -r + 1, true),
+        (r - 1, -r, false),
+        (r, r - 1, true),
+        (r, r, false),
+        (r - 1, r, false),
+        (-r, r, false),
+        (-r + 1, r, false),
+        (-r, r - 1, false),
+    ]
 }
 
 /// Dark module of the bullseye at Chebyshev distance `d` from the center:

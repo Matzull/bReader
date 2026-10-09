@@ -53,6 +53,77 @@ pub fn decode_stream(rune: Option<u8>, extra_ec: u8, stream: &[u8]) -> Option<Ve
     Some(d.data)
 }
 
+struct Threshold;
+
+impl breader_core::Binarizer for Threshold {
+    fn id(&self) -> &'static str {
+        "threshold"
+    }
+    fn binarize(&self, src: breader_core::ImageView<'_>, out: &mut BitMatrix) {
+        for (y, row) in src.rows().enumerate() {
+            for (x, &p) in row.iter().enumerate() {
+                out.set(x, y, p < 128);
+            }
+        }
+    }
+}
+
+/// Runs the whole reader on an image. With `valid` the image is a symbol
+/// built around the bits of `bytes` (3 pixels per module, a margin around it)
+/// whose pixels are flipped where `noise` says so; without it `bytes` are the
+/// pixels, `width` per row. Returns the number of symbols read, whose payloads
+/// are never empty.
+pub fn scan_image(valid: bool, effort: u8, width: usize, noise: &[u8], bytes: &[u8]) -> usize {
+    use breader_core::{Effort, ImageView, Pipeline, ScanOptions, Scratch};
+    let (w, luma) = if valid {
+        let mut bits = Bits::default();
+        for &b in bytes.iter().take(300) {
+            bits.push(u32::from(b), 8);
+        }
+        let Some((layout, words)) = fit(&bits.0, 3) else {
+            return 0;
+        };
+        let grid = render(layout, &words);
+        let n = grid.width();
+        let w = (n + 6) * 3;
+        let mut luma = vec![235u8; w * w];
+        for y in 0..n * 3 {
+            for x in 0..n * 3 {
+                if grid.get(x / 3, y / 3) {
+                    luma[(y + 9) * w + x + 9] = 25;
+                }
+            }
+        }
+        for (i, &flip) in noise.iter().take(256).enumerate() {
+            let at = (usize::from(flip) * 251 + i * 7919) % (w * w);
+            luma[at] = 255 - luma[at];
+        }
+        (w, luma)
+    } else {
+        let w = width.clamp(1, 256);
+        let mut luma = bytes.to_vec();
+        luma.truncate(luma.len() / w * w);
+        (w, luma)
+    };
+    let h = luma.len() / w;
+    let Ok(img) = ImageView::from_packed(&luma, w, h) else {
+        return 0;
+    };
+    let effort = match effort % 3 {
+        0 => Effort::Fast,
+        1 => Effort::Balanced,
+        _ => Effort::Exhaustive,
+    };
+    let pipeline = Pipeline::builder()
+        .binarizer(Threshold)
+        .reader(crate::AztecReader)
+        .build()
+        .expect("a pipeline with a binarizer");
+    let found = pipeline.scan(img, &ScanOptions::with_effort(effort), &mut Scratch::new());
+    assert!(found.iter().all(|s| !s.data.is_empty()));
+    found.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,6 +138,14 @@ mod tests {
             assert_eq!(decode_grid(size, &bytes, rng.below(2) == 0), None);
             let _ = decode_bits(&bytes[..rng.below(bytes.len())]);
             let _ = decode_stream(None, rng.below(5) as u8, &bytes);
+            if rng.below(8) == 0 {
+                for valid in [false, true] {
+                    for effort in 0..3 {
+                        let n = scan_image(valid, effort, 40 + usize::from(effort), &bytes, &bytes);
+                        assert!(n <= 1);
+                    }
+                }
+            }
         }
         assert_eq!(decode_grid(0, &[], false), None);
         assert_eq!(decode_grid(161, &[], false), None);

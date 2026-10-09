@@ -244,3 +244,30 @@ Video: `batch_rotated_small_pdf417_1080p` shows a label of about 60 px width on 
 
 Misses worth knowing: 1 px modules (zxing sample `19`: the shared edge detector merges single-pixel elements), a pen stroke across the symbol (`10.webp`), compact symbols under strong perspective, and everything where modules are below one pixel (`pdf417-small-module-size`, the video).
 
+## Aztec reader (2026-10-09)
+
+First measurement of the `breader-aztec` reader (`aztec` is a default feature). Baselines rewritten for the synthetic sets and the zxing-cpp samples at all three efforts; the diff against the old files is additions only (new Aztec entries and the 36 / 81 new synthetic Aztec labels, 48 zxing sample labels that now count), every other symbology unchanged, 0 false positives on every set (Dynamsoft sets checked unchanged).
+
+Aztec reads (release build; zxing-cpp 3.1.1 Python and rxing `--features baselines`, default options; the bench got an rxing Aztec mapping):
+
+| Set | Expected | Fast | Balanced | Exhaustive | zxing-cpp | rxing |
+|---|---|---|---|---|---|---|
+| zxing-cpp samples `aztec-1` | 32 | 25 | 32 | 32 | 32 | 20 |
+| zxing-cpp samples `aztec-2` | 16 | 16 | 16 | 16 | 16 | 2 |
+| synthetic seed 1 | 36 | 33 | 36 | 36 | 36 | 1 |
+| synthetic seed 2024 | 81 | 71 | 81 | 81 | 76 | 4 |
+
+Synthetic images: compact (1 to 4 layers) and full-range (2 to 15 layers, up to 99 modules) symbols from rxing's encoder in the classes clean, rotated, perspective, blur, low-res, illumination, inverted, noise and multi, every third one mirrored; Fast reads no inverted symbol by design (dark-on-light only), which accounts for its misses on the synthetic sets. The whole zxing-cpp samples set at Balanced: Aztec 48 of 48 against zxing-cpp 48 and rxing 22; the total read count moved with the 48 new labels (2026-10-08: 348 of 470, now 468 of 576 with 0 false positives).
+
+False-positive triage (`BENCH_SHOW_FP=1`):
+
+- `aztec-1/Z1-sequence4of7`: the reader returned ` Z1.txt DG3456` for the label `3456`. That is the structured append header of the symbol (message ID `Z1.txt`, sequence `DG` = 4 of 7) followed by the payload: normalization, not a misdecode. The bench strips such a header from Aztec reads (`matching.rs`, with a test; `py_bench.py` the same), see [D-034](decisions.md#d-034). The decode is Reed-Solomon valid, and the file name (`sequence4of7`) and the label (`3456`) agree with the header's `DG`.
+- `aztec-1/rune-*`: the labels are three digits (`001`, `064`); the reader first returned `1`, `64`. Fixed in the decoder (three-digit text) rather than in the matching, so users get zxing-cpp's spelling.
+- No other false positive on any set, at any effort.
+
+Misses found and fixed while measuring (all were decoder or sampler causes, none was relaxed): reader initialisation symbols (`readerinit-*`, a flag in the codeword count field), Binary Shift after a U/S shift (`dlusbs`), runes flush with the image border (core sampling outside the image), and the fit assuming rays that start at the true center (a quarter of a pixel off skewed the corners of the core by a module). The photo `aztec-2/04.webp` (strong perspective) needs the hill climb of the core corners on the bullseye and marks. Remaining misses: none on the zxing samples at Balanced or Exhaustive; Fast misses the small or tilted ones.
+
+Latency, `challenging-images`, Balanced, interleaved before/after runs of one binary with the reader switched off by a temporary environment check (five each, medians of the p50): 17.08 ms to 17.36 ms (+0.28 ms), p95 about +3 ms. Scanning every pass instead of the first costs about +7 ms ([D-033](decisions.md#d-033)). Fast and Exhaustive latency were not measured.
+
+Known limits seen in the unit and synthetic runs: modules of about 2.5 px or less are not detected reliably (2.75 px reads); 151-module symbols (32 layers) need about 3.5 px per module when rotated; strongly tilted large full-range symbols rely on the reference-grid anchors.
+

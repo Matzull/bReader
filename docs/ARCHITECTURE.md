@@ -13,7 +13,7 @@ crates/
   breader-qr        QR detection, sampling and decoding
   breader-datamatrix  Data Matrix ECC 200 detection, sampling and decoding
   breader-pdf417    PDF417 detection, row sampling, grid votes and decoding (GF(929) Reed-Solomon)
-  breader-aztec     Aztec Code decoding (spiral, GF(16) to GF(4096) Reed-Solomon, high-level modes); detection pending
+  breader-aztec     Aztec Code: bullseye search, core fit, reference-grid sampling, spiral decoding (GF(16) to GF(4096) Reed-Solomon, high-level modes)
   breader-content   charset/ECI decoding, GS1 parsing, content classification, dedup
   breader           facade: Reader, default pipeline, feature flags
   breader-py        Python bindings (outside the workspace build, built with maturin)
@@ -168,11 +168,11 @@ Stacked linear symbology read from gray profiles: seeds from the linear scan's p
 
 ### 3.7 Aztec Code (`breader-aztec`, milestone M10)
 
-Bullseye finder on the binary plane, mode message with orientation marks, layer spiral with a reference grid, Reed-Solomon over GF(16) to GF(4096). Decoding is implemented; detection and the reader are next. Design: [symbologies/aztec.md](symbologies/aztec.md).
+Bullseye finder on the binary plane (both polarities through the shared `Plane` view), mode message with orientation marks, layer spiral with a reference grid, Reed-Solomon over GF(16) to GF(4096). Design and as-built notes: [symbologies/aztec.md](symbologies/aztec.md).
 
 ## 4. Facade (`breader`)
 
-`Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear`, `datamatrix`, `pdf417` (all four default), `image`, `rayon`.
+`Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear`, `datamatrix`, `pdf417`, `aztec` (all five default), `image`, `rayon`.
 
 ## 5. Performance plan (M7)
 
@@ -204,4 +204,4 @@ Work items, in priority order. Each must keep read counts and 0 FP unchanged.
 
 ## 6. Planned extensions
 
-- **More symbologies**: Aztec, Micro QR, DataBar and Codabar as new `SymbologyReader` crates reusing the cached binarizations.
+- **More symbologies**: Micro QR, DataBar and Codabar as new `SymbologyReader` crates reusing the cached binarizations.

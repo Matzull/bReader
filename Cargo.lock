@@ -203,6 +203,8 @@ version = "0.1.0"
 dependencies = [
  "breader-core",
  "breader-ecc",
+ "datamatrix",
+ "qrcode",
  "rxing",
 ]
 

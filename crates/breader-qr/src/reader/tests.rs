@@ -1,13 +1,12 @@
 use std::time::{Duration, Instant};
 
 use breader_core::{
-    Binarizer, BitMatrix, Effort, FrameContext, ImageView, Perspective, Pipeline, Point,
+    Binarizer, BitMatrix, Effort, FrameContext, ImageView, Perspective, Pipeline, Plane, Point,
     ScanOptions, Scratch, Symbology,
 };
 
 use super::*;
 use crate::detect::FinderSearch;
-use crate::plane::Plane;
 
 mod render;
 use render::{Modules, Render, make_modules, similarity_quad, threshold};

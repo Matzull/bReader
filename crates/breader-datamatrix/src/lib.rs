@@ -8,7 +8,6 @@ mod detect;
 #[doc(hidden)]
 pub mod fuzzing;
 mod place;
-mod plane;
 mod reader;
 mod sample;
 mod spec;

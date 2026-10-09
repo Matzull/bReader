@@ -121,3 +121,10 @@ path = "fuzz_targets/aztec_grid.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "aztec_scan"
+path = "fuzz_targets/aztec_scan.rs"
+test = false
+doc = false
+bench = false

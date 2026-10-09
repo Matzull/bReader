@@ -1,9 +1,8 @@
-use breader_core::{BitMatrix, Point};
+use breader_core::{BitMatrix, Plane, Point};
 
 use super::*;
 use crate::check;
 use crate::detect::Detector;
-use crate::plane::Plane;
 use crate::testutil::*;
 
 fn lay(plane: Plane<'_>, quad: &[Point; 4], sc: &mut SampleScratch) -> Option<Layout> {

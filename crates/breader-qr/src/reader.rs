@@ -1,17 +1,16 @@
 //! QR reader orchestration: finders, triplets, sampling and decoding.
 
 use breader_core::{
-    BitMatrix, Content, FrameContext, Point, QrMeta, Quad, Symbol, SymbolMeta, Symbology,
-    SymbologyReader, SymbologySet,
+    BitMatrix, Content, FrameContext, Homography, Plane, Point, QrMeta, Quad, Symbol, SymbolMeta,
+    Symbology, SymbologyReader, SymbologySet,
 };
 
 use crate::decode::{DecodedQr, decode_grid, read_version};
 use crate::detect::{FinderSearch, Triplet, candidate_dims, find_alignment};
-use crate::plane::Plane;
 use crate::sample::{
-    Gray, Homography, Mapper, finders_plausible, fourth_point, module_axes, module_size,
-    pattern_cells, predict_alignment, refine_finder, sample_grid, sample_grid_local,
-    timing_plausible, timing_warp, transform,
+    Gray, Mapper, finders_plausible, fourth_point, module_axes, module_size, pattern_cells,
+    predict_alignment, refine_finder, sample_grid, sample_grid_local, timing_plausible,
+    timing_warp, transform,
 };
 use crate::spec::{dimension, version_for_dimension};
 

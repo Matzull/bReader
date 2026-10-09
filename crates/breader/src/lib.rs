@@ -1,6 +1,6 @@
 //! Barcode and QR code reader.
 //!
-//! Supported symbologies: QR Code, Data Matrix (ECC 200, rectangular and DMRE), PDF417 (including compact),
+//! Supported symbologies: QR Code, Data Matrix (ECC 200, rectangular and DMRE), PDF417 (including compact), Aztec Code (compact, full-range and Runes),
 //! EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39 and Interleaved 2 of 5. GS1 element strings and character sets
 //! are interpreted by the content post-processors.
 //!
@@ -33,7 +33,7 @@
 //!
 //! # Cargo features
 //!
-//! - `qr`, `linear`, `datamatrix`, `pdf417` (default): the QR, 1D, Data Matrix and PDF417 readers.
+//! - `qr`, `linear`, `datamatrix`, `pdf417`, `aztec` (default): the QR, 1D, Data Matrix, PDF417 and Aztec readers.
 //! - `image`: `Reader::scan_file` and `FileError`, decoding PNG and JPEG with the `image` crate.
 //! - `rayon`: multi-threaded kernels and scanning with identical output. Bound
 //!   the thread count by running scans inside `rayon::ThreadPool::install`.
@@ -64,6 +64,8 @@ pub use breader_content::{Gs1Error, charset, gs1};
 
 /// Ready-made pipeline modules, for building custom pipelines.
 pub mod modules {
+    #[cfg(feature = "aztec")]
+    pub use breader_aztec::AztecReader;
     pub use breader_content::{ContentClassifier, Dedup, TextDecoder};
     #[cfg(feature = "datamatrix")]
     pub use breader_datamatrix::DataMatrixReader;
@@ -77,7 +79,7 @@ pub mod modules {
 }
 
 /// The standard pipeline for the enabled features: local and Otsu binarizers,
-/// a 2x downscale preprocessor, a 3x up-scale for the retry pass, the QR, Data Matrix, linear and PDF417 readers, then dedup, text
+/// a 2x downscale preprocessor, a 3x up-scale for the retry pass, the QR, Data Matrix, linear, PDF417 and Aztec readers, then dedup, text
 /// decoding and content classification.
 pub fn default_pipeline() -> Pipeline {
     let builder = Pipeline::builder()
@@ -94,6 +96,8 @@ pub fn default_pipeline() -> Pipeline {
     // After the linear reader, whose scan records the patterns it starts from.
     #[cfg(feature = "pdf417")]
     let builder = builder.reader(modules::Pdf417Reader);
+    #[cfg(feature = "aztec")]
+    let builder = builder.reader(modules::AztecReader);
     builder
         .post_processor(modules::Dedup)
         .post_processor(modules::TextDecoder)

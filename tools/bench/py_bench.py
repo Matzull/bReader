@@ -168,9 +168,23 @@ def upce_to_upca(e):
     return e[:1] + mid + e[7:]
 
 
+def strip_aztec_structured_append(text):
+    """Drops a leading ` ID XY` header (same rule as tools/bench/src/matching.rs)."""
+    if not text.startswith(" "):
+        return text
+    _, sep, tail = text[1:].partition(" ")
+    ident = text[1:].split(" ", 1)[0]
+    if sep and ident and len(tail) >= 2 and "A" <= tail[0] <= "Z" and "A" <= tail[1] <= "Z" and tail[0] <= tail[1]:
+        return tail[2:]
+    return text
+
+
 def canonical(sym, data):
     try:
-        text = data.decode("utf-8").strip().replace("{GS}", "\x1d")
+        text = data.decode("utf-8")
+        if sym == "Aztec":
+            text = strip_aztec_structured_append(text)
+        text = text.strip().replace("{GS}", "\x1d")
         data = text.removeprefix("\x1d").encode("utf-8")
     except UnicodeDecodeError:
         data = data.strip()

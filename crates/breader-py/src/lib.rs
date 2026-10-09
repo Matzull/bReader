@@ -308,6 +308,7 @@ impl Symbol {
                 d.set_item("erasures", m.erasures)?;
                 d.set_item("mirrored", m.mirrored)?;
                 d.set_item("rune", m.rune)?;
+                d.set_item("reader_init", m.reader_init)?;
                 d.set_item("eci", m.eci.clone())?;
             }
             _ => d.set_item("kind", "unknown")?,

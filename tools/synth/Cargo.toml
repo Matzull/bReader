@@ -18,7 +18,7 @@ imageproc = { version = "0.27", default-features = false }
 qrcode = { version = "0.14", default-features = false }
 rand = "0.9"
 rand_chacha = "0.9"
-rxing = { version = "0.9", default-features = false, features = ["pdf417", "encoders", "encoding_rs"] }
+rxing = { version = "0.9", default-features = false, features = ["pdf417", "aztec", "encoders", "encoding_rs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

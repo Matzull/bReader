@@ -19,13 +19,14 @@ mod options;
 #[doc(hidden)]
 pub mod parallel;
 mod pipeline;
+mod plane;
 mod symbol;
 mod symbology;
 
 pub use bitmatrix::BitMatrix;
 pub use context::{FrameCache, FrameContext, Pass, Scratch};
 pub use error::Error;
-pub use geometry::{Perspective, Point, Quad};
+pub use geometry::{Homography, Perspective, Point, Quad};
 pub use image::{ImageBuffer, ImageView, PixelFormat};
 pub use module::{
     Binarizer, Detector, PostProcessor, Preprocessor, Reject, SymbolDecoder, SymbologyReader,
@@ -35,6 +36,7 @@ pub use options::{
     ScanOptions,
 };
 pub use pipeline::{Pipeline, PipelineBuilder};
+pub use plane::Plane;
 pub use symbol::{
     AztecMeta, Charset, Content, DataMatrixMeta, DataSegment, EcLevel, Gs1Element, LinearMeta,
     MacroPdf417, Pdf417Meta, QrMeta, Symbol, SymbolMeta,

@@ -108,6 +108,18 @@ fn digit_table_and_shifts() {
 }
 
 #[test]
+fn binary_shift_after_an_upper_shift_continues_in_upper() {
+    let d = text(|b| {
+        b.push(UPPER_DL, 5);
+        b.push(5, 4).push(5, 4); // 33
+        b.push(15, 4).push(UPPER_BS, 5).push(2, 5);
+        b.push(0x68, 8).push(0x69, 8);
+        b.push(3, 5); // B: the mode after the bytes is Upper
+    });
+    assert_eq!(d, b"33hiB");
+}
+
+#[test]
 fn punct_shift_returns_to_the_previous_mode() {
     let d = text(|b| {
         b.push(UPPER_LL, 5);

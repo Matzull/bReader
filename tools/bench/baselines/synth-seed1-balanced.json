@@ -3,6 +3,11 @@
   "effort": "balanced",
   "groups": {
     "blur": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -50,6 +55,11 @@
       }
     },
     "clean": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -104,6 +114,11 @@
       }
     },
     "illumination": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -151,6 +166,11 @@
       }
     },
     "inverted": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -198,6 +218,11 @@
       }
     },
     "low-res": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -245,6 +270,11 @@
       }
     },
     "multi": {
+      "Aztec": {
+        "expected": 12,
+        "read": 12,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 11,
         "read": 11,
@@ -293,6 +323,11 @@
     },
     "negative": {},
     "noise": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -340,6 +375,11 @@
       }
     },
     "perspective": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -387,6 +427,11 @@
       }
     },
     "rotated": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,

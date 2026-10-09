@@ -26,6 +26,7 @@ cargo install cargo-fuzz --locked
 | `rs929_decode`     | Reed-Solomon `decode` over GF(929): arbitrary blocks, and valid blocks with injected errors and erasures; a successful decode must yield a codeword and an exact correction count |
 | `rs2m_decode`      | Reed-Solomon `decode` over the five Aztec fields GF(16) to GF(4096): arbitrary blocks, and valid blocks with injected errors and erasures; a successful decode must yield a codeword and an exact correction count |
 | `aztec_grid`       | Aztec module grids (valid and arbitrary sides, transposed), bare high-level bit streams, and valid symbols and Runes built around arbitrary bytes (reaches the text layer) |
+| `aztec_scan`       | The whole Aztec reader (bullseye search, core fit, sampling, decoding) on arbitrary images and on valid symbols with flipped pixels |
 | `pdf417_codewords` | PDF417 codeword matrices: arbitrary rows x columns, and valid symbols built around arbitrary data codewords (reaches the compaction layer) |
 | `pdf417_line` | PDF417 start pattern search, codeword walk and grid solver on arbitrary run widths of one line |
 | `content_pipeline` | `Dedup`, `TextDecoder` and `ContentClassifier` on synthetic symbols with arbitrary segments |
