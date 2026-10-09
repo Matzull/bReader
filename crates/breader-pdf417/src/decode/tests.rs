@@ -975,6 +975,39 @@ fn hand_built_symbol_from_high_level_stream() {
 }
 
 #[test]
+fn eci_inside_a_byte_run_keeps_the_groups_aligned() {
+    // A symbol with designators between the groups of one byte run (the
+    // run is 12 codewords: two groups and two single bytes).
+    let data = [
+        1u16, 927, 10, 901, 927, 20, 246, 877, 166, 106, 797, 927, 30, 927, 29, 415, 537, 357, 329,
+        194, 927, 8, 927, 9, 225, 926, 899, 898, 927, 22, 144, 927, 4, 900, 913, 172, 925, 1, 900,
+    ];
+    let d = parse(&data).unwrap();
+    let charsets: Vec<_> = d
+        .segments
+        .iter()
+        .map(|s| (s.start, s.end, s.charset))
+        .collect();
+    assert_eq!(
+        charsets[..4],
+        [
+            (0, 2, Charset::Latin1),
+            (2, 8, Charset::Eci(20)),
+            (8, 14, Charset::Eci(29)),
+            (14, 15, Charset::Eci(9)),
+        ]
+    );
+}
+
+#[test]
+fn a_designator_may_not_split_a_group_of_five() {
+    assert_eq!(
+        parse(&[901, 246, 877, 927, 4, 166, 106, 797, 5, 5, 5]).err(),
+        Some(Reject::Format)
+    );
+}
+
+#[test]
 fn text_decoder_view_of_segments() {
     // Without ECI everything is one ISO-8859-1 segment, as for Data Matrix.
     let d = parse(&[901, 0xE9]).unwrap();

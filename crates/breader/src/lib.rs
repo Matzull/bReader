@@ -1,7 +1,7 @@
 //! Barcode and QR code reader.
 //!
-//! Supported symbologies: QR Code, Data Matrix (ECC 200, rectangular and DMRE), EAN-13, EAN-8, UPC-A, UPC-E, Code 128,
-//! Code 39 and Interleaved 2 of 5. GS1 element strings and character sets
+//! Supported symbologies: QR Code, Data Matrix (ECC 200, rectangular and DMRE), PDF417 (including compact),
+//! EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39 and Interleaved 2 of 5. GS1 element strings and character sets
 //! are interpreted by the content post-processors.
 //!
 //! The entry point is [`Reader`]: configure it with [`ScanOptions`], feed it
@@ -33,8 +33,7 @@
 //!
 //! # Cargo features
 //!
-//! - `qr`, `linear`, `datamatrix` (default): the QR, 1D and Data Matrix readers.
-//! - `pdf417`: links the PDF417 codeword decoder; no reader is registered yet.
+//! - `qr`, `linear`, `datamatrix`, `pdf417` (default): the QR, 1D, Data Matrix and PDF417 readers.
 //! - `image`: `Reader::scan_file` and `FileError`, decoding PNG and JPEG with the `image` crate.
 //! - `rayon`: multi-threaded kernels and scanning with identical output. Bound
 //!   the thread count by running scans inside `rayon::ThreadPool::install`.
@@ -71,12 +70,14 @@ pub mod modules {
     pub use breader_imgproc::{Downscale, LocalBinarizer, OtsuBinarizer, Upscale};
     #[cfg(feature = "linear")]
     pub use breader_linear::LinearReader;
+    #[cfg(feature = "pdf417")]
+    pub use breader_pdf417::Pdf417Reader;
     #[cfg(feature = "qr")]
     pub use breader_qr::QrReader;
 }
 
 /// The standard pipeline for the enabled features: local and Otsu binarizers,
-/// a 2x downscale preprocessor, a 3x up-scale for the retry pass, the QR, Data Matrix and linear readers, then dedup, text
+/// a 2x downscale preprocessor, a 3x up-scale for the retry pass, the QR, Data Matrix, linear and PDF417 readers, then dedup, text
 /// decoding and content classification.
 pub fn default_pipeline() -> Pipeline {
     let builder = Pipeline::builder()
@@ -90,6 +91,9 @@ pub fn default_pipeline() -> Pipeline {
     let builder = builder.reader(modules::DataMatrixReader);
     #[cfg(feature = "linear")]
     let builder = builder.reader(modules::LinearReader);
+    // After the linear reader, whose scan records the patterns it starts from.
+    #[cfg(feature = "pdf417")]
+    let builder = builder.reader(modules::Pdf417Reader);
     builder
         .post_processor(modules::Dedup)
         .post_processor(modules::TextDecoder)

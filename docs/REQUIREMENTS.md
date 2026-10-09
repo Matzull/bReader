@@ -29,7 +29,7 @@ The library is built as a pipeline of pluggable modules so symbologies and proce
 - WebAssembly and mobile (Android/iOS) targets.
 - Dynamically loaded plugins (`.so`/`.dll`).
 - Micro QR, rMQR, QR Structured Append, Model 1 QR.
-- Data Matrix, PDF417, Aztec, MaxiCode, other 1D symbologies (planned later; the architecture must accommodate them).
+- Aztec, MaxiCode, MicroPDF417, other 1D symbologies (planned later; the architecture must accommodate them). Data Matrix and PDF417 are implemented.
 
 ## 3. Functional requirements
 

@@ -69,6 +69,24 @@ fn read_modules(row: &[u8], at: usize, len: usize) -> u32 {
         .fold(0, |acc, &m| acc << 1 | u32::from(m != 0))
 }
 
+/// The modules of the encoder's output, top row first, one entry per module
+/// (1 = bar), without quiet zone.
+pub(crate) fn modules(msg: &str, opts: EncodeOptions) -> Option<Vec<Vec<u8>>> {
+    let mut enc = PDF417::with_compact_hint(opts.compact);
+    enc.setCompaction(opts.compaction);
+    enc.setEncoding(opts.encoding);
+    if let Some(c) = opts.cols {
+        enc.setDimensions(c, c, 90, 3);
+    } else {
+        enc.setDimensions(30, 1, 90, 3);
+    }
+    enc.generateBarcodeLogicWithAutoECI(msg, opts.level, opts.auto_eci)
+        .ok()?;
+    let mut rows = enc.getBarcodeMatrix().as_ref()?.getMatrix();
+    rows.reverse();
+    Some(rows)
+}
+
 /// Encodes `msg` (characters up to U+00FF are bytes) and reads the rendered
 /// symbol back through the pattern tables, checking start and stop patterns
 /// and the cluster of every codeword on the way.

@@ -12,6 +12,7 @@ crates/
   breader-linear    1D detection and decoders (EAN/UPC, Code 128, Code 39, ITF)
   breader-qr        QR detection, sampling and decoding
   breader-datamatrix  Data Matrix ECC 200 detection, sampling and decoding
+  breader-pdf417    PDF417 detection, row sampling, grid votes and decoding (GF(929) Reed-Solomon)
   breader-content   charset/ECI decoding, GS1 parsing, content classification, dedup
   breader           facade: Reader, default pipeline, feature flags
   breader-py        Python bindings (outside the workspace build, built with maturin)
@@ -62,7 +63,7 @@ Fine-grained options override the preset (`try_invert`, `upscale_retry`, later p
 
 ### 2.3 FrameContext and caching
 
-`FrameContext` is the only thing readers see. It exposes the original image, the current pass, the pass image and the pass binarization. Derived products are computed on first request and cached for the rest of the frame, so readers sharing a pass share the work: the QR reader and a future Data Matrix reader binarize once. Grayscale-based readers (1D readers read edges on grayscale scanlines, which is more robust to blur than binarized rows) never trigger binarization.
+`FrameContext` is the only thing readers see. It exposes the original image, the current pass, the pass image and the pass binarization. Derived products are computed on first request and cached for the rest of the frame, so readers sharing a pass share the work (a reader can also publish its own per-frame product through `FrameContext::shared`; the linear scan records the PDF417 start and stop patterns this way, so the PDF417 reader needs no scan of its own): the QR reader and a future Data Matrix reader binarize once. Grayscale-based readers (1D readers read edges on grayscale scanlines, which is more robust to blur than binarized rows) never trigger binarization.
 
 All buffers live in `Scratch`, owned by the caller and reused between frames, which keeps steady-state scanning allocation-free (NFR-4).
 
@@ -162,11 +163,11 @@ ECC 200, square, rectangular and DMRE sizes; candidates from pooled dark-pixel c
 
 ### 3.6 PDF417 (`breader-pdf417`, milestone M9)
 
-Stacked linear symbology read from gray profiles, GF(929) Reed-Solomon with erasures. Design (decoding implemented, detection in progress): [symbologies/pdf417.md](symbologies/pdf417.md).
+Stacked linear symbology read from gray profiles: seeds from the linear scan's pattern hits, boundary growth, row lines, grid votes, GF(929) Reed-Solomon with erasures. Design and as-built notes: [symbologies/pdf417.md](symbologies/pdf417.md).
 
 ## 4. Facade (`breader`)
 
-`Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear`, `datamatrix` (all three default), `image`, `rayon`.
+`Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear`, `datamatrix`, `pdf417` (all four default), `image`, `rayon`.
 
 ## 5. Performance plan (M7)
 
@@ -198,4 +199,4 @@ Work items, in priority order. Each must keep read counts and 0 FP unchanged.
 
 ## 6. Planned extensions
 
-- **More symbologies**: PDF417 (designed, [symbologies/pdf417.md](symbologies/pdf417.md)), Aztec as new `SymbologyReader` crates reusing the cached binarizations.
+- **More symbologies**: Aztec, Micro QR, DataBar and Codabar as new `SymbologyReader` crates reusing the cached binarizations.

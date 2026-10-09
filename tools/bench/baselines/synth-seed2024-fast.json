@@ -33,6 +33,11 @@
         "read": 4,
         "false_positives": 0
       },
+      "PDF417": {
+        "expected": 7,
+        "read": 5,
+        "false_positives": 0
+      },
       "QR Code": {
         "expected": 20,
         "read": 20,
@@ -73,6 +78,11 @@
       "ITF": {
         "expected": 6,
         "read": 6,
+        "false_positives": 0
+      },
+      "PDF417": {
+        "expected": 7,
+        "read": 7,
         "false_positives": 0
       },
       "QR Code": {
@@ -124,6 +134,11 @@
         "read": 6,
         "false_positives": 0
       },
+      "PDF417": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "QR Code": {
         "expected": 20,
         "read": 20,
@@ -164,6 +179,11 @@
       "ITF": {
         "expected": 6,
         "read": 6,
+        "false_positives": 0
+      },
+      "PDF417": {
+        "expected": 7,
+        "read": 7,
         "false_positives": 0
       },
       "QR Code": {
@@ -208,6 +228,11 @@
         "read": 6,
         "false_positives": 0
       },
+      "PDF417": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "QR Code": {
         "expected": 20,
         "read": 20,
@@ -248,6 +273,11 @@
       "ITF": {
         "expected": 29,
         "read": 21,
+        "false_positives": 0
+      },
+      "PDF417": {
+        "expected": 24,
+        "read": 22,
         "false_positives": 0
       },
       "QR Code": {
@@ -293,6 +323,11 @@
         "read": 6,
         "false_positives": 0
       },
+      "PDF417": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "QR Code": {
         "expected": 20,
         "read": 20,
@@ -335,6 +370,11 @@
         "read": 6,
         "false_positives": 0
       },
+      "PDF417": {
+        "expected": 7,
+        "read": 4,
+        "false_positives": 0
+      },
       "QR Code": {
         "expected": 20,
         "read": 15,
@@ -375,6 +415,11 @@
       "ITF": {
         "expected": 6,
         "read": 3,
+        "false_positives": 0
+      },
+      "PDF417": {
+        "expected": 7,
+        "read": 7,
         "false_positives": 0
       },
       "QR Code": {

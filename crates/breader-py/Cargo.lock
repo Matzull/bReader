@@ -29,6 +29,7 @@ dependencies = [
  "breader-datamatrix",
  "breader-imgproc",
  "breader-linear",
+ "breader-pdf417",
  "breader-qr",
  "image",
 ]
@@ -69,6 +70,15 @@ name = "breader-linear"
 version = "0.1.0"
 dependencies = [
  "breader-core",
+]
+
+[[package]]
+name = "breader-pdf417"
+version = "0.1.0"
+dependencies = [
+ "breader-core",
+ "breader-ecc",
+ "breader-linear",
 ]
 
 [[package]]

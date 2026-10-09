@@ -12,7 +12,7 @@ This page is the entry point. Find the audience below, follow the link, and when
 | Data Matrix (ECC 200) | implemented | [datamatrix](symbologies/datamatrix.md) |
 | EAN-13, EAN-8, UPC-A, UPC-E (+ EAN-2/5 add-ons) | implemented | [linear](symbologies/linear.md) |
 | Code 128, Code 39, ITF | implemented | [linear](symbologies/linear.md) |
-| PDF417 | decoding done, reader in progress (M9) | [pdf417](symbologies/pdf417.md) |
+| PDF417 (+ compact, Macro, ECI) | implemented | [pdf417](symbologies/pdf417.md) |
 | Aztec, Micro QR, rMQR, DataBar, Codabar | not started | [index](symbologies/README.md) |
 
 Headline numbers (Balanced; zero false positives at every effort on every gated dataset; these are dated snapshots, the current tables, other efforts, other engines and latency are in [BASELINES](BASELINES.md)):

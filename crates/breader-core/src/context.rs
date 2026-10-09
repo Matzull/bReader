@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::{Binarizer, BitMatrix, ImageBuffer, ImageView, Preprocessor, ScanOptions};
 
 /// One attempt over the frame with a given image variant and binarization.
@@ -26,6 +28,29 @@ struct ImageEntry {
     buffer: ImageBuffer,
 }
 
+/// A per-frame value that readers of one frame share, for example the
+/// pattern hits that one reader records while it scans and another reuses.
+/// `reset` runs at the start of every frame and keeps allocations.
+pub trait FrameCache: Default + Send + std::fmt::Debug + 'static {
+    /// Clears the value for a new frame.
+    fn reset(&mut self);
+}
+
+trait Slot: Send + std::fmt::Debug {
+    fn reset(&mut self);
+    fn as_any(&mut self) -> &mut dyn Any;
+}
+
+impl<T: FrameCache> Slot for T {
+    fn reset(&mut self) {
+        FrameCache::reset(self);
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
 /// Buffers reused across frames. Owned by the caller (or the pipeline)
 /// so steady-state scanning does not allocate.
 #[derive(Debug, Default)]
@@ -33,6 +58,7 @@ pub struct Scratch {
     images: Vec<ImageEntry>,
     binaries: Vec<BinaryEntry>,
     inverted: BitMatrix,
+    shared: Vec<Box<dyn Slot>>,
     /// Up-scaled copy of the frame for the retry pass.
     pub(crate) upscaled: ImageBuffer,
     /// Buffers of the nested scan over `upscaled`.
@@ -48,6 +74,7 @@ impl Scratch {
     fn invalidate(&mut self) {
         self.images.iter_mut().for_each(|e| e.valid = false);
         self.binaries.iter_mut().for_each(|e| e.valid = false);
+        self.shared.iter_mut().for_each(|s| s.reset());
     }
 }
 
@@ -109,6 +136,23 @@ impl<'a> FrameContext<'a> {
     /// Selects the pass whose image and binarization the accessors return.
     pub fn set_pass(&mut self, pass: Pass) {
         self.pass = pass;
+    }
+
+    /// The frame-wide value of type `T`, created on first use and reset at the
+    /// start of every frame.
+    pub fn shared<T: FrameCache>(&mut self) -> &mut T {
+        let slots = &mut self.scratch.shared;
+        let idx = match slots.iter_mut().position(|s| s.as_any().is::<T>()) {
+            Some(i) => i,
+            None => {
+                slots.push(Box::new(T::default()));
+                slots.len() - 1
+            }
+        };
+        slots[idx]
+            .as_any()
+            .downcast_mut::<T>()
+            .expect("slot type matches")
     }
 
     /// The original frame, independent of the current pass.

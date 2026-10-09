@@ -131,3 +131,20 @@ Product-level defaults and scope are owner decisions ([contributing](contributin
 ## D-025
 
 2026-10-09. **Third-party data keeps its license text.** The PDF417 cluster tables are transcribed from the MIT-licensed `pdf417` crate; its notice is in [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) and cited in the source. Any future table taken from a permissive source does the same; nothing is taken from zxing/zbar. Why: MIT requires the notice in substantial copies, and it keeps the clean-room record explicit.
+
+## D-026
+
+2026-10-09. **PDF417 start/stop search runs inside the linear scan** (`breader-linear/src/marks.rs`), its hits are shared through a typed per-frame cache (`FrameContext::shared`, `FrameCache`) and the PDF417 reader depends on `breader-linear` (a `#[doc(hidden)]` `stacked` module). Why: a second scan of the plan costs as much as the 1D scan; the shared one adds +0.25 ms p50 at Balanced on frames without PDF417 (target 1.5 ms). Without the linear reader the PDF417 reader scans the plan itself. See [pdf417](symbologies/pdf417.md#as-built).
+
+## D-027
+
+2026-10-09. **`pdf417` joins the default features**, registered after the linear reader, as `datamatrix` did. Why: gated at 0 false positives on every set, latency within target. With `symbologies` lacking PDF417 the linear scan does not record the hits.
+
+## D-028
+
+2026-10-09. **PDF417 boundary and row reading choices.** Boundaries by line walking and a trimmed least squares fit instead of RANSAC (the hits are dense and mostly collinear); row lines perpendicular to the boundary, then perspective between two boundaries, then turned and fanned rows picked by clean codewords on probe lines; the cluster check is a vote per line, not a gate; codewords are read on the module grid of the clean boundaries as well as per codeword. An ECI designator inside a byte run does not restart the groups of five codewords. Why: each step was added for a failing sample or synthetic class and keeps 0 false positives, because every symbol still passes the Reed-Solomon guard, the length descriptor and the compaction rules. Not covered: mirrored symbols, 1 px modules, compact symbols under strong perspective.
+
+## D-029
+
+2026-10-09. **No label is added for the PDF417 video.** Neither breader nor zxing-cpp reads any frame of `batch_rotated_small_pdf417_1080p` (modules far below a pixel), so no value can be verified; the video gate keeps 0 expected and 0 reads. `video-bench` gets an `ADDITIONS` list (video, format, payload, reason) for verified labels. Why: labels follow the images, not the engines.
+

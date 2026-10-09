@@ -12,6 +12,7 @@ mod edges;
 #[doc(hidden)]
 pub mod fuzzing;
 mod itf;
+mod marks;
 mod plan;
 mod profile;
 mod reader;
@@ -22,6 +23,17 @@ mod runs;
 mod testutil;
 
 pub use reader::LinearReader;
+
+/// Scanline machinery that the PDF417 reader builds on.
+#[doc(hidden)]
+pub mod stacked {
+    pub use crate::edges::{EdgeDetector, EdgeParams, Edges};
+    pub use crate::marks::{Mark, MarkKind, MarkSet, RawMark, find};
+    pub use crate::plan::{ScanPlan, Scanline};
+    pub use crate::profile::Oblique;
+    pub use crate::reader::scan_marks;
+    pub use crate::runs::Runs;
+}
 
 #[cfg(test)]
 mod tests {

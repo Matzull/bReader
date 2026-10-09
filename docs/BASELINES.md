@@ -201,9 +201,9 @@ Two more Dynamsoft sets, gated by `dynamsoft-ups-*.json` and `dynamsoft-pdf417-*
 - `UPS-Synthetic-Labels` (CC BY 4.0, "UPS Synthetic Shipping Label Dataset, Dynamsoft, 2025."): 58 annotated images, but only 52 are in the checkout (`IMG_8757`, `IMG_9565`, `IMG_9570`, `IMG_9577`, `IMG_9579`, `IMG_9582` are labelled and absent). Per image two Code 128 (tracking `1Z...`, reference `CA 859 2-NN`) and one MaxiCode: 104 Code 128 labels supported, 52 MaxiCode unsupported.
 - `pdf417-small-module-size`: 11 images, 15 PDF417 labels (all unsupported). The dataset has no Code 128 labels; 7 are added through `gt-overrides.json` (below), so 7 supported labels.
 - `challenging-images` carries 6 PDF417 labels, already counted as unsupported (excluded) there.
-- Video: `batch_rotated_small_pdf417_1080p` is in the video baseline, but its CSV holds only the header line (no PDF417 values were published), so it has 0 expected labels. Once PDF417 is read, every PDF417 read in that video is a false positive unless the CSV is labelled; see the open item below.
+- Video: `batch_rotated_small_pdf417_1080p` is in the video baseline, but its CSV holds only the header line (no PDF417 values were published), so it has 0 expected labels. Neither breader nor zxing-cpp reads a PDF417 in its 404 frames (see [PDF417 reader](#pdf417-reader-2026-10-09)), so no label could be verified and the gate has no false positive.
 
-PDF417 and MaxiCode map to no `Symbology`, so their labels are excluded. `map_symbology` (`tools/bench/src/groundtruth.rs`) is the only mapping, shared by the bench and video-bench: supporting PDF417 needs one new arm, `"PDF417" => Some(Symbology::Pdf417)` (the test `every_library_symbology_has_a_mapping` fails until it is added, and `py_bench.py` has the same `ALIASES` / `BR_FORMATS` tables), then re-recording the baselines.
+MaxiCode maps to no `Symbology`, so its labels are excluded; PDF417 labels count since the reader landed. `map_symbology` (`tools/bench/src/groundtruth.rs`) is the only mapping, shared by the bench and video-bench.
 
 Read count / false positives, release build (zxing-cpp 3.1.1 Python with default options; rxing with `--features baselines`, default options):
 
@@ -218,4 +218,29 @@ Triage (BENCH_SHOW_FP=1, all efforts):
 - pdf417-small: the first run had 3 / 2 / 6 Code 128 false positives (Fast / Balanced / Exhaustive), all `Q8` or `NUTWR`. These are genuine, unlabelled Code 128 symbols of the AIAG shipping labels (the dataset only labels the PDF417): the QTY(Q) barcode next to the printed quantity `8` (Q is the data identifier) and the SUPP(V) barcode of the supplier whose code is printed large as `NUTWR`. Checked on crops, and zxing-cpp reads exactly the same seven (`Q8` in 10-9-11, 16-6-15 x2, 4-3-11, 6-5-14; `NUTWR` in 16-6-15 x2). Added to `gt-overrides.json` with `count` (a new field for several identical symbols in one image). The labels carry other Code 128 symbols (part number `ML35-7B6xx-GB`, serial) that breader and zxing-cpp do not read; they stay unlabelled. rxing reads them, wrongly in two cases (`PML35-7B615-TB` and `PML35-7B606-TB` for `...-GB`), which count as its false positives.
 - No normalization differences were found.
 
-Open items: the 5 to 20 missed UPS Code 128 reads; labelling `batch_rotated_small_pdf417_1080p` (or exempting it) before PDF417 lands in the library, otherwise the video gate fails on its PDF417 reads.
+Open items: the 5 to 20 missed UPS Code 128 reads.
+
+## PDF417 reader (2026-10-09)
+
+First measurement of `breader-pdf417` (`pdf417` is a default feature). Baselines rewritten for the synthetic sets, the zxing-cpp samples, `challenging-images` and `pdf417-small-module-size` at all three efforts; the diff against the old files is additions only (new PDF417 entries, plus the 33 / 80 new synthetic PDF417 labels), every other symbology unchanged, 0 false positives on every set.
+
+PDF417 reads, release build (zxing-cpp 3.1.1 Python, default options; rxing with `--features baselines`, default options):
+
+| Set | Expected | Fast | Balanced | Exhaustive | zxing-cpp | rxing |
+|---|---|---|---|---|---|---|
+| zxing-cpp samples `pdf417-1..3` | 58 | 51 | 55 | 54 | 58 | 0 |
+| `challenging-images` | 6 | 3 | 3 | 3 | 3 | 0 |
+| `pdf417-small-module-size` | 15 | 1 | 1 | 1 | 0 | 0 |
+| synthetic seed 1 | 33 | 29 | 32 | 32 | 13 (1 FP) | 0 |
+| synthetic seed 2024 | 80 | 73 | 75 | 79 | 25 | 0 |
+
+(rxing reads no PDF417 symbol anywhere with the bench's default hints; it is listed for completeness.) The synthetic classes `clean`, `rotated`, `blur`, `low-res`, `illumination`, `inverted`, `noise` read 100 % at Balanced on seed 1; the misses are compact or perspective symbols (`perspective` 2 of 3 on seed 1, 4 of 7 on seed 2024). The dataset sizes changed with the new images: seed 1 286 to 319 symbols, seed 2024 831 to 911.
+
+False-positive triage: none occurred on any set. The zxing-cpp samples label `13-readerinit` ("$I"): the symbol starts with the reader initialisation codeword, which breader rejects by design (like Data Matrix reader programming), so it stays a miss. `pdf417-4` (Macro PDF417 split over several images) has no per-image labels and is not scored; `03-01.png` there reads.
+
+Latency, `challenging-images`, interleaved before/after runs (three each, medians of the p50): Fast 4.61 to 4.73 ms, Balanced 16.75 to 17.0 ms (+0.25), Exhaustive 40.42 to 41.13 ms. The matcher on the linear scan's runs is the only cost of frames without PDF417. Frames with a symbol cost more: the 3 MP `air-travel-ticket` takes a few ms extra for the row lines.
+
+Video: `batch_rotated_small_pdf417_1080p` shows a label of about 60 px width on a test tube, with modules well under a pixel. All 404 frames were read with breader (Balanced, Fast, tracker) and zxing-cpp: no PDF417 comes out of either, so there is nothing to label and nothing to count as a false positive. `video-bench` has an `ADDITIONS` list for verified labels, empty.
+
+Misses worth knowing: 1 px modules (zxing sample `19`: the shared edge detector merges single-pixel elements), a pen stroke across the symbol (`10.webp`), compact symbols under strong perspective, and everything where modules are below one pixel (`pdf417-small-module-size`, the video).
+

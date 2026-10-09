@@ -25,6 +25,7 @@ cargo install cargo-fuzz --locked
 | `rs_decode`        | Reed-Solomon `decode` over both fields; a successful decode must yield a codeword |
 | `rs929_decode`     | Reed-Solomon `decode` over GF(929): arbitrary blocks, and valid blocks with injected errors and erasures; a successful decode must yield a codeword and an exact correction count |
 | `pdf417_codewords` | PDF417 codeword matrices: arbitrary rows x columns, and valid symbols built around arbitrary data codewords (reaches the compaction layer) |
+| `pdf417_line` | PDF417 start pattern search, codeword walk and grid solver on arbitrary run widths of one line |
 | `content_pipeline` | `Dedup`, `TextDecoder` and `ContentClassifier` on synthetic symbols with arbitrary segments |
 
 Input layouts are documented at the top of each file in `fuzz_targets/`. The

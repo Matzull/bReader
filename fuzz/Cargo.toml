@@ -99,3 +99,10 @@ path = "fuzz_targets/pdf417_codewords.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "pdf417_line"
+path = "fuzz_targets/pdf417_line.rs"
+test = false
+doc = false
+bench = false

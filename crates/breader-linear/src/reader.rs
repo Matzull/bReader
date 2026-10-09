@@ -9,6 +9,7 @@ use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::ean::EanDecoder;
 use crate::edges::{EdgeDetector, EdgeParams, Edges};
 use crate::itf::ItfDecoder;
+use crate::marks::{self, Mark, MarkSet, RawMark};
 use crate::plan::{ScanPlan, Scanline, clip_line};
 use crate::profile::{self, Oblique};
 use crate::runs::Runs;
@@ -28,6 +29,8 @@ struct Stage {
     hits: Vec<LineHit>,
     aggregator: Aggregator,
     edge_params: Vec<EdgeParams>,
+    marks: Vec<Mark>,
+    raw_marks: Vec<RawMark>,
 }
 
 /// Buffers and decode state of one `scan` call.
@@ -89,6 +92,9 @@ fn scan_profile<D: LinearDecoder>(
         Runs::from_edges(&stage.edges, &mut stage.runs);
         if stage.runs.is_empty() {
             continue;
+        }
+        if opts.marks {
+            marks::record(&stage.runs, line, &mut stage.raw_marks, &mut stage.marks);
         }
         Runs::reverse_from(&stage.runs, &mut stage.reversed);
         stage.hits.clear();
@@ -226,7 +232,7 @@ fn scan_lines_parallel(
     lines: &[Scanline],
     sources: &Sources<'_>,
     template: &Stage,
-) -> Vec<PlacedHit> {
+) -> (Vec<PlacedHit>, Vec<Mark>) {
     use rayon::prelude::*;
     let mut starts = Vec::with_capacity(lines.len().div_ceil(PAR_LINES));
     let mut cursor = Cursor {
@@ -244,7 +250,7 @@ fn scan_lines_parallel(
         stage.edge_params.clone_from(&template.edge_params);
         (stage, Vec::new())
     };
-    let per_chunk: Vec<Vec<PlacedHit>> = lines
+    let per_chunk: Vec<(Vec<PlacedHit>, Vec<Mark>)> = lines
         .par_chunks(PAR_LINES)
         .zip(starts.par_iter())
         .enumerate()
@@ -255,10 +261,19 @@ fn scan_lines_parallel(
                 scan_line(img, line, index, cursor, sources, profile, stage);
                 cursor.advance(line);
             }
-            stage.aggregator.take_hits()
+            (
+                stage.aggregator.take_hits(),
+                std::mem::take(&mut stage.marks),
+            )
         })
         .collect();
-    per_chunk.into_iter().flatten().collect()
+    let mut hits = Vec::new();
+    let mut marks = Vec::new();
+    for (h, m) in per_chunk {
+        hits.extend(h);
+        marks.extend(m);
+    }
+    (hits, marks)
 }
 
 /// Parallel lines on both sides of `seed`, stopping per side once the
@@ -284,6 +299,7 @@ fn refine<D: LinearDecoder>(
     let opts = &LineOptions {
         normal: !seed.inverted,
         invert: seed.inverted,
+        marks: false,
         ..*opts
     };
     let step = seed.module.round().clamp(2.0, 6.0);
@@ -323,6 +339,27 @@ fn refine<D: LinearDecoder>(
             }
         }
     }
+}
+
+/// Start and stop patterns of PDF417 on the lines of the scan plan, for a
+/// PDF417 reader that runs without the linear reader.
+pub fn scan_marks(img: &ImageView<'_>, effort: Effort, out: &mut MarkSet) {
+    let plan = ScanPlan::new(img.width(), img.height(), effort);
+    let mut lines = Vec::new();
+    plan.lines(&mut lines);
+    let mut detector = EdgeDetector::default();
+    let mut edges = Edges::default();
+    let mut runs = Runs::default();
+    let (mut profile, mut raw) = (Vec::new(), Vec::new());
+    for line in &lines {
+        profile::sample(img, line, false, &mut profile);
+        for params in edge_variants(effort) {
+            detector.detect(&profile, params, &mut edges);
+            Runs::from_edges(&edges, &mut runs);
+            marks::record(&runs, line, &mut raw, &mut out.marks);
+        }
+    }
+    out.scanned = true;
 }
 
 /// 1D symbology reader. Reads grayscale scanlines, so it never needs the
@@ -426,8 +463,12 @@ impl LinearReader {
         let parallel = false;
         if parallel {
             #[cfg(feature = "rayon")]
-            for hit in scan_lines_parallel(&img, &lines, &sources, &work.stage) {
-                work.stage.aggregator.push(hit);
+            {
+                let (hits, marks) = scan_lines_parallel(&img, &lines, &sources, &work.stage);
+                for hit in hits {
+                    work.stage.aggregator.push(hit);
+                }
+                work.stage.marks.extend(marks);
             }
         } else {
             scan_lines(&img, &lines, &sources, &mut work.profile, &mut work.stage);
@@ -456,6 +497,11 @@ impl LinearReader {
         }
         work.seeds = seeds;
         work.stage.aggregator.finish(&settings, out);
+        if opts.marks {
+            let shared = ctx.shared::<MarkSet>();
+            shared.marks.append(&mut work.stage.marks);
+            shared.scanned = true;
+        }
     }
 }
 

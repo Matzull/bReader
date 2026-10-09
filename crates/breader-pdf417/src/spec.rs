@@ -53,6 +53,7 @@ pub(crate) fn pattern_of_widths(widths: [u8; 8]) -> Option<u32> {
 
 /// Cluster of a codeword, `0`, `3` or `6`, from its element widths:
 /// `(b1 - b2 + b3 - b4 + 9) mod 9`.
+#[cfg(test)]
 pub(crate) fn cluster_of_widths(widths: [u8; 8]) -> usize {
     let [b1, _, b2, _, b3, _, b4, _] = widths.map(i32::from);
     // The bars are the even elements: b1 w1 b2 w2 b3 w3 b4 w4.
@@ -140,6 +141,7 @@ impl Layout {
     /// Value of the left row indicator of `row`. The clusters carry, in
     /// turn, `(rows - 1) / 3`, `3 * level + (rows - 1) % 3` and `cols - 1`
     /// on top of `30 * (row / 3)`; the right indicator rotates the roles.
+    #[cfg(test)]
     pub(crate) fn left_indicator(&self, row: usize) -> u16 {
         self.indicator(row, row % 3)
     }

@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 breader-core.workspace = true
 breader-ecc.workspace = true
+breader-linear.workspace = true
 
 [lints]
 workspace = true

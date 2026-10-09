@@ -136,17 +136,49 @@ impl Text {
     }
 }
 
+/// Codewords at the end of a byte compaction run of `len` codewords that are
+/// single bytes.
+fn single_bytes(len: usize, whole_groups: bool) -> Result<usize, Reject> {
+    match (len % 5, whole_groups) {
+        (0, true) => Ok(0),
+        (_, true) => Err(Reject::Format),
+        (0, false) => Ok(len.min(5)),
+        (r, false) => Ok(r),
+    }
+}
+
+/// A byte compaction run that ECI designators may interrupt: the data
+/// codewords, and where each designator sits among them (count of data
+/// codewords before it) with its value, and the index after the run. The
+/// groups of five codewords run on across the designators.
+type ByteRun = (Vec<u16>, Vec<(usize, u32)>, usize);
+
+fn byte_run(cws: &[u16], start: usize) -> Result<ByteRun, Reject> {
+    let (mut run, mut ecis, mut i) = (Vec::new(), Vec::new(), start);
+    while let Some(&c) = cws.get(i) {
+        if c < 900 {
+            run.push(c);
+            i += 1;
+        } else if matches!(
+            c,
+            ECI_ONE_CODEWORD_HIGH | ECI_TWO_CODEWORDS | ECI_ONE_CODEWORD
+        ) {
+            let (value, used) = eci(cws, i)?;
+            ecis.push((run.len(), value));
+            i += used;
+        } else {
+            break;
+        }
+    }
+    Ok((run, ecis, i))
+}
+
 /// Appends the bytes of a byte compaction run. Five codewords make six
 /// bytes; after latch 901 the byte count is not a multiple of 6, so the last
 /// one to five codewords of the run are single bytes (also when there are
 /// five). After latch 924 the run holds whole groups only.
 fn flush_bytes(run: &[u16], whole_groups: bool, out: &mut Vec<u8>) -> Result<(), Reject> {
-    let singles = match (run.len() % 5, whole_groups) {
-        (0, true) => 0,
-        (_, true) => return Err(Reject::Format),
-        (0, false) => run.len().min(5),
-        (r, false) => r,
-    };
+    let singles = single_bytes(run.len(), whole_groups)?;
     let (groups, singles) = run.split_at(run.len() - singles);
     for g in groups.chunks_exact(5) {
         let v = g.iter().fold(0u64, |acc, &c| acc * 900 + u64::from(c));
@@ -312,6 +344,33 @@ pub(super) fn parse(cws: &[u16]) -> Result<Parsed, Reject> {
     let mut i = 0;
     while i < cws.len() {
         let cw = cws[i];
+        if let Mode::Byte { whole_groups } = mode
+            && (cw < 900
+                || matches!(
+                    cw,
+                    ECI_ONE_CODEWORD_HIGH | ECI_TWO_CODEWORDS | ECI_ONE_CODEWORD
+                ))
+        {
+            let (run, ecis, next) = byte_run(cws, i)?;
+            let base = data.len();
+            flush_bytes(&run, whole_groups, &mut data)?;
+            let groups = (run.len() - single_bytes(run.len(), whole_groups)?) / 5;
+            for (before, value) in ecis {
+                // A designator may not split a group of five codewords.
+                let at = if before <= 5 * groups {
+                    if before % 5 != 0 {
+                        return Err(Reject::Format);
+                    }
+                    6 * (before / 5)
+                } else {
+                    6 * groups + before - 5 * groups
+                };
+                eci_used = true;
+                charsets.push((base + at, Charset::Eci(value)));
+            }
+            i = next;
+            continue;
+        }
         if cw < 900 {
             let run = plain_run(cws, i);
             match mode {

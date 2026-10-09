@@ -33,6 +33,11 @@
         "read": 0,
         "false_positives": 0
       },
+      "PDF417": {
+        "expected": 6,
+        "read": 3,
+        "false_positives": 0
+      },
       "QR Code": {
         "expected": 234,
         "read": 229,

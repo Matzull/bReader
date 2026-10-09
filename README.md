@@ -4,7 +4,7 @@ A fast, clean-room barcode and QR code reader written in Rust. No unsafe code, n
 
 ## Supported symbologies
 
-QR Code, Data Matrix (ECC 200, rectangular and DMRE sizes), EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39 and Interleaved 2 of 5 (ITF). Also: ECI and Shift JIS character sets, GS1 element string parsing (Code 128 FNC1, GS1 QR, GTIN symbologies), EAN add-ons, light-on-dark and mirrored codes, and a video tracker. Input can be luma, RGB(A), BGRA, NV12, NV21 or I420.
+QR Code, Data Matrix (ECC 200, rectangular and DMRE sizes), PDF417 (including compact), EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39 and Interleaved 2 of 5 (ITF). Also: ECI and Shift JIS character sets, GS1 element string parsing (Code 128 FNC1, GS1 QR, GTIN symbologies), EAN add-ons, light-on-dark and mirrored codes, and a video tracker. Input can be luma, RGB(A), BGRA, NV12, NV21 or I420.
 
 ## Rust
 

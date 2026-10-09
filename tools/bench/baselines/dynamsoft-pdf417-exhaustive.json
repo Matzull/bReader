@@ -7,6 +7,11 @@
         "expected": 7,
         "read": 6,
         "false_positives": 0
+      },
+      "PDF417": {
+        "expected": 15,
+        "read": 1,
+        "false_positives": 0
       }
     }
   }

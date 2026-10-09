@@ -8,6 +8,7 @@ use qrcode::QrCode;
 use qrcode::types::{Color, EcLevel, Version};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
+use rxing::pdf417::encoder::PDF417;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sym {
@@ -19,6 +20,7 @@ pub enum Sym {
     Code39,
     Itf,
     DataMatrix,
+    Pdf417,
 }
 
 impl Sym {
@@ -55,6 +57,7 @@ impl Sym {
             Sym::Code39 => "CODE_39",
             Sym::Itf => "ITF",
             Sym::DataMatrix => "DATAMATRIX",
+            Sym::Pdf417 => "PDF417",
         }
     }
 }
@@ -233,7 +236,7 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             let t = to_text(&d);
             (t.clone(), TF::interleaved(&t).expect(fail).encode())
         }
-        Sym::Qr | Sym::DataMatrix => unreachable!("not linear"),
+        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 => unreachable!("not linear"),
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
@@ -314,9 +317,61 @@ pub fn encode_dm(rng: &mut ChaCha8Rng, shape: DmShape) -> Encoded {
     }
 }
 
+fn pdf417_payload(rng: &mut ChaCha8Rng, len: usize) -> String {
+    match rng.random_range(0..4u8) {
+        0 => to_text(&digits(rng, len)),
+        1 => pick_string(rng, &pool("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ "), len),
+        2 => pick_string(rng, &pool(BYTE_ASCII), len),
+        _ => {
+            let head = pick_string(rng, &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ"), 4);
+            format!("{head}{}", to_text(&digits(rng, len)))
+        }
+    }
+}
+
+/// PDF417 or compact PDF417 with a random column count and error
+/// correction level (the encoder is rxing's, as in the unit tests).
+pub fn encode_pdf417(rng: &mut ChaCha8Rng) -> Encoded {
+    let compact = rng.random_bool(0.25);
+    let mut len = rng.random_range(8..=100);
+    loop {
+        let text = pdf417_payload(rng, len);
+        let cols = rng.random_range(2..=8u32);
+        let level = rng.random_range(1..=5u32);
+        let mut enc = PDF417::with_compact_hint(compact);
+        enc.setDimensions(cols, cols, 90, 3);
+        if !text.trim().is_empty()
+            && text.trim() == text
+            && enc.generateBarcodeLogic(&text, level).is_ok()
+            && let Some(matrix) = enc.getBarcodeMatrix().as_ref()
+        {
+            // Rows are stored bottom first.
+            let rows: Vec<Vec<u8>> = matrix.getMatrix().into_iter().rev().collect();
+            let width = rows[0].len();
+            let modules = rows
+                .iter()
+                .flat_map(|r| r.iter().map(|&m| m != 0))
+                .collect();
+            let cell_h = rng.random_range(3.0..4.5);
+            return Encoded {
+                text,
+                format: Sym::Pdf417.label(),
+                modules,
+                cols: width,
+                rows: rows.len(),
+                cell_h,
+                qz_x: 3.0,
+                qz_y: 2.0,
+            };
+        }
+        len = (len * 4 / 5).max(1);
+    }
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
         Sym::DataMatrix => encode_dm(rng, DmShape::Square),
+        Sym::Pdf417 => encode_pdf417(rng),
         Sym::Qr => encode_qr(rng),
         _ => encode_linear(rng, sym),
     }
@@ -350,7 +405,7 @@ mod tests {
     fn all_symbologies_encode_many_times() {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         for _ in 0..200 {
-            for s in Sym::ALL.into_iter().chain([Sym::DataMatrix]) {
+            for s in Sym::ALL.into_iter().chain([Sym::DataMatrix, Sym::Pdf417]) {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);
                 assert!(!e.text.is_empty());

@@ -149,9 +149,27 @@
     "micropdf417-1": {},
     "microqrcode-1": {},
     "multi-1": {},
-    "pdf417-1": {},
-    "pdf417-2": {},
-    "pdf417-3": {},
+    "pdf417-1": {
+      "PDF417": {
+        "expected": 17,
+        "read": 16,
+        "false_positives": 0
+      }
+    },
+    "pdf417-2": {
+      "PDF417": {
+        "expected": 25,
+        "read": 25,
+        "false_positives": 0
+      }
+    },
+    "pdf417-3": {
+      "PDF417": {
+        "expected": 16,
+        "read": 14,
+        "false_positives": 0
+      }
+    },
     "pdf417-4": {},
     "qrcode-1": {
       "QR Code": {

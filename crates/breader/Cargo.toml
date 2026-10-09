@@ -7,7 +7,7 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-default = ["qr", "linear", "datamatrix"]
+default = ["qr", "linear", "datamatrix", "pdf417"]
 qr = ["dep:breader-qr"]
 linear = ["dep:breader-linear"]
 datamatrix = ["dep:breader-datamatrix"]

@@ -46,6 +46,8 @@ pub(crate) struct LineOptions {
     pub normal: bool,
     /// Read light-on-dark symbols.
     pub invert: bool,
+    /// Record start and stop patterns of PDF417 for its reader.
+    pub marks: bool,
 }
 
 impl LineOptions {
@@ -76,6 +78,7 @@ impl From<&ScanOptions> for LineOptions {
             itf_any: o.itf.allowed_lengths.is_empty(),
             normal: true,
             invert: o.try_invert.unwrap_or(true),
+            marks: o.symbologies.contains(Symbology::Pdf417),
         }
     }
 }

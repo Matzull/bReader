@@ -182,7 +182,7 @@ def test_options_roundtrip():
     "kwargs",
     [
         {"effort": "max"},
-        {"symbologies": ["pdf417"]},
+        {"symbologies": ["micropdf417"]},
         {"symbologies": []},
         {"symbologies": 5},
         {"escalation": "never"},
@@ -350,8 +350,8 @@ def test_synth_clean_matches_rust_bench():
                 read += 1
                 found.remove(w)
         fp += len(found)
-    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 23/23 (20 images plus 3 with Data Matrix), 0 false positives.
-    assert (read, expected, fp) == (23, 23, 0)
+    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 26/26 (20 images plus 3 with Data Matrix and 3 with PDF417), 0 false positives.
+    assert (read, expected, fp) == (26, 26, 0)
 
 
 def test_datamatrix_meta_on_synth():
@@ -376,3 +376,34 @@ def test_datamatrix_meta_on_synth():
             assert m["structured_append"] is None
             seen += 1
     assert seen >= 6
+
+
+def test_pdf417_meta_on_synth():
+    from PIL import Image
+
+    base = SYNTH_DIR / "clean"
+    if not (base / "annotations.json").exists():
+        pytest.skip("synthetic dataset not generated (set BREADER_SYNTH_DIR)")
+    ann = json.loads((base / "annotations.json").read_text())
+    r = Reader()
+    seen = 0
+    for img in ann["images"]:
+        want = {b["text"] for b in img["barcodes"] if b["format"] == "PDF417"}
+        if not want:
+            continue
+        found = r.scan(np.asarray(Image.open(base / img["file"]).convert("L")))
+        assert [s.text for s in found] == list(want)
+        s = found[0]
+        assert s.symbology == "pdf417"
+        assert s.aim_id == "]L2"
+        m = s.meta
+        assert m["kind"] == "pdf417"
+        assert m["rows"] >= 3 and 1 <= m["cols"] <= 30 and 0 <= m["ec_level"] <= 8
+        assert isinstance(m["compact"], bool) and m["macro"] is None
+        assert m["errors_corrected"] == 0 and m["erasures"] == 0
+        seen += 1
+    assert seen == 3
+
+
+def test_pdf417_is_a_known_symbology():
+    assert Reader(symbologies=["pdf417"]).options["symbologies"] == ["pdf417"]

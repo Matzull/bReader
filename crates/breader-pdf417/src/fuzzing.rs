@@ -1,8 +1,11 @@
 //! Entry points for fuzz targets. Not part of the public API.
 
 use crate::decode::{self, ERASED};
+use crate::grid::{self, Obs};
+use crate::row::{Entry, RowRead, walk};
 use crate::spec::{self, Layout};
 use breader_ecc::PDF417_FIELD;
+use breader_linear::stacked::{MarkKind, Runs, find};
 
 /// Decodes a `rows` x `cols` codeword matrix with error correction level
 /// `ec_level`. `cells` is row-major; missing cells are erasures, and so is
@@ -45,4 +48,55 @@ pub fn decode_stream(cols: usize, ec_level: u8, stream: &[u16]) -> Option<Vec<u8
     decode::decode_codewords(&cells, layout)
         .ok()
         .map(|d| d.data)
+}
+
+/// Finds a start pattern in the run widths of one line (alternating, the
+/// first a bar or a space), walks its codewords and solves a symbol made of
+/// 40 copies of that line. Returns the payload if one came out.
+pub fn read_line(first_is_bar: bool, widths: &[f32]) -> Option<Vec<u8>> {
+    let widths: Vec<f32> = widths
+        .iter()
+        .map(|w| if w.is_finite() { w.abs().min(1e4) } else { 1.0 })
+        .collect();
+    let runs = Runs::from_widths(first_is_bar, &widths, 4.0, 4.0);
+    let mut marks = Vec::new();
+    find(&runs, &mut marks);
+    let start = marks
+        .iter()
+        .find(|m| m.kind == MarkKind::Start && m.to > m.from)?;
+    let mut read = RowRead::default();
+    if !walk(&runs, &marks, &Entry::after(start), &mut read) {
+        return None;
+    }
+    let obs: Vec<Obs> = (0..40)
+        .map(|k| Obs {
+            t: k as f32,
+            read: read.clone(),
+        })
+        .collect();
+    grid::solve(&obs).map(|s| s.decoded.data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::Rng;
+
+    #[test]
+    fn arbitrary_run_widths_do_not_panic() {
+        let mut rng = Rng(3);
+        for _ in 0..3000 {
+            let n = rng.below(400);
+            let widths: Vec<f32> = (0..n)
+                .map(|_| match rng.below(12) {
+                    0 => f32::NAN,
+                    1 => 0.0,
+                    2 => -3.0,
+                    3 => 1e9,
+                    _ => rng.below(100) as f32 / 4.0,
+                })
+                .collect();
+            let _ = read_line(rng.below(2) == 0, &widths);
+        }
+    }
 }

@@ -85,6 +85,17 @@ impl Runs {
         &self.widths
     }
 
+    /// Distance from the profile start to the first edge, whatever the
+    /// colour of the margin.
+    pub fn lead(&self) -> f32 {
+        self.lead
+    }
+
+    /// Distance from the last edge to the profile end.
+    pub fn trail(&self) -> f32 {
+        self.trail
+    }
+
     pub fn is_bar(&self, i: usize) -> bool {
         self.first_is_bar == i.is_multiple_of(2)
     }

@@ -248,6 +248,7 @@ version = "0.1.0"
 dependencies = [
  "breader-core",
  "breader-ecc",
+ "breader-linear",
  "rxing",
 ]
 
@@ -1914,6 +1915,7 @@ dependencies = [
  "qrcode",
  "rand 0.9.5",
  "rand_chacha 0.9.0",
+ "rxing",
  "serde",
  "serde_json",
 ]

@@ -61,6 +61,10 @@ const OVERRIDES: &[(&str, &str, &str)] = &[(
     "000123457347",
 )];
 
+/// Labels the CSV lacks: (video, format, payload, reason). Each entry was
+/// verified visually on frame crops; the reason says how.
+const ADDITIONS: &[(&str, &str, &str, &str)] = &[];
+
 pub fn load(path: &Path) -> Result<Expected, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut text = text;
@@ -70,7 +74,20 @@ pub fn load(path: &Path) -> Result<Expected, String> {
             text = text.replace(from, to);
         }
     }
-    Ok(parse(&text))
+    let mut expected = parse(&text);
+    add_labels(&mut expected, stem, ADDITIONS);
+    Ok(expected)
+}
+
+fn add_labels(expected: &mut Expected, video: &str, additions: &[(&str, &str, &str, &str)]) {
+    for (v, format, value, _reason) in additions {
+        if *v == video
+            && let Some(sym) = map_symbology(format)
+        {
+            let (s, data) = canonical(sym, value.as_bytes());
+            *expected.codes.entry((s.name(), data)).or_default() += 1;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -87,6 +104,16 @@ mod tests {
         assert!(e.codes.keys().any(|k| k.1 == b"ae-1534"));
         assert!(e.codes.keys().any(|k| k.1 == b"2004567540106"));
         assert!(e.codes.keys().any(|k| k.1 == b"3605972842046"));
+    }
+
+    #[test]
+    fn additions_apply_to_their_video_only() {
+        let extra = [("clip", "PDF417", "hello", "verified on a crop")];
+        let mut e = parse("Format,Value\n");
+        add_labels(&mut e, "other", &extra);
+        assert!(e.codes.is_empty());
+        add_labels(&mut e, "clip", &extra);
+        assert_eq!(e.codes.len(), 1);
     }
 
     #[test]

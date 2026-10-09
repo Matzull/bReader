@@ -98,13 +98,24 @@ fn generate_class(
     } else {
         count.div_ceil(9)
     };
-    for i in 0..count + extra {
+    let pdf417 = if matches!(class, Class::Datamatrix | Class::Negative) {
+        0
+    } else {
+        count.div_ceil(9)
+    };
+    for i in 0..count + extra + pdf417 {
         let (img, annotations) = if i < count {
             scene::generate(class, i, seed)
-        } else if let Some(g) = scene::generate_extra(class, i - count, seed) {
-            g
+        } else if i < count + extra {
+            match scene::generate_extra(class, i - count, seed) {
+                Some(g) => g,
+                None => break,
+            }
         } else {
-            break;
+            match scene::generate_pdf417(class, i - count - extra, seed) {
+                Some(g) => g,
+                None => break,
+            }
         };
         let file = format!("{}_{:04}.png", class.name().replace('-', "_"), i + 1);
         img.save(dir.join(&file))

@@ -23,7 +23,7 @@ mod symbol;
 mod symbology;
 
 pub use bitmatrix::BitMatrix;
-pub use context::{FrameContext, Pass, Scratch};
+pub use context::{FrameCache, FrameContext, Pass, Scratch};
 pub use error::Error;
 pub use geometry::{Perspective, Point, Quad};
 pub use image::{ImageBuffer, ImageView, PixelFormat};

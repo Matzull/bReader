@@ -176,7 +176,15 @@ fn single(
     (canvas, vec![ann])
 }
 
-fn multi(rng: &mut ChaCha8Rng, with_dm: bool) -> (GrayImage, Vec<Annotation>) {
+/// Which symbols a `multi` image carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mix {
+    Original,
+    DataMatrix,
+    Pdf417,
+}
+
+fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
     let cfg = Class::Multi.config();
     let n = rng.random_range(2..=5usize);
     let (cols, rows) = match n {
@@ -194,7 +202,11 @@ fn multi(rng: &mut ChaCha8Rng, with_dm: bool) -> (GrayImage, Vec<Annotation>) {
     let mut anns = Vec::new();
     for &cell in cells.iter().take(n) {
         let sym = Sym::ALL[rng.random_range(0..Sym::ALL.len())];
-        let sym = if with_dm { Sym::DataMatrix } else { sym };
+        let sym = match mix {
+            Mix::Original => sym,
+            Mix::DataMatrix => Sym::DataMatrix,
+            Mix::Pdf417 => Sym::Pdf417,
+        };
         let enc = encode::encode(rng, sym);
         let dark: u8 = rng.random_range(0..=45);
         let code = render::rasterize(&enc, dark, light);
@@ -255,7 +267,7 @@ pub fn generate(class: Class, index: usize, seed: u64) -> (GrayImage, Vec<Annota
     let rng = &mut rng;
     match class {
         Class::Negative => (negative::generate(index, rng), Vec::new()),
-        Class::Multi => multi(rng, false),
+        Class::Multi => multi(rng, Mix::Original),
         Class::Datamatrix => {
             let shape = [
                 DmShape::Square,
@@ -289,9 +301,25 @@ pub fn generate_extra(class: Class, j: usize, seed: u64) -> Option<(GrayImage, V
     let rng = &mut rng;
     match class {
         Class::Negative | Class::Datamatrix => None,
-        Class::Multi => Some(multi(rng, true)),
+        Class::Multi => Some(multi(rng, Mix::DataMatrix)),
         _ => {
             let (mut img, anns) = single(class, Sym::DataMatrix, Some(DmShape::Square), rng);
+            degrade(class, &mut img, rng);
+            Some((img, anns))
+        }
+    }
+}
+
+/// PDF417 images of a class, generated after the Data Matrix ones so that
+/// every earlier image stays byte-identical.
+pub fn generate_pdf417(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Vec<Annotation>)> {
+    let mut rng = image_rng(seed.wrapping_add(0x7DF4_1700), class, j);
+    let rng = &mut rng;
+    match class {
+        Class::Negative | Class::Datamatrix => None,
+        Class::Multi => Some(multi(rng, Mix::Pdf417)),
+        _ => {
+            let (mut img, anns) = single(class, Sym::Pdf417, None, rng);
             degrade(class, &mut img, rng);
             Some((img, anns))
         }
