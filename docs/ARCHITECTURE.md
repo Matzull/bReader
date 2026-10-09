@@ -165,6 +165,10 @@ ECC 200, square, rectangular and DMRE sizes; candidates from pooled dark-pixel c
 
 Stacked linear symbology read from gray profiles: seeds from the linear scan's pattern hits, boundary growth, row lines, grid votes, GF(929) Reed-Solomon with erasures. Design and as-built notes: [symbologies/pdf417.md](symbologies/pdf417.md).
 
+### 3.7 Aztec Code (`breader-aztec`, milestone M10)
+
+Bullseye finder on the binary plane, mode message with orientation marks, layer spiral with a reference grid, Reed-Solomon over GF(16) to GF(4096). Design: [symbologies/aztec.md](symbologies/aztec.md).
+
 ## 4. Facade (`breader`)
 
 `Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear`, `datamatrix`, `pdf417` (all four default), `image`, `rayon`.
