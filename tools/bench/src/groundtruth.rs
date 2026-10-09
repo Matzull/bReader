@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use breader::Symbology;
 use serde::{Deserialize, Serialize};
@@ -77,14 +77,22 @@ pub fn load_annotations(path: &Path) -> Result<Annotations, String> {
     parse_annotations(&json)
 }
 
-/// Dataset spellings vary ("EAN13" and "EAN_13", "QRCode" and "QR_CODE").
-pub fn map_symbology(name: &str) -> Option<Symbology> {
-    let key: String = name
-        .chars()
+/// Normalized dataset spelling of a symbology: ASCII letters and digits, upper case
+/// ("EAN_13" and "ean-13" are both `EAN13`).
+fn symbology_key(name: &str) -> String {
+    name.chars()
         .filter(|c| c.is_ascii_alphanumeric())
         .map(|c| c.to_ascii_uppercase())
-        .collect();
-    match key.as_str() {
+        .collect()
+}
+
+/// Maps a dataset's format name to the library symbology. `None` means the symbology is not
+/// supported (yet): such labels are counted as unsupported and excluded from the read rates
+/// (today PDF417 and MaxiCode). Supporting a new symbology only needs one more arm here,
+/// e.g. `"PDF417" => Some(Symbology::Pdf417)`; the test
+/// `every_library_symbology_has_a_mapping` fails until it is added.
+pub fn map_symbology(name: &str) -> Option<Symbology> {
+    match symbology_key(name).as_str() {
         "QRCODE" | "QR" => Some(Symbology::Qr),
         "EAN13" => Some(Symbology::Ean13),
         "EAN8" => Some(Symbology::Ean8),
@@ -96,6 +104,82 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "DATAMATRIX" => Some(Symbology::DataMatrix),
         _ => None,
     }
+}
+
+const IMAGE_EXTENSIONS: [&str; 7] = ["jpg", "jpeg", "png", "webp", "gif", "bmp", "tif"];
+
+fn is_annotation_dir(dir: &Path) -> bool {
+    dir.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.eq_ignore_ascii_case("annotation"))
+}
+
+/// Annotation files: `annotations.json` anywhere, or any `.json` inside a directory named
+/// `annotation` (Dynamsoft's `UPS-Synthetic-Labels/annotation/annotations_min.json` and
+/// `pdf417-small-module-size/annotation/test-results.json`).
+pub fn is_annotation_file(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    name == "annotations.json"
+        || (name.ends_with(".json") && path.parent().is_some_and(is_annotation_dir))
+}
+
+/// Directory the image names of an annotation file are relative to: the dataset root, which is
+/// the parent of an `annotation` directory.
+pub fn dataset_base(ann_path: &Path) -> PathBuf {
+    let dir = ann_path.parent().unwrap_or(Path::new("."));
+    if is_annotation_dir(dir) {
+        dir.parent().unwrap_or(dir).to_path_buf()
+    } else {
+        dir.to_path_buf()
+    }
+}
+
+/// Image file stem to path for every image below `base`, the first path winning.
+pub fn index_images(base: &Path) -> BTreeMap<String, PathBuf> {
+    fn walk(dir: &Path, out: &mut BTreeMap<String, PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        let mut paths: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        paths.sort();
+        for p in paths {
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n != ".git") {
+                    walk(&p, out);
+                }
+            } else if let (Some(stem), Some(ext)) = (
+                p.file_stem().and_then(|s| s.to_str()),
+                p.extension().and_then(|e| e.to_str()),
+            ) && IMAGE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
+            {
+                out.entry(stem.to_string()).or_insert(p);
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    walk(base, &mut out);
+    out
+}
+
+/// Resolves an annotation's image name. A file next to the annotations is used as is; otherwise
+/// the name is matched by stem against the images below the dataset root, ignoring the
+/// extension and a trailing `_annotated` (the Dynamsoft annotations name `1-1-4_annotated` for
+/// `Images/1-1-4.jpeg` and omit the extension of the UPS labels). `None` when no image exists.
+pub fn resolve_image(
+    base: &Path,
+    file: &str,
+    index: &mut Option<BTreeMap<String, PathBuf>>,
+) -> Option<PathBuf> {
+    let direct = base.join(file);
+    if direct.is_file() {
+        return Some(direct);
+    }
+    let index = index.get_or_insert_with(|| index_images(base));
+    let stem = Path::new(file).file_stem().and_then(|s| s.to_str())?;
+    index
+        .get(stem)
+        .or_else(|| index.get(stem.strip_suffix("_annotated")?))
+        .cloned()
 }
 
 /// Versioned label corrections, embedded so the bench works from any directory.
@@ -113,11 +197,19 @@ pub struct OverrideEntry {
     #[serde(default)]
     pub from: Option<LabelRef>,
     pub to: LabelRef,
+    /// Number of identical labels an added entry stands for (several symbols with the same
+    /// text in one image); labels already present count towards it.
+    #[serde(default = "one")]
+    pub count: usize,
     /// Corners of an added label (image coordinates), informational.
     #[serde(default)]
     pub points: Vec<[f64; 2]>,
     #[allow(dead_code)]
     pub reason: String,
+}
+
+fn one() -> usize {
+    1
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -140,11 +232,12 @@ pub fn apply_overrides(ann: &mut Annotations, dataset_dir: &str, overrides: &Ove
     for entry in entries {
         for img in ann.images.iter_mut().filter(|i| i.file == entry.file) {
             let Some(from) = &entry.from else {
-                let exists = img
+                let present = img
                     .barcodes
                     .iter()
-                    .any(|b| b.format == entry.to.format && b.text == entry.to.text);
-                if !exists {
+                    .filter(|b| b.format == entry.to.format && b.text == entry.to.text)
+                    .count();
+                for _ in present..entry.count {
                     img.barcodes.push(Barcode {
                         text: entry.to.text.clone(),
                         format: entry.to.format.clone(),
@@ -350,7 +443,74 @@ mod tests {
         assert_eq!(map_symbology("CODE_39_EXTENDED"), Some(Symbology::Code39));
         assert_eq!(map_symbology("Code128"), Some(Symbology::Code128));
         assert_eq!(map_symbology("UPC_A"), Some(Symbology::UpcA));
-        assert_eq!(map_symbology("PDF417"), None);
+    }
+
+    #[test]
+    fn every_library_symbology_has_a_mapping() {
+        for &s in Symbology::ALL {
+            assert_eq!(map_symbology(s.name()), Some(s), "{}", s.name());
+        }
+    }
+
+    #[test]
+    fn unsupported_symbologies_have_no_symbology() {
+        for n in ["MAXICODE", "AZTEC"] {
+            assert_eq!(map_symbology(n), None, "{n}");
+        }
+        // PDF417 is unsupported only until the library has it; its arm in `map_symbology`
+        // is then the only change needed (checked by `every_library_symbology_has_a_mapping`).
+        let supported = Symbology::ALL.iter().any(|s| s.name() == "PDF417");
+        assert_eq!(map_symbology("PDF417").is_some(), supported);
+    }
+
+    #[test]
+    fn annotation_file_layouts() {
+        assert!(is_annotation_file(Path::new(
+            "d/challenging/annotations.json"
+        )));
+        assert!(is_annotation_file(Path::new(
+            "d/UPS/annotation/annotations_min.json"
+        )));
+        assert!(is_annotation_file(Path::new(
+            "d/p/annotation/test-results.json"
+        )));
+        assert!(!is_annotation_file(Path::new("d/p/annotation/sheet.xlsx")));
+        assert!(!is_annotation_file(Path::new(
+            "d/p/other/test-results.json"
+        )));
+        assert_eq!(
+            dataset_base(Path::new("d/UPS/annotation/annotations_min.json")),
+            Path::new("d/UPS")
+        );
+        assert_eq!(
+            dataset_base(Path::new("d/c/annotations.json")),
+            Path::new("d/c")
+        );
+    }
+
+    #[test]
+    fn images_resolve_by_stem() {
+        let dir = std::env::temp_dir().join(format!("bench-resolve-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Images")).unwrap();
+        for f in ["Images/1-1-4.jpeg", "Images/IMG_1.JPG", "a.png"] {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        let mut idx = None;
+        assert_eq!(
+            resolve_image(&dir, "a.png", &mut idx),
+            Some(dir.join("a.png"))
+        );
+        assert!(idx.is_none());
+        assert_eq!(
+            resolve_image(&dir, "1-1-4_annotated", &mut idx),
+            Some(dir.join("Images/1-1-4.jpeg"))
+        );
+        assert_eq!(
+            resolve_image(&dir, "IMG_1", &mut idx),
+            Some(dir.join("Images/IMG_1.JPG"))
+        );
+        assert_eq!(resolve_image(&dir, "IMG_2", &mut idx), None);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     fn bc(format: &str, text: &str, pts: [[f64; 2]; 4]) -> Barcode {
@@ -445,6 +605,20 @@ mod tests {
         assert_eq!(apply_overrides(&mut ann, "ds", &ov), 1);
         assert_eq!(apply_overrides(&mut ann, "ds", &ov), 0);
         assert_eq!(ann.images[0].barcodes.len(), 1);
+    }
+
+    #[test]
+    fn overrides_can_add_several_identical_labels() {
+        let ov = parse_overrides(
+            r#"{"datasets": {"ds": [{"file": "a.jpg", "count": 2,
+                "to": {"format": "CODE_128", "text": "Q8"}, "reason": "r"}]}}"#,
+        )
+        .unwrap();
+        let mut ann = ann_of(vec![bc("CODE_128", "Q8", SQ)]);
+        assert_eq!(apply_overrides(&mut ann, "ds", &ov), 1);
+        assert_eq!(ann.images[0].barcodes.len(), 2);
+        assert_eq!(apply_overrides(&mut ann, "ds", &ov), 0);
+        assert_eq!(ann.images[0].barcodes.len(), 2);
     }
 
     #[test]

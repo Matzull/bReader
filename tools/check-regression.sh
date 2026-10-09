@@ -2,8 +2,8 @@
 # Runs the regression gate against the versioned baselines in tools/bench/baselines.
 # Usage: tools/check-regression.sh [--dynamsoft] [--zxing-samples] [--all]
 #   Synthetic sets (data/synth seed 1, data/synth-2024 seed 2024) are generated when missing.
-#   --dynamsoft also gates data/dynamsoft/challenging-images, skewed-datamatrix and the videos (needs
-#   tools/fetch-datasets.sh and ffmpeg).
+#   --dynamsoft also gates data/dynamsoft/challenging-images, skewed-datamatrix, UPS-Synthetic-Labels,
+#   pdf417-small-module-size and the videos (needs tools/fetch-datasets.sh and ffmpeg).
 #   --zxing-samples also gates data/zxing-samples/test/samples (needs tools/fetch-datasets.sh).
 #   --all is --dynamsoft and --zxing-samples.
 set -euo pipefail
@@ -49,6 +49,12 @@ for effort in fast balanced exhaustive; do
         echo "=== dynamsoft skewed-datamatrix, $effort"
         gate "$bin/bench" data/dynamsoft/skewed-datamatrix --effort "$effort" \
             --check "$base/dynamsoft-skewed-$effort.json"
+        echo "=== dynamsoft UPS-Synthetic-Labels, $effort"
+        gate "$bin/bench" data/dynamsoft/UPS-Synthetic-Labels --effort "$effort" \
+            --check "$base/dynamsoft-ups-$effort.json"
+        echo "=== dynamsoft pdf417-small-module-size, $effort"
+        gate "$bin/bench" data/dynamsoft/pdf417-small-module-size --effort "$effort" \
+            --check "$base/dynamsoft-pdf417-$effort.json"
     fi
     if [ "$zxing" = 1 ]; then
         echo "=== zxing-cpp samples, $effort"

@@ -299,7 +299,8 @@ def apply_overrides(ann, dir_name, overrides):
             if "from" not in entry:
                 # An entry without "from" adds a label the dataset is missing.
                 to = entry["to"]
-                if not any(b["format"] == to["format"] and b["text"] == to["text"] for b in img["barcodes"]):
+                present = sum(b["format"] == to["format"] and b["text"] == to["text"] for b in img["barcodes"])
+                for _ in range(present, entry.get("count", 1)):
                     img["barcodes"].append({"format": to["format"], "text": to["text"], "points": entry.get("points", [])})
                     applied += 1
                 continue
@@ -391,8 +392,43 @@ def dedup_annotations(ann):
     return removed
 
 
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif"}
+
+
+def is_annotation_file(p):
+    """annotations.json anywhere, or any .json inside a directory named `annotation`."""
+    return p.name == "annotations.json" or (p.suffix == ".json" and p.parent.name.lower() == "annotation")
+
+
 def find_annotations(root):
-    return sorted(p for p in root.rglob("annotations.json") if ".git" not in p.parts)
+    return sorted(p for p in root.rglob("*.json") if ".git" not in p.parts and is_annotation_file(p))
+
+
+def dataset_base(ann_path):
+    """Directory the image names are relative to (the parent of an `annotation` directory)."""
+    d = ann_path.parent
+    return d.parent if d.name.lower() == "annotation" else d
+
+
+def resolve_images(base, files):
+    """Maps annotation image names to paths: direct files, else a stem match below `base` (ignoring the
+    extension and a trailing `_annotated`). Names without an image are absent from the result."""
+    index = None
+    out = {}
+    for file in files:
+        if (base / file).is_file():
+            out[file] = base / file
+            continue
+        if index is None:
+            index = {}
+            for p in sorted(base.rglob("*")):
+                if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS:
+                    index.setdefault(p.stem, p)
+        stem = Path(file).stem
+        found = index.get(stem) or index.get(stem.removesuffix("_annotated"))
+        if found:
+            out[file] = found
+    return out
 
 
 def dataset_name(root, base):
@@ -407,13 +443,17 @@ def run_dataset(base, ann, engine):
             (map_symbology(b["format"]), gt_data(b)) for b in img["barcodes"]
         )
     stats = Stats()
+    paths = resolve_images(base, expected_by_file)
     for file in sorted(expected_by_file):
+        if file not in paths:
+            print(f"skipping {file}: labelled but no such image", file=sys.stderr)
+            continue
         expected = expected_by_file[file]
         stats.images += 1
         try:
-            gray = np.asarray(Image.open(base / file).convert("L"))
+            gray = np.asarray(Image.open(paths[file]).convert("L"))
         except Exception as e:
-            print(f"{base / file}: {e}", file=sys.stderr)
+            print(f"{paths[file]}: {e}", file=sys.stderr)
             stats.errors += 1
             score([], expected, stats)
             continue
@@ -462,7 +502,7 @@ def main(argv):
         engines.append(ZxingEngine())
     files = find_annotations(root)
     if not files:
-        sys.exit(f"no annotations.json found under {root}")
+        sys.exit(f"no annotation files found under {root}")
     totals = {e.name: Stats() for e in engines}
     per_dataset = {e.name: {} for e in engines}
     overrides = load_overrides()
@@ -471,14 +511,15 @@ def main(argv):
         if not str(ann.get("format", "")).startswith("barcode-benchmark/"):
             print(f"skipping {f}: unknown annotation format", file=sys.stderr)
             continue
-        ds = dataset_name(root, f.parent)
+        base = dataset_base(f)
+        ds = dataset_name(root, base)
         if use_overrides:
-            n = apply_overrides(ann, f.parent.resolve().name, overrides)
+            n = apply_overrides(ann, base.resolve().name, overrides)
             if n:
                 print(f"{ds}: applied {n} GT override(s)", file=sys.stderr)
         print(f"{ds}: removed {dedup_annotations(ann)} duplicate GT entries", file=sys.stderr)
         for e in engines:
-            stats = run_dataset(f.parent, ann, e)
+            stats = run_dataset(base, ann, e)
             print_table(e.name, ds, stats)
             per_dataset[e.name][ds] = stats_json(stats)
             totals[e.name].merge(stats)

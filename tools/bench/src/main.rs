@@ -143,7 +143,7 @@ fn find_annotation_files(dir: &Path, out: &mut Vec<PathBuf>) {
             if p.file_name().is_some_and(|n| n != ".git") {
                 find_annotation_files(&p, out);
             }
-        } else if p.file_name().is_some_and(|n| n == "annotations.json") {
+        } else if groundtruth::is_annotation_file(&p) {
             out.push(p);
         }
     }
@@ -173,7 +173,8 @@ fn load_datasets(root: &Path, use_overrides: bool) -> Result<Vec<Dataset>, Strin
                 continue;
             }
         };
-        let base = ann_path.parent().unwrap_or(Path::new("."));
+        let base_buf = groundtruth::dataset_base(ann_path);
+        let base = base_buf.as_path();
         let name = match base.strip_prefix(root) {
             Ok(rel) if !rel.as_os_str().is_empty() => rel.display().to_string(),
             _ => root
@@ -195,10 +196,14 @@ fn load_datasets(root: &Path, use_overrides: bool) -> Result<Vec<Dataset>, Strin
         }
         let removed = groundtruth::dedup_annotations(&mut ann);
         eprintln!("{name}: removed {removed} duplicate GT entries");
-        let images = groundtruth::expected_by_file(&ann)
-            .into_iter()
-            .map(|(file, expected)| (base.join(file), expected))
-            .collect();
+        let mut index = None;
+        let mut images = Vec::new();
+        for (file, expected) in groundtruth::expected_by_file(&ann) {
+            match groundtruth::resolve_image(base, &file, &mut index) {
+                Some(path) => images.push((path, expected)),
+                None => eprintln!("{name}: skipping {file}: labelled but no such image"),
+            }
+        }
         datasets.push(Dataset { name, images });
     }
     Ok(datasets)

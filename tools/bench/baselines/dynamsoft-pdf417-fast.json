@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "effort": "fast",
+  "groups": {
+    "pdf417-small-module-size": {
+      "Code 128": {
+        "expected": 7,
+        "read": 2,
+        "false_positives": 0
+      }
+    }
+  }
+}

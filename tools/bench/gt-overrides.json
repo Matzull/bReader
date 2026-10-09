@@ -329,6 +329,50 @@
         },
         "reason": "PZN is carried in a plain Code 39 symbol and its text is the Code 39 content itself ('-' plus 8 digits, printed as PZN - 12345678); the label names the symbology PZN, which is not supported, so the Code 39 reading of the same symbol is added."
       }
+    ],
+    "pdf417-small-module-size": [
+      {
+        "file": "10-9-11_annotated",
+        "to": {
+          "format": "CODE_128",
+          "text": "Q8"
+        },
+        "reason": "The dataset labels only the PDF417; the AIAG shipping label also carries Code 128 symbols. QTY(Q) barcode beside the printed quantity '8': Code 128 'Q8' (data identifier Q + 8). Verified on a crop against the printed digit; breader and zxing-cpp read the same checksum-valid value."
+      },
+      {
+        "file": "16-6-15_annotated",
+        "to": {
+          "format": "CODE_128",
+          "text": "Q8"
+        },
+        "reason": "The dataset labels only the PDF417; the AIAG shipping label also carries Code 128 symbols. QTY(Q) barcode beside the printed quantity '8': Code 128 'Q8' (data identifier Q + 8). Verified on a crop against the printed digit; breader and zxing-cpp read the same checksum-valid value. The image shows two labels, so two symbols.",
+        "count": 2
+      },
+      {
+        "file": "16-6-15_annotated",
+        "to": {
+          "format": "CODE_128",
+          "text": "NUTWR"
+        },
+        "reason": "The dataset labels only the PDF417; the AIAG shipping label also carries Code 128 symbols. SUPP(V) barcode under 'SUPP(V) ANDERSON ELECTRIC ASIA PACIFIC, INC', whose supplier code is printed large as NUTWR on the label. Verified on a crop; breader and zxing-cpp read the same checksum-valid value. Other Code 128 symbols on the label (part number, serial) are neither read by any engine nor labelled. The image shows two labels, so two symbols.",
+        "count": 2
+      },
+      {
+        "file": "4-3-11_annotated",
+        "to": {
+          "format": "CODE_128",
+          "text": "Q8"
+        },
+        "reason": "The dataset labels only the PDF417; the AIAG shipping label also carries Code 128 symbols. QTY(Q) barcode beside the printed quantity '8': Code 128 'Q8' (data identifier Q + 8). Verified on a crop against the printed digit; breader and zxing-cpp read the same checksum-valid value."
+      },
+      {
+        "file": "6-5-14_annotated",
+        "to": {
+          "format": "CODE_128",
+          "text": "Q8"
+        },
+        "reason": "The dataset labels only the PDF417; the AIAG shipping label also carries Code 128 symbols. QTY(Q) barcode beside the printed quantity '8': Code 128 'Q8' (data identifier Q + 8). Verified on a crop against the printed digit; breader and zxing-cpp read the same checksum-valid value."
+      }
     ]
   }
 }

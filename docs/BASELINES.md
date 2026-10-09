@@ -191,3 +191,29 @@ Where breader reads less than zxing-cpp:
 - Code 128 and Code 39 (`code128-3`, `code39-2`, `code128-1`): not investigated.
 - Data Matrix: `datamatrix-5` (0 of 5) and a few in `datamatrix-3`.
 - A kana-only Shift JIS QR payload (`qrcode-2`) is reported with `text` as Latin-1, since the heuristic requires a double-byte character; `data` is the exact payload.
+
+## Dynamsoft `UPS-Synthetic-Labels` and `pdf417-small-module-size` (2026-10-09)
+
+Two more Dynamsoft sets, gated by `dynamsoft-ups-*.json` and `dynamsoft-pdf417-*.json` (`tools/check-regression.sh --dynamsoft`). Their ground truth is already in the `barcode-benchmark/1.0` format but lives in `annotation/annotations_min.json` and `annotation/test-results.json`, with image names the bench resolves by stem (UPS names have no extension; PDF417 names end in `_annotated` while the files are `Images/1-1-4.jpeg`). Labels whose image is missing are skipped with a notice. All coordinates in both files are zero (no quads).
+
+- `UPS-Synthetic-Labels` (CC BY 4.0, "UPS Synthetic Shipping Label Dataset, Dynamsoft, 2025."): 58 annotated images, but only 52 are in the checkout (`IMG_8757`, `IMG_9565`, `IMG_9570`, `IMG_9577`, `IMG_9579`, `IMG_9582` are labelled and absent). Per image two Code 128 (tracking `1Z...`, reference `CA 859 2-NN`) and one MaxiCode: 104 Code 128 labels supported, 52 MaxiCode unsupported.
+- `pdf417-small-module-size`: 11 images, 15 PDF417 labels (all unsupported). The dataset has no Code 128 labels; 7 are added through `gt-overrides.json` (below), so 7 supported labels.
+- `challenging-images` carries 6 PDF417 labels, already counted as unsupported (excluded) there.
+- Video: `batch_rotated_small_pdf417_1080p` is in the video baseline, but its CSV holds only the header line (no PDF417 values were published), so it has 0 expected labels. Once PDF417 is read, every PDF417 read in that video is a false positive unless the CSV is labelled; see the open item below.
+
+PDF417 and MaxiCode map to no `Symbology`, so their labels are excluded. `map_symbology` (`tools/bench/src/groundtruth.rs`) is the only mapping, shared by the bench and video-bench: supporting PDF417 needs one new arm, `"PDF417" => Some(Symbology::Pdf417)` (the test `every_library_symbology_has_a_mapping` fails until it is added, and `py_bench.py` has the same `ALIASES` / `BR_FORMATS` tables), then re-recording the baselines.
+
+Read count / false positives, release build (zxing-cpp 3.1.1 Python with default options; rxing with `--features baselines`, default options):
+
+| Set / symbology | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing | zxing-cpp |
+|---|---|---|---|---|---|---|
+| UPS, Code 128 | 104 | 84 / 0 | 98 / 0 | 99 / 0 | 88 / 0 (+4 UPC-E FP) | 91 / 0 |
+| pdf417-small, Code 128 | 7 | 2 / 0 | 3 / 0 | 6 / 0 | 5 / 4 (+2 EAN-8 / UPC-E FP) | 7 / 0 |
+
+Triage (BENCH_SHOW_FP=1, all efforts):
+
+- UPS: no false positives; the misses are real (5 to 20 of 104, e.g. `CA 859 2-41` in `IMG_9592` / `IMG_9593` and `CA 859 2-34` in `IMG_9576` at every effort), not investigated.
+- pdf417-small: the first run had 3 / 2 / 6 Code 128 false positives (Fast / Balanced / Exhaustive), all `Q8` or `NUTWR`. These are genuine, unlabelled Code 128 symbols of the AIAG shipping labels (the dataset only labels the PDF417): the QTY(Q) barcode next to the printed quantity `8` (Q is the data identifier) and the SUPP(V) barcode of the supplier whose code is printed large as `NUTWR`. Checked on crops, and zxing-cpp reads exactly the same seven (`Q8` in 10-9-11, 16-6-15 x2, 4-3-11, 6-5-14; `NUTWR` in 16-6-15 x2). Added to `gt-overrides.json` with `count` (a new field for several identical symbols in one image). The labels carry other Code 128 symbols (part number `ML35-7B6xx-GB`, serial) that breader and zxing-cpp do not read; they stay unlabelled. rxing reads them, wrongly in two cases (`PML35-7B615-TB` and `PML35-7B606-TB` for `...-GB`), which count as its false positives.
+- No normalization differences were found.
+
+Open items: the 5 to 20 missed UPS Code 128 reads; labelling `batch_rotated_small_pdf417_1080p` (or exempting it) before PDF417 lands in the library, otherwise the video gate fails on its PDF417 reads.

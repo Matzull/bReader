@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "effort": "exhaustive",
+  "groups": {
+    "UPS-Synthetic-Labels": {
+      "Code 128": {
+        "expected": 104,
+        "read": 99,
+        "false_positives": 0
+      }
+    }
+  }
+}
