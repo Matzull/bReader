@@ -21,6 +21,8 @@ pub enum Symbology {
     Itf,
     /// Data Matrix ECC 200, including rectangular and DMRE sizes.
     DataMatrix,
+    /// PDF417, including compact PDF417 and Macro PDF417.
+    Pdf417,
 }
 
 impl Symbology {
@@ -35,11 +37,12 @@ impl Symbology {
         Self::Code39,
         Self::Itf,
         Self::DataMatrix,
+        Self::Pdf417,
     ];
 
     /// True for 1D symbologies.
     pub const fn is_linear(self) -> bool {
-        !matches!(self, Self::Qr)
+        !matches!(self, Self::Qr | Self::DataMatrix | Self::Pdf417)
     }
 
     /// Human-readable name, e.g. "EAN-13".
@@ -54,6 +57,7 @@ impl Symbology {
             Self::Code39 => "Code 39",
             Self::Itf => "ITF",
             Self::DataMatrix => "Data Matrix",
+            Self::Pdf417 => "PDF417",
         }
     }
 }

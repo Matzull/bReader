@@ -190,6 +190,7 @@ dependencies = [
  "breader-datamatrix",
  "breader-imgproc",
  "breader-linear",
+ "breader-pdf417",
  "breader-qr",
  "image",
  "qrcode",
@@ -239,6 +240,15 @@ version = "0.1.0"
 dependencies = [
  "breader-core",
  "rayon",
+]
+
+[[package]]
+name = "breader-pdf417"
+version = "0.1.0"
+dependencies = [
+ "breader-core",
+ "breader-ecc",
+ "rxing",
 ]
 
 [[package]]

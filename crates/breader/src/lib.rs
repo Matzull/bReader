@@ -34,6 +34,7 @@
 //! # Cargo features
 //!
 //! - `qr`, `linear`, `datamatrix` (default): the QR, 1D and Data Matrix readers.
+//! - `pdf417`: links the PDF417 codeword decoder; no reader is registered yet.
 //! - `image`: `Reader::scan_file` and `FileError`, decoding PNG and JPEG with the `image` crate.
 //! - `rayon`: multi-threaded kernels and scanning with identical output. Bound
 //!   the thread count by running scans inside `rayon::ThreadPool::install`.
@@ -55,9 +56,9 @@ pub use tracker::{FrameUpdate, Track, TrackEvent, Tracker, TrackerConfig};
 pub use breader_core::{
     Binarizer, BitMatrix, Charset, Code39Options, Content, DataMatrixMeta, DataSegment, Detector,
     EanAddonPolicy, EcLevel, Effort, Error, Escalation, FrameContext, Gs1Element, ImageBuffer,
-    ImageView, ItfOptions, LinearMeta, Pass, Pipeline, PipelineBuilder, PixelFormat, Point,
-    PostProcessor, Preprocessor, QrMeta, Quad, Reject, ScanOptions, Scratch, Symbol, SymbolDecoder,
-    SymbolMeta, Symbology, SymbologyReader, SymbologySet,
+    ImageView, ItfOptions, LinearMeta, MacroPdf417, Pass, Pdf417Meta, Pipeline, PipelineBuilder,
+    PixelFormat, Point, PostProcessor, Preprocessor, QrMeta, Quad, Reject, ScanOptions, Scratch,
+    Symbol, SymbolDecoder, SymbolMeta, Symbology, SymbologyReader, SymbologySet,
 };
 
 pub use breader_content::{Gs1Error, charset, gs1};

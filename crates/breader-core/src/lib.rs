@@ -36,7 +36,7 @@ pub use options::{
 };
 pub use pipeline::{Pipeline, PipelineBuilder};
 pub use symbol::{
-    Charset, Content, DataMatrixMeta, DataSegment, EcLevel, Gs1Element, LinearMeta, QrMeta, Symbol,
-    SymbolMeta,
+    Charset, Content, DataMatrixMeta, DataSegment, EcLevel, Gs1Element, LinearMeta, MacroPdf417,
+    Pdf417Meta, QrMeta, Symbol, SymbolMeta,
 };
 pub use symbology::{Symbology, SymbologySet};

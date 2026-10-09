@@ -90,6 +90,8 @@ pub enum SymbolMeta {
     Linear(LinearMeta),
     /// Data Matrix details.
     DataMatrix(DataMatrixMeta),
+    /// PDF417 details.
+    Pdf417(Pdf417Meta),
 }
 
 /// Details of a decoded Data Matrix symbol.
@@ -107,6 +109,50 @@ pub struct DataMatrixMeta {
     pub eci: Vec<u32>,
     /// Structured Append: (position, total, file id) when present; position and total are 1-based.
     pub structured_append: Option<(u8, u8, u16)>,
+}
+
+/// Details of a decoded PDF417 symbol.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pdf417Meta {
+    /// Number of rows, 3 to 90.
+    pub rows: u16,
+    /// Number of data columns, 1 to 30 (row indicators not counted).
+    pub cols: u16,
+    /// Error correction level, 0 to 8 (2^(level + 1) check codewords).
+    pub ec_level: u8,
+    /// Codewords changed by Reed-Solomon correction that were not erasures.
+    pub errors_corrected: u32,
+    /// Codewords that were unreadable and recovered as erasures.
+    pub erasures: u32,
+    /// Compact (truncated) PDF417: no right row indicators and a single-bar stop.
+    pub compact: bool,
+    /// Macro PDF417 control block, when the symbol is part of a file.
+    pub macro_pdf417: Option<MacroPdf417>,
+}
+
+/// Macro PDF417 control block: the position of a symbol in a multi-symbol file.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MacroPdf417 {
+    /// Zero-based position of this symbol in the file.
+    pub segment_index: u32,
+    /// File identifier: the codewords of the file ID as three-digit groups.
+    pub file_id: String,
+    /// The terminator codeword marks this symbol as the last segment.
+    pub last_segment: bool,
+    /// File name.
+    pub file_name: Option<String>,
+    /// Total number of segments.
+    pub segment_count: Option<u32>,
+    /// Time stamp of the file, as encoded (seconds since 1970-01-01 UTC).
+    pub timestamp: Option<u64>,
+    /// Sender.
+    pub sender: Option<String>,
+    /// Addressee.
+    pub addressee: Option<String>,
+    /// File size in bytes.
+    pub file_size: Option<u64>,
+    /// 16-bit CRC of the file.
+    pub checksum: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

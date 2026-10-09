@@ -1,10 +1,13 @@
-//! Reed-Solomon error correction over GF(256).
+//! Reed-Solomon error correction over GF(256) and, for PDF417, GF(929).
 //!
 //! Block layout: `block[0]` is the highest-degree coefficient; the last
 //! `ec_len` symbols are check symbols. The code's generator polynomial has
 //! roots `alpha^base, ..., alpha^(base + ec_len - 1)`.
 
 #![forbid(unsafe_code)]
+
+mod gf929;
+pub use gf929::{Correction, Gf929, MAX_BLOCK_LEN, MAX_EC_LEN, PDF417_FIELD};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RsError {

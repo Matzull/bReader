@@ -11,6 +11,7 @@ default = ["qr", "linear", "datamatrix"]
 qr = ["dep:breader-qr"]
 linear = ["dep:breader-linear"]
 datamatrix = ["dep:breader-datamatrix"]
+pdf417 = ["dep:breader-pdf417"]
 image = ["dep:image"]
 # Multi-threaded kernels and scanning on rayon's global pool; results are
 # identical to the single-threaded build. To bound the threads, run the scan
@@ -25,6 +26,7 @@ breader-content.workspace = true
 breader-qr = { workspace = true, optional = true }
 breader-linear = { workspace = true, optional = true }
 breader-datamatrix = { workspace = true, optional = true }
+breader-pdf417 = { workspace = true, optional = true }
 image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg"] }
 
 [dev-dependencies]
