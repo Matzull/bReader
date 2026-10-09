@@ -1,6 +1,6 @@
 # breader — Architecture
 
-Status: draft v0.1 (2026-10-06). See [REQUIREMENTS.md](REQUIREMENTS.md) for the requirement IDs referenced here.
+Status: draft v0.1 (2026-10-06). See [REQUIREMENTS.md](REQUIREMENTS.md) for the requirement IDs referenced here. This page is the cross-cutting overview; per-family designs are in [symbologies/](symbologies/README.md), and the documentation map is [README.md](README.md).
 
 ## 1. Workspace
 
@@ -11,12 +11,15 @@ crates/
   breader-ecc       Reed-Solomon over GF(256)
   breader-linear    1D detection and decoders (EAN/UPC, Code 128, Code 39, ITF)
   breader-qr        QR detection, sampling and decoding
+  breader-datamatrix  Data Matrix ECC 200 detection, sampling and decoding
   breader-content   charset/ECI decoding, GS1 parsing, content classification, dedup
   breader           facade: Reader, default pipeline, feature flags
   breader-py        Python bindings (outside the workspace build, built with maturin)
 tools/
-  bench             dataset harness and baseline comparison
-  fetch-datasets.sh
+  bench             dataset harness, regression gate and baseline comparison
+  synth             synthetic dataset generator
+  video-bench       video dataset harness and gate
+  fetch-datasets.sh, check-regression.sh
 ```
 
 Dependency direction is strictly downward: every module crate depends only on `breader-core` (and `breader-ecc` where needed); only the facade knows about all of them. A third-party crate can provide a module by depending on `breader-core` alone.
@@ -92,72 +95,21 @@ Validation is part of each decoder, not an optional post-step: a `SymbologyReade
 
 `Symbol` carries symbology, raw bytes, optional text, `Content` classification, `Quad` (corners in symbol order, image coordinates of the original frame, independent of the preprocessor scale), orientation, AIM identifier, `SymbolMeta` (`Qr` or `Linear`) and a quality estimate. `quality` is informational only and never used to accept a result.
 
-## 3. Symbology families (planned design)
+## 3. Symbology families
+
+The per-family designs live in [symbologies/](symbologies/README.md) (one page per family, with status and spec references). Sections 3.3 and 3.4 are shared by all families and stay here.
 
 ### 3.1 Linear (`breader-linear`)
 
-`LinearReader` returns `uses_binary() == false` and `handles_inversion() == true`: it reads grayscale profiles and decodes both polarities from the same edges. It only scans the original image; the downscaled variant was measured to add no 1D reads on any dataset.
-
-Internal modules and data flow for one pass:
-
-```
-ScanPlan ─► Scanline ─► profile (u8) ─► Edges ─► Runs ─┬─ dark bars  ─┐
-                                                        └─ light bars ─┤
-                       LinearDecoder × K (EAN/UPC, 128, 39, ITF) ◄─────┘
-                                   │ LineHit
-                                   ▼
-                    Aggregator ◄─► Refinement ─► Symbol
-```
-
-1. **ScanPlan** — scanlines for the pass image, ordered center-out so early hits come quickly. The spacing is computed from the image extent perpendicular to each direction, capped at 48 / 24 / 12 px (Fast / Balanced / Exhaustive), and multiplied by 1.5 for non-axis directions. The cap keeps small symbols in large photos reachable.
-
-   | Effort | Directions |
-   |---|---|
-   | Fast | horizontal, vertical |
-   | Balanced | 8 (every 22.5°) |
-   | Exhaustive | 12 (every 15°) |
-
-2. **Profile** — samples along the scanline at 1 px steps: direct reads when axis-aligned (vertical lines in one row-major sweep). Oblique lines use 16.16 fixed-point DDA with integer bilinear weights and are sampled band by band (32 rows), so each band stays in cache while every line crosses it. Nearest and 1D interpolation were measured and lost reads.
-3. **Edges** — central difference of the profile. An edge is a local extremum with `|d| ≥ max(min_edge, 0.12 · local_range, noise term)`, where the noise is estimated on flat blocks only and the threshold is capped at 0.3 · range. Signs must alternate; for consecutive same-sign extrema, the stronger one is kept. Each edge is then moved to the half-level crossing between the neighbouring extremes, which gives sub-pixel positions and corrects print gain. A [1 2 1]-smoothed variant runs in Balanced and Exhaustive only on lines where some decoder found its start pattern (it is the only variant in Fast); unsmoothed is the default because smoothing merges 1.5–2 px bars.
-4. **Runs** — widths between consecutive edges, edge positions, and the polarity of the first run. Decoders read both polarities by swapping the bar/space roles. They never allocate.
-5. **LinearDecoder** (family-internal trait, static dispatch through a tuple of decoders): `decode(&self, runs, opts, out: &mut Vec<LineHit>)`. Each decoder tries both reading directions:
-   - finds its start (or reversed stop) pattern;
-   - checks quiet zones against the estimated module width;
-   - matches characters by normalizing runs to the character's module count, with print-gain bias and module-width drift (≤ 1.8×) estimated from guard patterns;
-   - accepts a character only when its best match beats the second best by a margin; at most one weak character is allowed when a check digit protects it;
-   - validates check characters, stop pattern and length rules.
-
-   `LineHit` holds the symbology, text, add-on, polarity, positions along the line and module width; the reader maps positions to image points.
-6. **Aggregator** — groups hits by (symbology, text, polarity) with single-link proximity: center distance below the longer segment, any direction, so lines at different angles confirm each other. A group becomes a `Symbol` with at least `min_line_agreement` lines (ITF: at least 3).
-   - **Conflicts:** if two groups of the same family overlap (segment and rectangle overlap) with different text, the one with fewer lines survives only when the other has at least twice as many; otherwise both are dropped (NFR-1). This also removes partial reads such as a UPC-E inside an EAN-13 or 12 digits of an ITF-14.
-   - **Refinement:** a group that is still short of agreement gets parallel lines on both sides (at most 24 per side, stopping after 3 misses, at most 48 seeds per pass). Adjacent lines see nearly the same pixels, so a group backed by a single line of the sparse plan needs `min_line_agreement + 1` lines.
-   - **Coordinates:** the quad comes from the endpoint extents along and across the mean direction, mapped to original-frame coordinates with `FrameContext::scale`.
-
-EAN/UPC specifics: EAN-13 encodes its first digit in the L/G parity of the left half. An EAN-13 with leading 0 is reported as UPC-A (12 digits) when UPC-A is enabled, and as EAN-13 otherwise. UPC-E is expanded to UPC-A only for check digit validation; the reported data is the 8-digit UPC-E. Add-ons are searched after the end guard (gap of 5–14 modules, start pattern 1011) and need their own line agreement. Minimum quiet zones are 4.5 / 5.5 / 6.5 modules for EAN-13 and UPC-A / EAN-8 / UPC-E. A symbol whose end guard cannot be verified is never accepted, even when the digits and check digit would be. EAN-2 parity comes from the value mod 4, EAN-5 parity from its weighted checksum. `EanAddonPolicy` decides acceptance.
+EAN/UPC, Code 128, Code 39 and ITF over gray scanline profiles: scan plan, edges, runs, per-symbology decoders, aggregation with conflict removal. Design: [symbologies/linear.md](symbologies/linear.md).
 
 ### 3.2 QR (`breader-qr`)
 
-`QrReader` uses the binarized pass image (`uses_binary() == true`) and `handles_inversion() == true`. It reads both polarities from the same matrix through a `Plane` view, which XORs the polarity, so light-on-dark symbols are found even in Fast and the pipeline never builds an inverted copy for it.
-
-Modules: `detect` (finder patterns, triplets), `alignment` (Annex E table), `sample` (homography and grid sampling), `spec` (dimensions, block layouts), `decode` (grid → payload), `reader` (orchestration).
-
-1. **Finder patterns** — rows of the binary matrix are scanned with a step of 3 / 2 / 1 rows (Fast / Balanced / Exhaustive) for the dark-light-dark-light-dark ratio 1:1:3:1:1, with tolerance per run: unit runs in [0.5, 1.5]·u, the center run in [2, 4]·u. Each hit is cross-checked vertically and along one diagonal through its center; the center is refined to the mean of the horizontal and vertical estimates, and the module size is their mean. Hits whose centers fall within one finder width of each other are merged, and the number of confirmations is kept.
-2. **Triplets** — among the strongest finders (at most 30), triples are kept when their module sizes agree (max/min ≤ 1.6), the angle at the corner finder is in [60°, 120°], and the two legs differ by at most a factor of 1.6. The corner finder is top-left. Top-right and bottom-left are assigned from the sign of the cross product. A mirrored symbol therefore produces a transposed grid, which the decoder handles. The estimated dimension is `(|TL−TR| + |TL−BL|) / (2·module) + 7`, rounded to the nearest `4k + 1`. Triplets are tried best-score first. A finder may be reused if the triplet that claimed it failed to decode.
-3. **Fourth point** — for version ≥ 2, the bottom-right alignment pattern is searched near its predicted position: the parallelogram prediction moved 3 modules inward, within a window of ±4 modules. The search looks for a dark-light-dark 1:1:1 center with module size consistent with the finders. If it is found, a homography maps the module coordinates (3.5, 3.5), (d−3.5, 3.5), (3.5, d−3.5) and (d−6.5, d−6.5) to the image; otherwise the parallelogram (affine) estimate is used.
-4. **Sampling** — before alignment search or full sampling, each dimension hypothesis passes cheap plausibility tests: the three finder blocks (8x8 with separators) must match under the mapping (at most 48 of 192 modules wrong), and for dimensions below 45 without a timing-verified hint the timing patterns must alternate (at most 35 % wrong). `sample_grid` repeats both checks on the sampled grid (timing row/column first, then finder blocks) before reading the data area. Refining finder centers and the plain-parallelogram retry only run when some grid passed these tests. Failure budgets are separate for detected and timing-recovered triplets and scale with effort. Module centers are mapped through the homography. Modules under 3 px are read at the center; larger modules take the majority of 5 sub-samples. When version ≥ 7, the version information read from the first sampling overrides the estimate, and the grid is resampled. If decoding fails, dimensions ±4 are tried.
-5. **Decoding** — format information (BCH (15,5), both copies, nearest valid word with distance ≤ 3), version information (BCH (18,6), distance ≤ 3), unmasking, codeword placement, de-interleaving per the block layout, Reed-Solomon on every block (`breader-ecc`), and the bitstream (numeric, alphanumeric, byte, kanji, ECI, FNC1 in first and second position; Structured Append headers are parsed and ignored). If format information fails, the transposed grid is tried (mirrored symbol). Any block failing RS rejects the symbol.
-6. **Results** — the quad maps module corners (0,0), (d,0), (d,d), (0,d) to the image, scaled to original-frame coordinates. Candidates whose center falls inside a symbol already decoded in this frame are skipped. `QrMeta` records version, level, mask, corrected errors, ECI and mirroring. The AIM identifier follows ISO/IEC 15424: `]Q1` by default, `]Q2` with ECI, `]Q3`/`]Q4` with FNC1 in first position (without/with ECI), and `]Q5`/`]Q6` with FNC1 in second position.
-
-7. **Retries after a Reed-Solomon failure** (no cost on the happy path). Per dimension hypothesis, with the first mapping that sampled a plausible grid:
-   - *Local threshold:* module values are read from the luma image (center and four nearby points) and compared with the mean of the surrounding 7x7 modules, which copes with a ramp of lighting or a binarization threshold that does not fit a 2-3 px/module symbol.
-   - *Pitch correction:* the offsets of the column and row boundaries are measured on the finder edges and the timing patterns (transition search within half a module), smoothed with a moving average (half-width 2, then 5) and interpolated; module coordinates are shifted before the homography. A homography cannot follow the uneven module pitch of prints on creased or curved sheets. The measurement is repeated once on the corrected mapping. Reed-Solomon and the version check still decide.
-   - *Nested symbols:* a finder inside a decoded quad is kept when its module is below half of that symbol's module size, so a small code printed over the data area of a large one is read as well; finders of the same scale stay skipped.
-
-Later improvements, driven by the benchmarks: piecewise homographies over all alignment patterns for large versions, grayscale sampling, and recovery of a missing finder from two finders plus timing patterns.
+Finder patterns, triplets, homography sampling, Reed-Solomon, retries (local threshold, pitch correction, nested symbols). Design: [symbologies/qr.md](symbologies/qr.md).
 
 ### 3.3 Error correction (`breader-ecc`)
 
-GF(256) arithmetic with log/antilog tables built at compile time (`const fn`), syndrome computation, Berlekamp–Massey, Chien search, Forney. Returns corrected count for metadata and quality. Reusable by Data Matrix and PDF417 (PDF417 needs the prime field GF(929) with erasures; see §3.6).
+GF(256) arithmetic with log/antilog tables built at compile time (`const fn`), syndrome computation, Berlekamp–Massey, Chien search, Forney. Returns corrected count for metadata and quality. Reusable by Data Matrix and PDF417 (PDF417 needs the prime field GF(929) with erasures; see [PDF417](symbologies/pdf417.md)).
 
 ### 3.4 Content (`breader-content`)
 
@@ -206,90 +158,15 @@ Further semantic parsers (vCard, Wi-Fi, GS1 Digital Link, ...) are added as `Con
 
 ### 3.5 Data Matrix (`breader-datamatrix`, milestone M8)
 
-Scope: ECC 200 only (ECC 000–140 are obsolete).
-- **Sizes:**
-  - square symbols from 10×10 to 144×144;
-  - rectangular symbols from 8×18 to 16×48;
-  - DMRE rectangular sizes (ISO/IEC 21471).
-- **Content:** GS1 (FNC1), ECI and Structured Append (headers are parsed).
-
-Out of scope: direct part marking. The normative source is ISO/IEC 16022 and ISO/IEC 21471.
-
-**Tests:** the `datamatrix` crate (MIT/Apache) is allowed as a dev-dependency, to encode test symbols only. Clean-room: its decoder sources are never read.
-
-The structure mirrors `breader-qr`. The modules are `spec` (size table, region layout, block layout), `place` (Annex F placement), `decode` (grid to payload), `detect`, `sample` and `reader`.
-
-`DataMatrixReader` uses the binary matrix (`uses_binary() == true`) and sets `handles_inversion() == true`. It reads both polarities through a polarity view, like the QR `Plane`. A shared view type can move to `breader-core` if both readers end up needing the same one.
-
-1. **Candidates.**
-   - Dark-pixel counts over 4x4 blocks of the binary plane are built for each polarity, and the coarser levels (8, 16, ...) sum 2x2 groups of them.
-   - The finest level keeps a cell when at least 30 % of its pixels are dark; this drops speckle that would otherwise bridge a symbol to a textured surface. Coarser levels keep any cell with a dark pixel, because a share there would erase the thin clock tracks on the symbol boundary.
-   - Cells that are fully dark in a block (the AND plane) are eroded and dilated to cut out thick solid regions (shadows, filled areas) before labeling.
-   - Connected components are labeled with union–find over word-packed runs. A component is kept when it has at least 16 cells and a 3x3 bounding box. Compact, filled components are fitted first; the per-level budget (48 / 128 / 512 components by effort) is split between them and the largest others (merged symbols, clusters).
-   - The pixels of a component in full resolution give per-row extents and a convex hull (no sorting: the extents are already ordered by row). A quad is fitted to the hull from the four best supported side lines (turns of 55 to 125 degrees), and two further quads come from pairs of solid hull sides (the L finder), which still work when the clock track is fragmented.
-   - Quads found at several levels are merged when their corners agree, and ranked by convexity and density.
-2. **Orientation and size.**
-   - A cheap precheck runs on every candidate in rank order: coarse samples along a side half a module inside the edge must be dark (at least 73 %) on two adjacent sides (the L) while the other two are not solid, then the module size is estimated. A polarity is abandoned after a run of candidates (48 / 96 / 384 by effort) without an L, since the tail of the ranking is texture.
-   - Survivors are re-fitted (RANSAC lines through the boundary pixels), the L is confirmed on the refined quad (78 %), and the two clock sides are sampled at the middle of their modules (a shallower probe is tried again for bold prints) and must alternate (regular runs ≥ 70 %). The corner of the L is the symbol's bottom-left corner.
-   - Size hypotheses are the table entries that best match the counted runs, the side lengths divided by the module size, and the alternating pattern of each clock sample series (module counts of an alternating track are matched against every table dimension, which survives runs that merge or split). The top three are tried, a transposed (mirrored) reading when decoding fails.
-3. **Sampling.**
-   - An initial homography maps the four quad corners.
-   - Refinement: the clock-track module centers are located along both clock sides (dark/light run midpoints with sub-pixel interpolation), and the homography is refit by least squares over the L corners plus the clock centers. This handles the top-right corner, which perspective distorts the most.
-   - For multi-region symbols, the alignment patterns between data regions (two-module solid and dotted lines) are skipped by the region layout, and their positions are also used as extra fit points.
-   - Modules under 3 px are sampled at their center; larger modules use a 5-point majority.
-   - When Reed-Solomon fails on a plausible grid, the grid is sampled again through a mapping corrected per column and row boundary with the clock transitions of the top rows and right columns of every region (the same measurement `refine` uses, kept as an offset per boundary instead of a global fit). This follows the uneven pitch of 2x2-region prints, where the left regions drift against the right ones.
-4. **Cheap gates** (before Reed-Solomon, like the QR gates): L solidity, clock alternation and alignment-pattern agreement on the sampled grid.
-5. **Decoding.**
-   - Remove the finder, clock and alignment patterns to obtain the mapping matrix.
-   - Extract codewords with the Annex F placement, including the four corner cases.
-   - De-interleave the blocks (the 144×144 symbol has unequal blocks).
-   - Run Reed-Solomon over GF(256) with polynomial 0x12D and first root α^1, using `breader-ecc`. Every block must succeed.
-   - A block with more than 12 check codewords that decodes with no correction does not need the pad check; non-standard pad values (some encoders write them) are accepted there. Corrected or small blocks keep it.
-   - Small blocks may correct fewer codewords than the spec allows: (ec − r) / 2, where r = 2 when ec ≤ 7, r = 1 when ec ≤ 12, and r = 0 otherwise. This is our own zero-FP policy, analogous to QR's misdecode protection, not an ISO 16022 requirement. As a result, 10×10 accepts one correction instead of two.
-   - Grid contract: the L finder is on the left and bottom edges. A mirrored retry reflects the grid across the diagonal through the bottom-left corner, which swaps the dimensions.
-   - Ambiguous cases, resolved conservatively (details in `decode/encodation.rs`):
-     - Reader Programming (234) is rejected.
-     - Empty payloads are rejected.
-     - Pads must match the 253-state sequence exactly, except for uncorrected large blocks (above).
-     - Structured Append is accepted only in the first position, and macros only before any data.
-   - Decode the encodation modes:
-     - ASCII, including digit pairs, Upper Shift and padding with its 253-state randomization check;
-     - C40 and Text, with the three shift sets;
-     - X12, EDIFACT, and Base256 with its length field and 255-state derandomization;
-     - FNC1 (first or second position, or GS inside data), ECI, macros 05/06 (header and trailer applied to `data`), Structured Append (233, parsed and recorded), and Reader Programming (234).
-   - Invalid sequences reject the symbol. Data after the end of a mode must follow the spec's unlatch rules.
-6. **Results.** `data` holds the raw bytes. `segments` gives the charset (`Eci(n)` after ECI 241, otherwise `Latin1`, which is the Data Matrix default). The new `SymbolMeta::DataMatrix(DataMatrixMeta { rows, cols, errors_corrected, mirrored, structured_append })` carries the metadata. The AIM identifiers are `]d1` (default), `]d2` (FNC1 first, GS1), `]d3` (FNC1 second), and `]d4`/`]d5`/`]d6` for the same with ECI. `ContentClassifier` already treats AIM GS1 markers; `]d2` is added to its list.
-
-**Passes and effort.** The first pass of a frame (original image, first binarizer) finds nearly every symbol. Later passes repeat the search only when a symbol is already known in the frame (more may be hidden) or at Exhaustive effort. Fast reads dark-on-light symbols only (the inverted polarity costs about as much as the first) and uses three pooling levels; Balanced searches both polarities with a third of the component budget for the inverted plane; Exhaustive adds two levels and larger budgets.
-
-Evaluation sets:
-- Dynamsoft `challenging-images` (50 Data Matrix), `skewed-datamatrix` (42) and the Data Matrix videos;
-- synth Data Matrix classes (square, rectangular, DMRE, inverted, rotated, perspective, blur, low-res).
-
-Targets: read at least as many as zxing-cpp on every set, with 0 FP.
+ECC 200, square, rectangular and DMRE sizes; candidates from pooled dark-pixel components, L finder and clock fit, Annex F placement, all encodation modes. Design: [symbologies/datamatrix.md](symbologies/datamatrix.md).
 
 ### 3.6 PDF417 (`breader-pdf417`, milestone M9)
 
-Scope: PDF417 and compact (truncated) PDF417, all error-correction levels, Macro PDF417 control blocks (parsed into metadata), ECI. MicroPDF417 and GS1 composite components are deferred to the "micro" group. The normative source is ISO/IEC 15438.
-
-**Tests:** an encoder crate (the `pdf417` crate, or rxing's encoder; MIT/Apache) is allowed as a dev-dependency, to encode test symbols only. Clean-room: no decoder sources are read.
-
-PDF417 is a stacked linear symbology, so the reader works on gray profiles like `breader-linear` (`uses_binary() == false`), not on the binary plane. Edge detection and run extraction are reused from `breader-linear` through a small `#[doc(hidden)]` API rather than duplicated. Modules: `spec` (cluster tables, row-indicator formulas, EC sizes), `decode` (codeword matrix to payload), `detect` (start/stop search and boundary fit), `sample` (row lines and codeword reading), `reader`.
-
-1. **Start/stop search.** Scanlines from the linear scan plan (directions by effort). On the runs, match the start pattern (8 elements, 8-1-1-1-1-1-1-3 modules) and the stop pattern (9 elements, 7-1-1-3-1-1-1-2-1) with a quiet zone on the outer side, either reading direction. Each hit records position, module width and direction.
-2. **Boundaries.** Start hits of one symbol lie on a line (the left edge), stop hits on another. A robust line fit (RANSAC) over hits of compatible module width and direction gives the left and right boundary segments; their extent gives top and bottom. Compact PDF417 has no stop pattern and no right row indicator: the right side ends at the single stop bar and is found while reading rows.
-3. **Row sampling.** Lines parallel to the row direction, between the boundaries, spaced at most half a minimum row height (3 modules) apart. Each line is a gray profile; edges and runs as in `breader-linear`; codewords are read left to right after the start pattern: each is 4 bars and 4 spaces over 17 modules (widths 1–6), normalized and looked up in the cluster table. The cluster ((b1 − b2 + b3 − b4 + 9) mod 9 ∈ {0, 3, 6}) is the row number mod 3, which rejects most misreads for free.
-4. **Grid assignment.** Row indicators (left and right columns) carry the row number, the row and column counts and the EC level. Lines get absolute row numbers from their indicators; lines without one are interpolated from neighbours (row numbers are monotonic across the symbol). Column positions come from the distance to the start pattern in 17-module units, re-anchored at each decoded codeword boundary. Every read votes into a rows × columns cell; the cell's value is the majority, and empty or tied cells are erasures.
-5. **Metadata vote.** Rows, columns and EC level are taken by vote over all decoded row indicators; a symbol is accepted only when they agree with the grid extent and the symbol length descriptor (first data codeword).
-6. **Error correction.** Reed-Solomon over the prime field GF(929) (generator 3), with erasures: Berlekamp–Massey with erasure initialization, Chien search and Forney, in `breader-ecc` next to GF(256). Misdecode guard: `2·errors + erasures ≤ ec − reserve`, with level 0 (2 check codewords) detection only and a reserve of 2 for up to 16 check codewords, 1 above. When decoding fails, cells with a close second candidate are swapped in a bounded search.
-7. **Decoding.** Text compaction (alpha, lower, mixed and punctuation submodes, latches and shifts), byte compaction (900→256, 6:5 groups, modes 901/924 and the 913 shift), numeric compaction (base 900 to base 10, groups of up to 15 codewords), ECI (925, 926, 927) into `DataSegment` charsets, Macro PDF417 (928 control block, 923 optional fields, 922 terminator) into `SymbolMeta::Pdf417`, reader initialisation (921). The default character set follows the standard (documented with the decision in the code). AIM identifier `]L` with the modifier the standard assigns.
-8. **Metadata.** `Pdf417Meta { rows, cols, ec_level, errors_corrected, erasures, compact, macro_pdf417 }`.
-
-Fast effort uses fewer scanline directions. `PDF417` is not tried on frames where no start or stop pattern was seen, so its cost on other content is the run matching only.
+Stacked linear symbology read from gray profiles, GF(929) Reed-Solomon with erasures. Design (work in progress): [symbologies/pdf417.md](symbologies/pdf417.md).
 
 ## 4. Facade (`breader`)
 
-`Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear` (default), `image`, `rayon`.
+`Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear`, `datamatrix` (all three default), `image`, `rayon`.
 
 ## 5. Performance plan (M7)
 
@@ -321,4 +198,4 @@ Work items, in priority order. Each must keep read counts and 0 FP unchanged.
 
 ## 6. Planned extensions
 
-- **More symbologies**: Data Matrix, PDF417, Aztec as new `SymbologyReader` crates reusing the cached binarizations.
+- **More symbologies**: PDF417 (designed, [symbologies/pdf417.md](symbologies/pdf417.md)), Aztec as new `SymbologyReader` crates reusing the cached binarizations.

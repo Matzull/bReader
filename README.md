@@ -41,9 +41,10 @@ See [crates/breader-py/README.md](crates/breader-py/README.md).
 
 ## Documentation
 
+Start at [docs/README.md](docs/README.md): status, a map of all documents by audience, and the design, testing, dataset and contribution guides. Common entry points:
+
 - [docs/GUIDE.md](docs/GUIDE.md): options, effort presets, parallelism, tracker, GS1.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design and module structure.
-- [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md): requirements and targets.
+- [docs/symbologies](docs/symbologies/README.md): supported symbologies, status and design per family.
 - [docs/BASELINES.md](docs/BASELINES.md): measurements against other engines.
 - API reference: `cargo doc --open -p breader`.
 
@@ -71,4 +72,4 @@ breader is dual-licensed:
 
 ## Contributing
 
-External contributions require signing a Contributor License Agreement (CLA), so that the project can keep offering the dual license. Open an issue before sending a large change.
+External contributions require signing a Contributor License Agreement (CLA), so that the project can keep offering the dual license. Open an issue before sending a large change. How to work in the repository: [docs/contributing.md](docs/contributing.md).

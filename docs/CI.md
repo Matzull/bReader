@@ -1,5 +1,7 @@
 # Continuous integration
 
+Documentation hub: [README.md](README.md). How the gates are maintained (rewriting and merging baselines, false-positive triage): [testing.md](testing.md). Datasets: [datasets.md](datasets.md).
+
 Workflows live in `.github/workflows/`. All use `contents: read` only.
 
 | Workflow | Trigger | What it does |
