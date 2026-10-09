@@ -28,7 +28,7 @@ A change is done when all of this holds:
 4. The gates pass with `--check`: `tools/check-regression.sh --all` for anything that can move reads ([testing](testing.md#gates)). No read count drops.
 5. **0 false positives** on every dataset including negatives.
 6. Baselines rewritten if reads increased, in the same change, with the movement written in BASELINES.
-7. Docs updated (see the table at the end) and, if a design choice was made or reversed, a [decision](decisions.md) entry.
+7. Docs updated (see the table at the end), `tools/check-docs.py` passes (no broken links or anchors) and, if a design choice was made or reversed, a [decision](decisions.md) entry.
 8. New public behavior has tests; a bug fix has the failing case as a test; a misdecode fix has its repro.
 
 ## Checklists
