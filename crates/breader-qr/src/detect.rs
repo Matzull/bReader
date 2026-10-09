@@ -2,9 +2,7 @@
 
 use std::f32::consts::SQRT_2;
 
-use breader_core::{BitMatrix, Point};
-
-use crate::plane::Plane;
+use breader_core::{BitMatrix, Plane, Point};
 
 const FINDER_UNITS: [f32; 5] = [1.0, 1.0, 3.0, 1.0, 1.0];
 /// Hard cap on stored finder hits per pass.

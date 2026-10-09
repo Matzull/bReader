@@ -103,7 +103,8 @@ fn generate_class(
     } else {
         count.div_ceil(9)
     };
-    for i in 0..count + extra + pdf417 {
+    let aztec = pdf417;
+    for i in 0..count + extra + pdf417 + aztec {
         let (img, annotations) = if i < count {
             scene::generate(class, i, seed)
         } else if i < count + extra {
@@ -111,8 +112,13 @@ fn generate_class(
                 Some(g) => g,
                 None => break,
             }
-        } else {
+        } else if i < count + extra + pdf417 {
             match scene::generate_pdf417(class, i - count - extra, seed) {
+                Some(g) => g,
+                None => break,
+            }
+        } else {
+            match scene::generate_aztec(class, i - count - extra - pdf417, seed) {
                 Some(g) => g,
                 None => break,
             }

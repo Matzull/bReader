@@ -131,8 +131,11 @@ pub struct AztecMeta {
     pub erasures: u32,
     /// The symbol was read mirrored (transposed).
     pub mirrored: bool,
-    /// Value 0 to 255 of an Aztec Rune; the payload is its decimal text.
+    /// Value 0 to 255 of an Aztec Rune; the payload is its three-digit decimal text.
     pub rune: Option<u8>,
+    /// Reader initialisation symbol (a one-layer symbol that flags the reader
+    /// to be programmed by its data).
+    pub reader_init: bool,
     /// ECI designators in order of appearance.
     pub eci: Vec<u32>,
 }

@@ -39,7 +39,7 @@ symbols = reader.scan(raw_bytes, width=640, height=480, format="nv12")
   - QR `meta`: `kind="qr"`, `version`, `ec_level`, `mask`, `errors_corrected`, `eci`, `mirrored`.
   - 1D `meta`: `kind="linear"`, `addon`, `checksum_verified`, `lines_agreeing`.
   - Data Matrix `meta`: `kind="datamatrix"`, `rows`, `cols`, `errors_corrected`, `mirrored`, `eci`, `structured_append`.
-  - Aztec `meta`: `kind="aztec"`, `compact`, `layers`, `data_codewords`, `ec_codewords`, `errors_corrected`, `erasures`, `mirrored`, `rune` (None, or the Rune value 0 to 255), `eci`.
+  - Aztec `meta`: `kind="aztec"`, `compact`, `layers`, `data_codewords`, `ec_codewords`, `errors_corrected`, `erasures`, `mirrored`, `rune` (None, or the Rune value 0 to 255), `reader_init`, `eci`.
   - PDF417 `meta`: `kind="pdf417"`, `rows`, `cols`, `ec_level`, `errors_corrected`, `erasures`, `compact`, `macro` (None, or a dict with `segment_index`, `file_id`, `last_segment`, `file_name`, `segment_count`, `timestamp`, `sender`, `addressee`, `file_size`, `checksum`).
 
 ## Options

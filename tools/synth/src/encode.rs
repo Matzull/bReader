@@ -8,6 +8,7 @@ use qrcode::QrCode;
 use qrcode::types::{Color, EcLevel, Version};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
+use rxing::aztec::encoder::aztec_encoder;
 use rxing::pdf417::encoder::PDF417;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +22,7 @@ pub enum Sym {
     Itf,
     DataMatrix,
     Pdf417,
+    Aztec,
 }
 
 impl Sym {
@@ -58,6 +60,7 @@ impl Sym {
             Sym::Itf => "ITF",
             Sym::DataMatrix => "DATAMATRIX",
             Sym::Pdf417 => "PDF417",
+            Sym::Aztec => "AZTEC",
         }
     }
 }
@@ -236,7 +239,7 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             let t = to_text(&d);
             (t.clone(), TF::interleaved(&t).expect(fail).encode())
         }
-        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 => unreachable!("not linear"),
+        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 | Sym::Aztec => unreachable!("not linear"),
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
@@ -368,10 +371,65 @@ pub fn encode_pdf417(rng: &mut ChaCha8Rng) -> Encoded {
     }
 }
 
+/// Layer choices of the Aztec images: negative for a compact symbol with that
+/// many layers, positive for a full-range one.
+pub const AZTEC_LAYERS: [i32; 14] = [-1, 2, -2, 3, -3, 5, -4, 4, 8, 6, 11, 7, 15, 10];
+
+fn aztec_payload(rng: &mut ChaCha8Rng, len: usize) -> String {
+    let text = match rng.random_range(0..4u8) {
+        0 => to_text(&digits(rng, len)),
+        1 => pick_string(rng, &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789"), len),
+        2 => pick_string(rng, &pool(BYTE_ASCII), len),
+        _ => {
+            let head = pick_string(rng, &pool("abcdefghijklmnopqrstuvwxyz"), 5);
+            format!("{head}{}", to_text(&digits(rng, len)))
+        }
+    };
+    text.trim().to_string()
+}
+
+/// Aztec Code with the layer count of `AZTEC_LAYERS[pick]`, filled to a
+/// random share of its capacity; `mirrored` transposes the modules (the encoder
+/// is rxing's, as in the unit tests).
+pub fn encode_aztec(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Encoded {
+    let layers = AZTEC_LAYERS[pick % AZTEC_LAYERS.len()];
+    let l = layers.unsigned_abs() as usize;
+    let bits = (if layers < 0 { 88 } else { 112 } + 16 * l) * l;
+    let mut len = (bits * 5 / 60).max(2) * rng.random_range(40..=100usize) / 100;
+    let ec = rng.random_range(23..=40u32);
+    loop {
+        let text = aztec_payload(rng, len.max(1));
+        if !text.is_empty()
+            && let Ok(code) = aztec_encoder::encode_bytes(text.as_bytes(), ec, layers)
+            && code.getLayers() == l as u32
+            && code.isCompact() == (layers < 0)
+        {
+            let n = code.getSize() as usize;
+            let m = code.getMatrix();
+            let mut modules = vec![false; n * n];
+            for y in 0..n {
+                for x in 0..n {
+                    let (r, c) = if mirrored { (x, y) } else { (y, x) };
+                    modules[r * n + c] = m.get(x as u32, y as u32);
+                }
+            }
+            let mut e = Encoded::matrix(text, Sym::Aztec.label(), modules, n);
+            e.qz_x = 2.0;
+            e.qz_y = 2.0;
+            return e;
+        }
+        len = (len * 4 / 5).max(1);
+    }
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
         Sym::DataMatrix => encode_dm(rng, DmShape::Square),
         Sym::Pdf417 => encode_pdf417(rng),
+        Sym::Aztec => {
+            let pick = rng.random_range(0..AZTEC_LAYERS.len());
+            encode_aztec(rng, pick, false)
+        }
         Sym::Qr => encode_qr(rng),
         _ => encode_linear(rng, sym),
     }
@@ -402,10 +460,31 @@ mod tests {
     }
 
     #[test]
+    fn aztec_covers_the_layer_choices_and_mirrors() {
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        for (pick, &l) in AZTEC_LAYERS.iter().enumerate() {
+            let a = encode_aztec(&mut rng, pick, false);
+            let n = a.cols;
+            let base = if l < 0 { 11 } else { 14 } + 4 * l.unsigned_abs() as usize;
+            assert!(n >= base && n <= base + 1 + 2 * (base / 2 / 15), "{l}: {n}");
+            assert_eq!(a.modules.len(), n * n);
+        }
+        // Same payload and seed, transposed.
+        let a = encode_aztec(&mut ChaCha8Rng::seed_from_u64(9), 5, false);
+        let b = encode_aztec(&mut ChaCha8Rng::seed_from_u64(9), 5, true);
+        assert_eq!(a.text, b.text);
+        let n = a.cols;
+        assert!((0..n).all(|y| (0..n).all(|x| a.modules[y * n + x] == b.modules[x * n + y])));
+    }
+
+    #[test]
     fn all_symbologies_encode_many_times() {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         for _ in 0..200 {
-            for s in Sym::ALL.into_iter().chain([Sym::DataMatrix, Sym::Pdf417]) {
+            for s in Sym::ALL
+                .into_iter()
+                .chain([Sym::DataMatrix, Sym::Pdf417, Sym::Aztec])
+            {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);
                 assert!(!e.text.is_empty());

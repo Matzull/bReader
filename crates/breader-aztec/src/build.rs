@@ -171,6 +171,17 @@ fn draw_reference_grid(grid: &mut BitMatrix) {
 /// Renders a symbol from `data_words` (already stuffed codewords of the
 /// layout's size) with correct mode message, check words and finder.
 pub(crate) fn render(layout: Layout, data_words: &[u16]) -> BitMatrix {
+    render_flagged(layout, data_words, false)
+}
+
+/// Like [`render`]; `reader_init` sets the top bit of the codeword count
+/// field of the mode message (a reader initialisation symbol, one layer).
+pub(crate) fn render_flagged(layout: Layout, data_words: &[u16], reader_init: bool) -> BitMatrix {
+    let flag = match (reader_init, layout.compact) {
+        (false, _) => 0,
+        (true, true) => 1 << 5,
+        (true, false) => 1 << 10,
+    };
     let w = layout.word_size();
     let total = layout.total_codewords();
     let mut words = data_words.to_vec();
@@ -191,7 +202,7 @@ pub(crate) fn render(layout: Layout, data_words: &[u16]) -> BitMatrix {
     draw_mode(
         &mut grid,
         layout.compact,
-        &mode_message(layout, data_words.len(), None),
+        &mode_message(layout, data_words.len() + flag, None),
     );
     grid
 }
@@ -210,6 +221,7 @@ pub(crate) fn render_rune(value: u8) -> BitMatrix {
 
 /// Renders a high-level bit stream into the smallest symbol with at least
 /// `min_ec` check words.
+#[cfg(test)]
 pub(crate) fn render_stream(bits: &Bits, min_ec: usize) -> Option<(Layout, BitMatrix)> {
     let (layout, words) = fit(&bits.0, min_ec)?;
     Some((layout, render(layout, &words)))

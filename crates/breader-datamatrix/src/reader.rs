@@ -3,14 +3,13 @@
 use std::cell::RefCell;
 
 use breader_core::{
-    BitMatrix, Content, DataMatrixMeta, Effort, FrameContext, Point, Quad, Reject, Symbol,
+    BitMatrix, Content, DataMatrixMeta, Effort, FrameContext, Plane, Point, Quad, Reject, Symbol,
     SymbolMeta, Symbology, SymbologyReader, SymbologySet,
 };
 
 use crate::check;
 use crate::decode::{DecodedDm, decode_grid};
 use crate::detect::{Candidate, Detector};
-use crate::plane::Plane;
 use crate::sample::{
     Hypothesis, Mapper, SampleScratch, analyze, clock_warp, precheck, refine, sample_grid,
     sample_grid_warped, snap_layout,

@@ -190,16 +190,22 @@ impl State {
         Ok(())
     }
 
-    /// One token read after a shift: a character or FLG, nothing else.
-    fn shifted(&mut self, r: &mut Bits, to: Mode) -> Result<(), Reject> {
+    /// One token read after a shift: a character, FLG or Binary Shift, nothing else.
+    fn shifted(&mut self, r: &mut Bits, to: Mode) -> Result<Option<Mode>, Reject> {
         let code = r.read(5).ok_or(Reject::Format)?;
         match lookup(to, code) {
             Tok::Byte(b) => self.data.push(b),
             Tok::Text(t) => self.data.extend_from_slice(t),
             Tok::Flg => self.flg(r)?,
+            // Digit mode reaches Binary Shift through U/S; the data that
+            // follows the bytes is in the mode the shift went to.
+            Tok::Binary => {
+                self.binary(r)?;
+                return Ok(Some(to));
+            }
             _ => return Err(Reject::Format),
         }
-        Ok(())
+        Ok(None)
     }
 
     fn binary(&mut self, r: &mut Bits) -> Result<(), Reject> {
@@ -240,7 +246,11 @@ pub(crate) fn parse(bits: &[bool]) -> Result<Parsed, Reject> {
             Tok::Byte(b) => st.data.push(b),
             Tok::Text(t) => st.data.extend_from_slice(t),
             Tok::Latch(m) => mode = m,
-            Tok::Shift(m) => st.shifted(&mut r, m)?,
+            Tok::Shift(m) => {
+                if let Some(back) = st.shifted(&mut r, m)? {
+                    mode = back;
+                }
+            }
             Tok::Binary => st.binary(&mut r)?,
             Tok::Flg => st.flg(&mut r)?,
         }

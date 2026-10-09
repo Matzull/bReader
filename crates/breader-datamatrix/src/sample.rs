@@ -1,9 +1,8 @@
 //! Orientation from the L finder and clock tracks, homography refinement
 //! and module sampling.
 
-use breader_core::{BitMatrix, Perspective, Point};
+use breader_core::{BitMatrix, Perspective, Plane, Point};
 
-use crate::plane::Plane;
 use crate::spec::{self, SymbolSize};
 
 /// Fraction of dark samples along a side for it to count as part of the L.

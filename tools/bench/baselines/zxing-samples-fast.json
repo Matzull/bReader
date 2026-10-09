@@ -2,8 +2,20 @@
   "version": 1,
   "effort": "fast",
   "groups": {
-    "aztec-1": {},
-    "aztec-2": {},
+    "aztec-1": {
+      "Aztec": {
+        "expected": 32,
+        "read": 25,
+        "false_positives": 0
+      }
+    },
+    "aztec-2": {
+      "Aztec": {
+        "expected": 16,
+        "read": 16,
+        "false_positives": 0
+      }
+    },
     "codabar-1": {},
     "codabar-2": {},
     "code128-1": {

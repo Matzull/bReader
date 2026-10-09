@@ -115,7 +115,7 @@ pub fn image_rng(seed: u64, class: Class, index: usize) -> ChaCha8Rng {
 
 fn geometry(cfg: &Config, sym: Sym, rng: &mut ChaCha8Rng) -> Geometry {
     let module_px = match sym {
-        Sym::Qr | Sym::DataMatrix => uniform(rng, cfg.qr_module),
+        Sym::Qr | Sym::DataMatrix | Sym::Aztec => uniform(rng, cfg.qr_module),
         _ => uniform(rng, cfg.lin_module),
     };
     Geometry {
@@ -147,11 +147,20 @@ fn single(
     shape: Option<DmShape>,
     rng: &mut ChaCha8Rng,
 ) -> (GrayImage, Vec<Annotation>) {
-    let cfg = class.config();
     let enc = match shape {
         Some(shape) => encode::encode_dm(rng, shape),
         None => encode::encode(rng, sym),
     };
+    single_with(class, sym, enc, rng)
+}
+
+fn single_with(
+    class: Class,
+    sym: Sym,
+    enc: encode::Encoded,
+    rng: &mut ChaCha8Rng,
+) -> (GrayImage, Vec<Annotation>) {
+    let cfg = class.config();
     let light: u8 = rng.random_range(220..=255);
     let dark: u8 = rng.random_range(0..=45);
     let code = render::rasterize(&enc, dark, light);
@@ -182,6 +191,7 @@ enum Mix {
     Original,
     DataMatrix,
     Pdf417,
+    Aztec,
 }
 
 fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
@@ -206,6 +216,7 @@ fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
             Mix::Original => sym,
             Mix::DataMatrix => Sym::DataMatrix,
             Mix::Pdf417 => Sym::Pdf417,
+            Mix::Aztec => Sym::Aztec,
         };
         let enc = encode::encode(rng, sym);
         let dark: u8 = rng.random_range(0..=45);
@@ -320,6 +331,25 @@ pub fn generate_pdf417(class: Class, j: usize, seed: u64) -> Option<(GrayImage, 
         Class::Multi => Some(multi(rng, Mix::Pdf417)),
         _ => {
             let (mut img, anns) = single(class, Sym::Pdf417, None, rng);
+            degrade(class, &mut img, rng);
+            Some((img, anns))
+        }
+    }
+}
+
+/// Aztec images of a class, generated after the PDF417 ones so that every
+/// earlier image stays byte-identical: layer counts cycle over compact and
+/// full-range symbols, every third image is mirrored.
+pub fn generate_aztec(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Vec<Annotation>)> {
+    let mut rng = image_rng(seed.wrapping_add(0xA27E_C000), class, j);
+    let rng = &mut rng;
+    match class {
+        Class::Negative | Class::Datamatrix => None,
+        Class::Multi => Some(multi(rng, Mix::Aztec)),
+        _ => {
+            let pick = j + class.index() as usize * 3;
+            let enc = encode::encode_aztec(rng, pick, j % 3 == 2);
+            let (mut img, anns) = single_with(class, Sym::Aztec, enc, rng);
             degrade(class, &mut img, rng);
             Some((img, anns))
         }

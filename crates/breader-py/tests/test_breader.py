@@ -405,5 +405,37 @@ def test_pdf417_meta_on_synth():
     assert seen == 3
 
 
+def test_aztec_meta_on_synth():
+    from PIL import Image
+
+    base = SYNTH_DIR / "clean"
+    if not (base / "annotations.json").exists():
+        pytest.skip("synthetic dataset not generated (set BREADER_SYNTH_DIR)")
+    ann = json.loads((base / "annotations.json").read_text())
+    r = Reader()
+    seen = 0
+    for img in ann["images"]:
+        want = {b["text"] for b in img["barcodes"] if b["format"] == "AZTEC"}
+        if not want:
+            continue
+        found = r.scan(np.asarray(Image.open(base / img["file"]).convert("L")))
+        assert [s.text for s in found] == list(want)
+        s = found[0]
+        assert s.symbology == "aztec"
+        assert s.aim_id == "]z0"
+        m = s.meta
+        assert m["kind"] == "aztec"
+        assert isinstance(m["compact"], bool) and m["layers"] >= 1
+        assert m["data_codewords"] >= 1 and m["ec_codewords"] >= 3
+        assert m["rune"] is None and m["reader_init"] is False
+        assert isinstance(m["mirrored"], bool) and m["eci"] == []
+        seen += 1
+    assert seen >= 3
+
+
+def test_aztec_is_a_known_symbology():
+    assert Reader(symbologies=["aztec"]).options["symbologies"] == ["aztec"]
+
+
 def test_pdf417_is_a_known_symbology():
     assert Reader(symbologies=["pdf417"]).options["symbologies"] == ["pdf417"]

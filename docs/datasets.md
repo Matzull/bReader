@@ -72,3 +72,7 @@ A label changes only when the image proves it, never because breader (or any oth
 5. Record the addition in BASELINES next to the numbers it moves, and regenerate the affected baselines.
 
 Normalizations that are not overrides (UTF-8 read as Latin-1 in labels, Code 39 Full ASCII expansion, UPC-E/UPC-A/EAN-13 folding, charset-decoded text) live in `matching.rs` with unit tests; see [false-positive triage](testing.md#false-positive-policy-and-triage).
+
+### Aztec labels (zxing-cpp samples and synthetic sets)
+
+`aztec-1` and `aztec-2` (48 labels) count since the Aztec reader landed. Two spellings differ from what a reader returns and are handled in the matching, not by overrides: the Aztec Rune labels are three digits (`001`; the reader returns them that way) and the structured append sample `Z1-sequence4of7` is labelled with the payload only (`3456`) while the reader returns the message with its header (` Z1.txt DG3456`); `tools/bench/src/matching.rs` strips a leading ` ID XY` header (space, ID without spaces, space, two capitals in order) from Aztec reads before comparing, with a unit test. The synthetic sets gained Aztec images after the PDF417 ones (3 per class and 12 in `multi` at 20 images per class, 7 per class at 60), existing images byte-identical: compact and full-range symbols over 14 layer counts (compact 1 to 4, full-range 2 to 15), every third image mirrored, inverted and perspective classes included.

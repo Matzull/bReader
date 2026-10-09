@@ -13,6 +13,7 @@ This page is the entry point. Find the audience below, follow the link, and when
 | EAN-13, EAN-8, UPC-A, UPC-E (+ EAN-2/5 add-ons) | implemented | [linear](symbologies/linear.md) |
 | Code 128, Code 39, ITF | implemented | [linear](symbologies/linear.md) |
 | PDF417 (+ compact, Macro, ECI) | implemented | [pdf417](symbologies/pdf417.md) |
+| Aztec Code (compact, full-range, Runes) | implemented | [aztec](symbologies/aztec.md) |
 | Micro QR, rMQR, DataBar, Codabar | not started | [index](symbologies/README.md) |
 
 Headline numbers (Balanced; zero false positives at every effort on every gated dataset; these are dated snapshots, the current tables, other efforts, other engines and latency are in [BASELINES](BASELINES.md)):
@@ -45,7 +46,7 @@ Per-symbology status, spec references and known gaps: [symbologies/README.md](sy
 |---|---|
 | [contributing](contributing.md) | Clean-room rules, style, definition of done, checklists (new symbology, dataset, preprocessor, changing defaults) |
 | [ARCHITECTURE](ARCHITECTURE.md) | Workspace, pipeline, traits, validation policy, ECC, content, facade, performance plan |
-| [symbologies/](symbologies/README.md) | One design page per family ([linear](symbologies/linear.md), [qr](symbologies/qr.md), [datamatrix](symbologies/datamatrix.md), [pdf417](symbologies/pdf417.md)) and the status table |
+| [symbologies/](symbologies/README.md) | One design page per family ([linear](symbologies/linear.md), [qr](symbologies/qr.md), [datamatrix](symbologies/datamatrix.md), [pdf417](symbologies/pdf417.md), [aztec](symbologies/aztec.md)) and the status table |
 | [REQUIREMENTS](REQUIREMENTS.md) | Functional and non-functional requirements (stable IDs), scope, clean-room policy, roadmap |
 | [testing](testing.md) | Test layers, regression gates, rewriting and merging baselines, false-positive triage |
 | [datasets](datasets.md) | Every dataset: how to fetch, terms, ground-truth format, overrides policy, which gate uses it |
