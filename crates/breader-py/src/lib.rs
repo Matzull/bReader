@@ -31,6 +31,7 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::Code39 => "code39",
         Symbology::Itf => "itf",
         Symbology::DataMatrix => "datamatrix",
+        Symbology::Pdf417 => "pdf417",
         _ => s.name(),
     }
 }
@@ -241,7 +242,7 @@ impl Symbol {
         self.quality
     }
 
-    /// Symbology specific details as a dict with a "kind" key ("qr", "linear" or "datamatrix").
+    /// Symbology specific details as a dict with a "kind" key ("qr", "linear", "datamatrix" or "pdf417").
     #[getter]
     fn meta<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let d = PyDict::new(py);
@@ -269,6 +270,32 @@ impl Symbol {
                 d.set_item("mirrored", m.mirrored)?;
                 d.set_item("eci", m.eci.clone())?;
                 d.set_item("structured_append", m.structured_append)?;
+            }
+            SymbolMeta::Pdf417(m) => {
+                d.set_item("kind", "pdf417")?;
+                d.set_item("rows", m.rows)?;
+                d.set_item("cols", m.cols)?;
+                d.set_item("ec_level", m.ec_level)?;
+                d.set_item("errors_corrected", m.errors_corrected)?;
+                d.set_item("erasures", m.erasures)?;
+                d.set_item("compact", m.compact)?;
+                match &m.macro_pdf417 {
+                    Some(mc) => {
+                        let md = PyDict::new(py);
+                        md.set_item("segment_index", mc.segment_index)?;
+                        md.set_item("file_id", &mc.file_id)?;
+                        md.set_item("last_segment", mc.last_segment)?;
+                        md.set_item("file_name", mc.file_name.as_deref())?;
+                        md.set_item("segment_count", mc.segment_count)?;
+                        md.set_item("timestamp", mc.timestamp)?;
+                        md.set_item("sender", mc.sender.as_deref())?;
+                        md.set_item("addressee", mc.addressee.as_deref())?;
+                        md.set_item("file_size", mc.file_size)?;
+                        md.set_item("checksum", mc.checksum)?;
+                        d.set_item("macro", md)?;
+                    }
+                    None => d.set_item("macro", py.None())?,
+                }
             }
             _ => d.set_item("kind", "unknown")?,
         }

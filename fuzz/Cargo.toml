@@ -16,6 +16,7 @@ breader-ecc = { path = "../crates/breader-ecc" }
 breader-linear = { path = "../crates/breader-linear" }
 breader-qr = { path = "../crates/breader-qr" }
 breader-datamatrix = { path = "../crates/breader-datamatrix" }
+breader-pdf417 = { path = "../crates/breader-pdf417" }
 
 [workspace]
 
@@ -81,6 +82,20 @@ bench = false
 [[bin]]
 name = "dm_grid"
 path = "fuzz_targets/dm_grid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rs929_decode"
+path = "fuzz_targets/rs929_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf417_codewords"
+path = "fuzz_targets/pdf417_codewords.rs"
 test = false
 doc = false
 bench = false
