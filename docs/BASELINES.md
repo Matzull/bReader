@@ -11,6 +11,8 @@ cargo run -r -p bench --features baselines -- data/dynamsoft/challenging-images 
 crates/breader-py/.venv/bin/python tools/bench/py_bench.py data/dynamsoft/challenging-images --engine zxingcpp
 ```
 
+Datasets are described in [datasets.md](datasets.md); the gates that use them in [testing.md](testing.md#gates).
+
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options).
 
 ## Dynamsoft `challenging-images`

@@ -19,6 +19,7 @@ cargo install cargo-fuzz --locked
 | `qr_grid`          | QR `decode_grid` on arbitrary module grids (valid and invalid dimensions)         |
 | `linear_runs`      | every 1D decoder on arbitrary run-width sequences, both directions and polarities |
 | `linear_profile`   | edge detection plus all 1D decoders on arbitrary gray-level profiles              |
+| `dm_grid`          | Data Matrix grid and codeword-stream decoding on arbitrary input                  |
 | `gs1_parse`        | `gs1::parse` / `gs1::hri`                                                         |
 | `charset_decode`   | `charset::decode` for every `Charset`, including arbitrary ECI numbers            |
 | `rs_decode`        | Reed-Solomon `decode` over both fields; a successful decode must yield a codeword |

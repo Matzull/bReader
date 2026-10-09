@@ -1,0 +1,133 @@
+# Decision log
+
+Short entries for decisions that shape the product, in the order they were taken. New decisions are appended at the end (copy [templates/decision.md](templates/decision.md)); a reversed decision is not edited away: add a new entry that supersedes it and mark the old one `Superseded by D-NNN`. Dates are ISO; entries before this log existed were reconstructed from the docs and git history (2026-10-09), so their dates are the date of the commit or document that first records them.
+
+Product-level defaults and scope are owner decisions ([contributing](contributing.md#changing-defaults)).
+
+| ID | Date | Decision |
+|---|---|---|
+| [D-001](#d-001) | 2026-10-06 | Clean-room implementation from the specifications |
+| [D-002](#d-002) | 2026-10-06 | Accuracy first, zero false positives as a hard constraint |
+| [D-003](#d-003) | 2026-10-06 | Pluggable pipeline; families independent, static dispatch inside |
+| [D-004](#d-004) | 2026-10-06 | Dynamsoft data is internal-only and never committed |
+| [D-005](#d-005) | 2026-10-06 | Ground-truth overrides need visual verification |
+| [D-006](#d-006) | 2026-10-06 | Code 39 Full ASCII off by default |
+| [D-007](#d-007) | 2026-10-07 | v1 targets |
+| [D-008](#d-008) | 2026-10-07 | ITF default accepted lengths: 14 only |
+| [D-009](#d-009) | 2026-10-07 | License: AGPL-3.0-only plus commercial |
+| [D-010](#d-010) | 2026-10-07 | Regression gate with versioned baselines; CI on GitHub Actions |
+| [D-011](#d-011) | 2026-10-07 | Fuzz corpus is not versioned |
+| [D-012](#d-012) | 2026-10-07 | 1D reader scans the original image only |
+| [D-013](#d-013) | 2026-10-07 | Threads optional and deterministic; Tracker uses a rolling strip scan |
+| [D-014](#d-014) | 2026-10-08 | Data Matrix scope: ECC 200, no direct part marking |
+| [D-015](#d-015) | 2026-10-08 | Data Matrix correction capacity below the spec maximum |
+| [D-016](#d-016) | 2026-10-08 | zxing-cpp samples as a second gated dataset |
+| [D-017](#d-017) | 2026-10-08 | Code 39 quiet zone 4X with an extra-line safeguard |
+| [D-018](#d-018) | 2026-10-08 | Up-scale retry only in Balanced and Exhaustive |
+| [D-019](#d-019) | 2026-10-09 | Open quiet zone at the profile border, except ITF |
+| [D-020](#d-020) | 2026-10-09 | Label normalizations belong in bench matching, not in the decoder |
+| [D-021](#d-021) | 2026-10-09 | Baselines are regenerated on the combined tree after merging branches |
+| [D-022](#d-022) | 2026-10-09 | PDF417 design: reuse linear edges, GF(929) in `breader-ecc` |
+| [D-024](#d-024) | 2026-10-09 | PDF417 decoding choices: ISO 8859-1 default, `]L1`/`]L2`, strict length descriptor |
+| [D-025](#d-025) | 2026-10-09 | Third-party data tables need their license text in THIRD-PARTY-NOTICES.md |
+| [D-023](#d-023) | 2026-10-09 | Central documentation hub, per-family pages |
+
+## D-001
+
+2026-10-06. **Clean-room implementation.** ZXing and zbar may be studied for ideas; no code, tables or structure are copied. Specifications are the normative sources; tables are generated or transcribed from them. Why: licensing independence (the dual license needs clean provenance) and better understanding of the failure modes. See [REQUIREMENTS section 5](REQUIREMENTS.md#5-clean-room-policy), [contributing](contributing.md#clean-room-rules).
+
+## D-002
+
+2026-10-06. **Accuracy first; zero false positives.** Priorities are accuracy, then speed. No wrong result is acceptable on any benchmark or negative image; when in doubt return nothing. Every decoder validates inside itself (checksum, quiet zones, line agreement, Reed-Solomon). Why: a wrong read in a logistics or healthcare flow is worse than a miss. See NFR-1 in [REQUIREMENTS](REQUIREMENTS.md#4-non-functional-requirements), [ARCHITECTURE 2.5](ARCHITECTURE.md#25-validation-and-false-positive-control), [testing](testing.md#false-positive-policy-and-triage).
+
+## D-003
+
+2026-10-06. **Pluggable pipeline.** Module crates depend only on `breader-core` (and `breader-ecc`); only the facade knows all families; dynamic dispatch at stage boundaries, static dispatch inside a family. Why: new symbologies and techniques without touching the core; hot loops inline. See [ARCHITECTURE sections 1 and 2.4](ARCHITECTURE.md#1-workspace).
+
+## D-004
+
+2026-10-06. **Dynamsoft datasets are internal-only.** Fetched into the gitignored `data/` by `tools/fetch-datasets.sh`, never committed or redistributed, and fetched in CI only by the weekly or manual workflow. Why: most subsets state no license (only `UPS-Synthetic-Labels` is CC BY 4.0). See [datasets](datasets.md#dynamsoft-subsets), [CI](CI.md).
+
+## D-005
+
+2026-10-06. **Label overrides require visual verification.** Ground truth is cleaned by deduplication and by versioned overrides in `tools/bench/gt-overrides.json`, each with a reason; a label changes only when the image proves it. First case: `barcode-with-shadow-1.jpg` (printed digits differ from the label although the check digit is equal). Why: otherwise the benchmark drifts toward whatever breader reads. See [datasets](datasets.md#overrides-policy), [BASELINES](BASELINES.md#ground-truth-cleanup).
+
+## D-006
+
+2026-10-06. **Code 39 Full ASCII is off by default**, as is the mod-43 requirement (FR-17). Why: Full ASCII reinterprets `$ / + %` pairs and changes the payload of plain Code 39 labels; it must be a conscious choice. The bench accepts the expansion of a label when comparing ([D-020](#d-020)). See [GUIDE](GUIDE.md#scanoptions).
+
+## D-007
+
+2026-10-07. **v1 targets:** 0 false positives everywhere including `negative`; challenging-images read rate at least 86 % (zxing-cpp level); synth at least 82 % overall and at least zxing-cpp in every class; Balanced p50 not above zxing-cpp; Fast p50 at most 10 ms on a 1080p frame. See [BASELINES](BASELINES.md#v1-targets-confirmed-2026-10-07).
+
+## D-008
+
+2026-10-07. **ITF accepts only 14 digits by default** (`ItfOptions::allowed_lengths = [14]`, minimum length 6). Why: ITF has no start/stop redundancy to reject truncated reads, and partial ITF reads were the largest source of false positives in other engines. Consequence: most 4 to 10 digit ITF labels in the zxing samples are not read by design; users widen the list for formats they expect. See [GUIDE](GUIDE.md#scanoptions), [BASELINES](BASELINES.md#zxing-cpp-samples-2026-10-08).
+
+## D-009
+
+2026-10-07. **Dual license: `AGPL-3.0-only` plus a commercial license**, copyright Marcos Alonso, with a CLA for external contributions. Why: open source with strong copyleft while keeping the option to sell commercial use. See [README](../README.md#license), [LICENSE-COMMERCIAL](../LICENSE-COMMERCIAL.md).
+
+## D-010
+
+2026-10-07. **Regression gate with versioned baselines; CI on GitHub Actions.** Per dataset and effort the gate fails on fewer reads, any false positive or a changed expected count; latency is not gated. Synthetic sets run on every push, real-world sets weekly or manual. Why: speed work and accuracy work must not silently trade reads. See [testing](testing.md#gates), [CI](CI.md).
+
+## D-011
+
+2026-10-07. **Fuzz corpus is not versioned.** `corpus/`, `artifacts/` and `target/` are gitignored; CI caches the corpus between nightly runs; only small seeds are generated on demand. Why: the corpus grows without bound and is reproducible. See [fuzz/README.md](../fuzz/README.md).
+
+## D-012
+
+2026-10-07. **The 1D reader scans only the original image.** The downscaled variant was measured to add no 1D reads on any dataset, and the smoothed edge variant runs only on lines where a start pattern was found. Why: speed without read loss (41.3 to 14.4 ms per image on challenging-images). See [ARCHITECTURE section 5](ARCHITECTURE.md#5-performance-plan-m7), [linear design](symbologies/linear.md).
+
+## D-013
+
+2026-10-07. **Single-threaded by default; `rayon` optional with identical output.** Speculative QR triplet decoding was built, made deterministic, then removed because it gave no gain. The video `Tracker` uses a rolling strip scan (3 strips, 50 % overlap): 40 of 74 reads against 38 for stateless Balanced, 24 flickers against 212. See [ARCHITECTURE section 5](ARCHITECTURE.md#5-performance-plan-m7), [GUIDE](GUIDE.md#video-tracker).
+
+## D-014
+
+2026-10-08. **Data Matrix scope: ECC 200 only, no direct part marking.** Square, rectangular and DMRE sizes, GS1, ECI, Structured Append headers. ECC 000-140 are obsolete; dot-peened and etched DPM on rough metal is out of scope (the misses `datamatrix-3` stay misses). Fast searches dark-on-light only. See [datamatrix design](symbologies/datamatrix.md), [BASELINES](BASELINES.md#data-matrix-2026-10-08).
+
+## D-015
+
+2026-10-08. **Data Matrix corrects fewer codewords than the spec allows on small blocks**: (ec - r) / 2 with r = 2 for ec <= 7, 1 for ec <= 12, 0 otherwise (10x10 accepts one correction, not two). Pads must match the 253-state sequence except for uncorrected large blocks. Why: our own zero-false-positive policy, analogous to QR's misdecode protection; not an ISO requirement. See [datamatrix design](symbologies/datamatrix.md).
+
+## D-016
+
+2026-10-08. **zxing-cpp `test/samples` is a second gated dataset**, pinned to tag `v3.1.1`, used as test data only (images and expected values; Apache-2.0). It closed the open question in REQUIREMENTS section 8 and is richer in QR and EAN/UPC. See [datasets](datasets.md#zxing-cpp-samples), [FAILURES-ZXING-SAMPLES](FAILURES-ZXING-SAMPLES.md).
+
+## D-017
+
+2026-10-08. **Code 39 quiet zone of 4 modules** (was 7), with a safeguard: a symbol with either quiet zone below 7 modules and no check character needs one more agreeing line. Result: `batch_code39` Fast 9 to 25 of 32. The safeguard cost one video read (28 instead of 29 at Balanced); 0 false positives were measured without it too, and it is kept as insurance. See [FAILURES](FAILURES.md#status-of-the-fixes), [BASELINES](BASELINES.md#linear-reader-fixes-2026-10-08).
+
+## D-018
+
+2026-10-08. **Up-scale retry only in Balanced and Exhaustive.** After the regular passes, a frame that produced nothing and has `max(w, h) <= 600` is rescanned 3x up-scaled (Catmull-Rom). Never when something was found; off in Fast (limit 0) and in `Tracker`. Measured +28 reads on the zxing samples at Balanced, 0 false positives; running it also when something was found gained one read and is not done. Whether Fast should enable it is pending an owner decision. Cost: a blank 600x600 frame +15 ms at Balanced. See [ARCHITECTURE 2.2](ARCHITECTURE.md#22-passes-and-escalation), [GUIDE](GUIDE.md#up-scale-retry).
+
+## D-019
+
+2026-10-09. **A quiet zone that ends at the profile border counts as open** for EAN/UPC, Code 128 and Code 39, not for ITF. Why: tight crops lose the margin but not the symbol; ITF is the most false-positive-prone symbology and stays strict. Edge relocation may move a reference level at most 0.25 of the local level difference (without the limit three groups regressed). See [BASELINES](BASELINES.md#edge-relocation-and-border-quiet-zone-2026-10-08), [linear design](symbologies/linear.md).
+
+## D-020
+
+2026-10-09. **Label normalizations live in bench matching**, with unit tests: UPC-A / UPC-E / EAN-13 folding, charset-decoded text, Code 39 Full ASCII expansion, UTF-8 read as Latin-1 repaired in labels only (never in reads). Why: a read that is correct in another notation must not count as a false positive, and decoders must not bend to labels. See [testing](testing.md#false-positive-policy-and-triage).
+
+## D-021
+
+2026-10-09. **After merging branches, regenerate baselines on the combined tree** and verify no decrease against either parent; never merge baseline JSON textually. Why: combining branches surfaced a label mismatch neither measured. See [testing](testing.md#merging-baselines-after-combining-branches).
+
+## D-022
+
+2026-10-09. **PDF417 design:** gray-profile reader reusing linear edge and run extraction through a small `#[doc(hidden)]` API, Reed-Solomon over GF(929) with erasures in `breader-ecc`, misdecode guard `2*errors + erasures <= ec - reserve`; MicroPDF417 and GS1 composite deferred. Status: decoding implemented (merged 2026-10-09). See [pdf417 design](symbologies/pdf417.md).
+
+## D-023
+
+2026-10-09. **Central documentation hub.** `docs/README.md` is the entry point; per-family designs moved out of ARCHITECTURE into `docs/symbologies/`, with ARCHITECTURE keeping section numbers 3.x as stubs; datasets, testing, contributing and this log became separate pages. Why: the project changes quickly and each change should touch one obvious page. See [docs/README.md](README.md).
+
+## D-024
+
+2026-10-09. **PDF417 decoding choices.** Default character set ISO/IEC 8859-1 (ISO/IEC 15438:2006) reported as `Charset::Latin1`; AIM `]L2` without ECI and `]L1` with ECI; the symbol length descriptor must match exactly; reader initialisation (921) only as the first codeword and rejected by the reader; rxing's encoder is a test-only dev-dependency. Why: follow the standard and reject rather than guess. Open: the AIM modifier meanings and the strict descriptor should be re-checked against ISO/IEC 15424 / real symbols. See [pdf417 design](symbologies/pdf417.md).
+
+## D-025
+
+2026-10-09. **Third-party data keeps its license text.** The PDF417 cluster tables are transcribed from the MIT-licensed `pdf417` crate; its notice is in [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) and cited in the source. Any future table taken from a permissive source does the same; nothing is taken from zxing/zbar. Why: MIT requires the notice in substantial copies, and it keeps the clean-room record explicit.

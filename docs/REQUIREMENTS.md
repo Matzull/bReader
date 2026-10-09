@@ -121,6 +121,8 @@ zxing-cpp, rxing, rqrr — same images, same machine, same metrics.
 
 ### 6.3 Datasets
 
+The current dataset list, terms and gates are in [datasets.md](datasets.md); this section is the original plan.
+
 - [Dynamsoft/datasets-from-dynamsoft](https://github.com/Dynamsoft/datasets-from-dynamsoft): `challenging-images` (68 images, 514 symbols; `annotations.json` with file, format, text and corner points; about 400 symbols in v1 symbologies, the rest Data Matrix/PDF417), `video-based-testing` (1080p videos plus one CSV per video listing the expected set of codes, without per-frame labels), `UPS-Synthetic-Labels` (CC BY 4.0). Downloaded by `tools/fetch-datasets.sh` into `data/`, never committed; used for internal testing only, since most subsets state no license.
 - Candidate complement (pending decision): zxing-cpp `test/samples` (Apache-2.0), richer in QR and EAN/UPC images.
 - Synthetic set: symbols generated with encoder crates (`qrcode`, `barcoders`) and distorted (rotation, perspective, blur, noise, illumination gradients, inversion, downscaling) with known ground truth.
