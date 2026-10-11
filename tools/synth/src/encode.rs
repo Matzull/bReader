@@ -25,6 +25,9 @@ pub enum Sym {
     Aztec,
     Codabar,
     MicroQr,
+    DataBar,
+    DataBarLimited,
+    DataBarExpanded,
 }
 
 impl Sym {
@@ -65,6 +68,9 @@ impl Sym {
             Sym::Aztec => "AZTEC",
             Sym::Codabar => "CODABAR",
             Sym::MicroQr => "MICRO_QR_CODE",
+            Sym::DataBar => "DATABAR",
+            Sym::DataBarLimited => "DATABAR_LIMITED",
+            Sym::DataBarExpanded => "DATABAR_EXPANDED",
         }
     }
 }
@@ -243,9 +249,15 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             let t = to_text(&d);
             (t.clone(), TF::interleaved(&t).expect(fail).encode())
         }
-        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 | Sym::Aztec | Sym::Codabar | Sym::MicroQr => {
-            unreachable!("not linear")
-        }
+        Sym::Qr
+        | Sym::DataMatrix
+        | Sym::Pdf417
+        | Sym::Aztec
+        | Sym::Codabar
+        | Sym::MicroQr
+        | Sym::DataBar
+        | Sym::DataBarLimited
+        | Sym::DataBarExpanded => unreachable!("not linear"),
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
@@ -555,8 +567,103 @@ pub fn encode_microqr(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Enco
     }
 }
 
+/// GTIN-13 body (without check digit); Limited needs a first digit of 0 or 1.
+fn gtin_body(rng: &mut ChaCha8Rng, limited: bool) -> String {
+    let mut body = digits_string(rng, 13);
+    if limited {
+        body.replace_range(0..1, if rng.random_bool(0.5) { "0" } else { "1" });
+    }
+    body
+}
+
+fn digits_string(rng: &mut ChaCha8Rng, n: usize) -> String {
+    pick_string(rng, &pool("0123456789"), n)
+}
+
+fn body_check(body: &str) -> char {
+    let sum: u32 = body
+        .bytes()
+        .rev()
+        .enumerate()
+        .map(|(i, d)| u32::from(d - b'0') * if i % 2 == 0 { 3 } else { 1 })
+        .sum();
+    char::from(b'0' + ((10 - sum % 10) % 10) as u8)
+}
+
+/// GS1 element string of an Expanded symbol: the label is the string as
+/// read, FNC1 as GS (0x1D).
+fn expanded_payload(rng: &mut ChaCha8Rng) -> String {
+    let gtin = |rng: &mut ChaCha8Rng| {
+        let b = gtin_body(rng, false);
+        format!("{b}{}", body_check(&b))
+    };
+    let lot = |rng: &mut ChaCha8Rng| {
+        let len = rng.random_range(1..=14);
+        pick_string(rng, &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), len)
+    };
+    let date = |rng: &mut ChaCha8Rng| {
+        format!(
+            "{:02}{:02}{:02}",
+            rng.random_range(20..=40),
+            rng.random_range(1..=12),
+            rng.random_range(1..=28)
+        )
+    };
+    match rng.random_range(0..6) {
+        0 => format!("10{}", lot(rng)),
+        1 => format!("01{}3103{}", gtin(rng), digits_string(rng, 6)),
+        2 => format!("01{}17{}10{}", gtin(rng), date(rng), lot(rng)),
+        3 => format!("01{}10{}\x1d21{}", gtin(rng), lot(rng), lot(rng)),
+        4 => format!("01{}11{}", gtin(rng), date(rng)),
+        _ => format!(
+            "01{}15{}\x1d37{}",
+            gtin(rng),
+            date(rng),
+            digits_string(rng, 3)
+        ),
+    }
+}
+
+/// GS1 DataBar Omnidirectional, Limited or Expanded in one row, from the
+/// independent `anyd` encoder.
+fn encode_databar(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::output::Encoding;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    let fail = "encoder rejected generated payload";
+    let (text, symbol) = match sym {
+        Sym::DataBar => {
+            let b = gtin_body(rng, false);
+            (
+                format!("01{b}{}", body_check(&b)),
+                enc.build_omni(b.as_bytes()),
+            )
+        }
+        Sym::DataBarLimited => {
+            let b = gtin_body(rng, true);
+            (
+                format!("01{b}{}", body_check(&b)),
+                enc.build_limited(b.as_bytes()),
+            )
+        }
+        _ => {
+            let t = expanded_payload(rng);
+            let symbol = enc.build_expanded(t.as_bytes());
+            (t, symbol)
+        }
+    };
+    let Encoding::Linear(p) = enc.encode(&symbol.expect(fail)).expect(fail) else {
+        unreachable!("DataBar is linear");
+    };
+    let bars: Vec<u8> = p.modules.iter().map(|&b| u8::from(b)).collect();
+    let height = linear_height(rng, bars.len());
+    Encoded::linear(text, sym.label(), &bars, height)
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
+        Sym::DataBar | Sym::DataBarLimited | Sym::DataBarExpanded => encode_databar(rng, sym),
         Sym::Codabar => encode_codabar(rng),
         Sym::MicroQr => {
             let pick = rng.random_range(0..MICRO_QR_VARIANTS.len());
@@ -652,6 +759,9 @@ mod tests {
                 Sym::Aztec,
                 Sym::Codabar,
                 Sym::MicroQr,
+                Sym::DataBar,
+                Sym::DataBarLimited,
+                Sym::DataBarExpanded,
             ]) {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);

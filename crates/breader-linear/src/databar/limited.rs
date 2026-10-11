@@ -189,7 +189,7 @@ pub(super) fn decode(row: &Row, out: &mut Vec<LineHit>) -> bool {
     }
     let mut n = [0u8; super::ROW_RUNS];
     let Some(q) = quantize(w, true, &SEGMENTS, module, TOLERANCE, &mut n) else {
-        return true;
+        return false;
     };
     let left: [u8; 14] = super::array(&n[1..15]);
     let right: [u8; 14] = super::array(&n[29..43]);

@@ -29,3 +29,31 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## anyd (GS1 DataBar Limited check patterns, development oracle)
+
+`crates/breader-linear/src/databar/limited.rs` holds the 89 check patterns of GS1 DataBar Limited (one per checksum value mod 89), written down from the output of the `anyd` crate 0.2.0 (https://github.com/KarpelesLab/anydcode, MIT, Karpeles Lab Inc.; its DataBar encoder is derived from zint and its tests carry BWIPP reference vectors) and checked against BWIPP reference vectors and photographed samples. The crate is also a dev-dependency of `breader-linear` and `tools/synth` to produce test symbols; nothing of it is in the library.
+
+```
+MIT License
+
+Copyright (c) Karpeles Lab Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

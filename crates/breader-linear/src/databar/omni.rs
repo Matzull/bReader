@@ -148,7 +148,7 @@ pub(super) fn decode(row: &Row, out: &mut Vec<LineHit>) -> bool {
     }
     let mut n = [0u8; super::ROW_RUNS];
     let Some(q) = quantize(w, true, &SEGMENTS, module, TOLERANCE, &mut n) else {
-        return true;
+        return false;
     };
     let (Some(left), Some(right)) = (
         finder_of(&super::array(&n[9..14])),
@@ -254,7 +254,7 @@ mod tests {
         for f in FINDERS {
             assert_eq!(f.iter().map(|&w| u32::from(w)).sum::<u32>(), 15);
         }
-        assert_eq!(pair_matches(0, 0), true);
+        assert!(pair_matches(0, 0));
         assert!(!pair_matches(7, 8) && pair_matches(8, 9));
         assert!(pair_matches(70, 71) && pair_matches(78, 80));
     }

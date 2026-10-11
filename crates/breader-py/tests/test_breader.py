@@ -155,7 +155,7 @@ def test_bad_input_raises_value_error(image, kwargs):
 def test_default_options():
     o = Reader().options
     assert o["effort"] == "balanced" and o["escalation"] is None and o["upscale_max_side"] is None
-    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr"]
+    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr", "databar", "databar-limited", "databar-expanded"]
     assert o["itf_lengths"] == (14,) and o["min_line_agreement"] == 2
     o["effort"] = "x"
     assert Reader().options["effort"] == "balanced"
@@ -351,8 +351,8 @@ def test_synth_clean_matches_rust_bench():
                 read += 1
                 found.remove(w)
         fp += len(found)
-    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 35/35 (20 images plus 3 each of Data Matrix, PDF417, Aztec, Codabar and Micro QR), 0 false positives.
-    assert (read, expected, fp) == (35, 35, 0)
+    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 38/38 (20 images plus 3 each of Data Matrix, PDF417, Aztec, Codabar, Micro QR and GS1 DataBar), 0 false positives.
+    assert (read, expected, fp) == (38, 38, 0)
 
 
 def test_datamatrix_meta_on_synth():

@@ -50,8 +50,8 @@ pub(super) fn quantize(
         let mut space = (0.0f32, 0u32);
         for seg in segments {
             let scale = scale_of(&adjusted, seg, module)?;
-            for i in seg.at..seg.at + seg.len {
-                let e = adjusted[i] * scale;
+            for (i, &a) in adjusted.iter().enumerate().skip(seg.at).take(seg.len) {
+                let e = a * scale;
                 let residual = e - e.round().max(1.0);
                 let slot = if bar0 == (i % 2 == 0) {
                     &mut bar

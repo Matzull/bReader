@@ -138,7 +138,11 @@ fn checksum(chars: &[[u8; 8]], n: usize) -> u32 {
 /// even, only the bar when it is odd (the space then merges with the
 /// quiet zone).
 fn tail_runs(n: usize) -> usize {
-    if finder_count(n) % 2 == 0 { 2 } else { 1 }
+    if finder_count(n).is_multiple_of(2) {
+        2
+    } else {
+        1
+    }
 }
 
 /// Runs from the first bar guard to the last bar: the guards, the
@@ -163,6 +167,19 @@ pub(super) fn decode(runs: &Runs, out: &mut Vec<LineHit>) -> bool {
     while j + row_runs(MIN_CHARS) as isize <= n_runs + 1 {
         // First character and first finder: 17 + 15 modules.
         let first = (j + 1) as usize;
+        // Every symbol starts with finder A, 1 8 4 1 1: a cheap screen.
+        let (n1, wide, mid, n2) = (w[first + 8], w[first + 9], w[first + 10], w[first + 11]);
+        let (a, b) = (n1.min(n2), n1.max(n2));
+        if !(a > 0.0
+            && b <= 2.5 * a
+            && wide >= 4.5 * a
+            && wide <= 13.0 * b
+            && mid >= 2.0 * a
+            && mid <= 7.0 * b)
+        {
+            j += 2;
+            continue;
+        }
         let head: f32 = w[first..first + 13].iter().sum();
         let module = head / 32.0;
         let guard_ok = j < 0 || (0.5 * module..=2.2 * module).contains(&w[j as usize]);
@@ -236,7 +253,7 @@ fn try_symbol(runs: &Runs, j: isize, n: usize, head_module: f32, out: &mut Vec<L
     } else {
         quiet_after_open(runs, last as usize, 0.0)
     };
-    if !(module >= MIN_MODULE) || quiet_after < QUIET * module {
+    if module.is_nan() || module < MIN_MODULE || quiet_after < QUIET * module {
         return false;
     }
     // Guards at the end: the last bar and, for an even number of finders,
@@ -274,21 +291,21 @@ fn try_symbol(runs: &Runs, j: isize, n: usize, head_module: f32, out: &mut Vec<L
             let sum: f32 = widths[s.at..s.at + s.len].iter().sum();
             let expected = f32::from(s.modules) * module;
             if (sum - expected).abs() > PIECE_SLACK * expected {
-                return true;
+                return false;
             }
         }
     }
     let mut mods = [0u8; MAX_ELEMENTS];
     let mods = &mut mods[..len];
     let Some(q) = quantize(widths, true, &segments[..count], module, TOLERANCE, mods) else {
-        return true;
+        return false;
     };
     // Finder patterns.
     let sequence = FINDER_SEQUENCES[group_size(n)];
     let mut chars = [[0u8; 8]; MAX_CHARS];
     let mut at = 1;
-    for k in 0..n {
-        chars[k].copy_from_slice(&mods[at..at + 8]);
+    for (k, slot) in chars.iter_mut().enumerate().take(n) {
+        slot.copy_from_slice(&mods[at..at + 8]);
         at += 8;
         if k % 2 == 0 {
             let p = k / 2;
@@ -382,7 +399,7 @@ mod tests {
         for n in MIN_CHARS..=MAX_CHARS {
             let pairs = WEIGHT_ROWS[group_size(n)];
             assert_eq!(pairs.len(), (n - 2).div_ceil(2), "{n}");
-            assert!(pairs.iter().all(|&r| r % 2 == 1 && r + 1 <= 22));
+            assert!(pairs.iter().all(|&r| r % 2 == 1 && r < 22));
             assert_eq!(row_runs(n) - 1 - tail_runs(n), 8 * n + 5 * finder_count(n));
         }
         // Value ranges of the five groups.
@@ -438,7 +455,7 @@ mod tests {
     #[test]
     fn random_payloads_round_trip_in_every_size() {
         let alnum = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-./";
-        let mut rng = Rng(0xe9a2_d3d);
+        let mut rng = Rng(0x0e9a_2d3d);
         let mut sizes = std::collections::BTreeSet::new();
         for _ in 0..300 {
             let k = 1 + rng.below(30) as usize;

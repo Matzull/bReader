@@ -48,11 +48,14 @@ impl LinearDecoder for DataBarDecoder {
         // that the edges do not show: window -1.
         let mut j: isize = if runs.is_bar(0) { 0 } else { -1 };
         while (omni || limited) && j + ROW_RUNS as isize <= n + 1 {
-            if let Some(row) = Row::at(runs, j) {
-                if omni {
+            let (maybe_omni, maybe_limited) = screen(runs.widths(), j);
+            if (omni && maybe_omni || limited && maybe_limited)
+                && let Some(row) = Row::at(runs, j)
+            {
+                if omni && maybe_omni {
                     started |= omni::decode(&row, out);
                 }
-                if limited {
+                if limited && maybe_limited {
                     started |= limited::decode(&row, out);
                 }
             }
@@ -60,6 +63,22 @@ impl LinearDecoder for DataBarDecoder {
         }
         started
     }
+}
+
+/// Cheap tests on the runs at `j` that reject most windows of a busy line:
+/// every finder of Omnidirectional ends, and the right one starts, with two
+/// narrow elements; the check pattern of Limited has no element wider than
+/// three modules. Windows with a cut guard are not screened.
+fn screen(w: &[f32], j: isize) -> (bool, bool) {
+    if j < 0 || j as usize + ROW_RUNS > w.len() {
+        return (true, true);
+    }
+    let w = &w[j as usize..j as usize + ROW_RUNS];
+    let g = w[0];
+    let narrow = |v: f32| (0.4 * g..=2.5 * g).contains(&v);
+    let omni = narrow(w[12]) && narrow(w[13]) && narrow(w[30]) && narrow(w[31]);
+    let limited = w[15..29].iter().all(|&v| (0.4 * g..=4.0 * g).contains(&v));
+    (omni, limited)
 }
 
 /// The 45 runs of a symbol of 46 elements, without the guard space that
@@ -105,6 +124,17 @@ impl Row {
         };
         let (lo, hi) = (a.min(b).min(c), a.max(b).max(c));
         if !(lo > 0.0 && hi <= 2.2 * lo) {
+            return None;
+        }
+        // No element of either symbology is narrower than a third or wider
+        // than ten guard widths; most windows of a busy line fail here.
+        let g = (a + b + c) / 3.0;
+        let first_real = j.max(0) as usize;
+        let last_real = (last.min(n - 1)) as usize;
+        if runs.widths()[first_real..=last_real]
+            .iter()
+            .any(|&w| !(0.33 * g..=10.0 * g).contains(&w))
+        {
             return None;
         }
         // Positions decrease along reversed runs.
