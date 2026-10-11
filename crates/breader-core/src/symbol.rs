@@ -111,6 +111,9 @@ pub struct DataMatrixMeta {
     pub eci: Vec<u32>,
     /// Structured Append: (position, total, file id) when present; position and total are 1-based.
     pub structured_append: Option<(u8, u8, u16)>,
+    /// The symbol programs the reader (Reader Programming codeword first);
+    /// applications that do not expect it should ignore it.
+    pub reader_init: bool,
 }
 
 /// Details of a decoded Aztec Code symbol.
@@ -157,6 +160,9 @@ pub struct Pdf417Meta {
     pub compact: bool,
     /// Macro PDF417 control block, when the symbol is part of a file.
     pub macro_pdf417: Option<MacroPdf417>,
+    /// The symbol programs the reader (codeword 921 first); applications that
+    /// do not expect it should ignore it.
+    pub reader_init: bool,
 }
 
 /// Macro PDF417 control block: the position of a symbol in a multi-symbol file.

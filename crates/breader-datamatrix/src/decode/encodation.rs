@@ -2,8 +2,9 @@
 //! encodation schemes with their latch, shift and special codewords.
 //!
 //! Decisions where ISO/IEC 16022 leaves room:
-//! - Reader Programming (234) is rejected: its payload configures a reader
-//!   and is never application data.
+//! - Reader Programming (234) is only accepted as the first codeword and is
+//!   reported as a flag: its payload configures a reader and is never
+//!   application data (decision D-035).
 //! - Structured Append, macros 05/06 and the first-position FNC1 are only
 //!   accepted before any data character.
 //! - Padding must follow the standard sequence exactly (129, then the
@@ -27,6 +28,7 @@ pub(super) struct Parsed {
     pub eci: Vec<u32>,
     pub structured_append: Option<(u8, u8, u16)>,
     pub aim_id: [u8; 3],
+    pub reader_programming: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -85,6 +87,7 @@ struct State<'a> {
     fnc1: Fnc1,
     sa: Option<(u8, u8, u16)>,
     macro_trailer: bool,
+    reader_programming: bool,
     /// Symbol characters produced so far.
     chars: usize,
     /// The first character was a letter or a digit pair (application indicator).
@@ -181,7 +184,12 @@ impl State<'_> {
                 }
                 self.sa = Some((position, total, u16::from(f1) << 8 | u16::from(f2)));
             }
-            234 => return Err(BAD),
+            234 => {
+                if at != 0 {
+                    return Err(BAD);
+                }
+                self.reader_programming = true;
+            }
             235 => {
                 let n = self.next()?;
                 if !(1..=128).contains(&n) {
@@ -425,6 +433,7 @@ pub(super) fn parse(cw: &[u8], strict_pad: bool) -> Result<Parsed, Reject> {
         fnc1: Fnc1::None,
         sa: None,
         macro_trailer: false,
+        reader_programming: false,
         chars: 0,
         first_is_ai: false,
         shift: 0,
@@ -469,5 +478,6 @@ pub(super) fn parse(cw: &[u8], strict_pad: bool) -> Result<Parsed, Reject> {
         eci: st.eci,
         structured_append: st.sa,
         aim_id: [b']', b'd', b'0' + kind],
+        reader_programming: st.reader_programming,
     })
 }

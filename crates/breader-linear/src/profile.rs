@@ -125,24 +125,35 @@ const BAND_ROWS: usize = 32;
 /// the few image rows of a band stay in cache while every line crosses them,
 /// instead of each line streaming through the whole image. The values equal
 /// those of [`sample`].
+/// Buffers of [`sample_oblique_batch`].
+#[derive(Debug, Default)]
+pub struct ObliqueWork {
+    states: Vec<Oblique>,
+    cursor: Vec<usize>,
+}
+
 pub fn sample_oblique_batch(
     img: &ImageView<'_>,
     lines: &[Scanline],
     inverted: bool,
     offsets: &mut Vec<usize>,
     out: &mut Vec<u8>,
+    work: &mut ObliqueWork,
 ) {
-    let states: Vec<Oblique> = lines.iter().map(Oblique::new).collect();
+    let ObliqueWork { states, cursor } = work;
+    states.clear();
+    states.extend(lines.iter().map(Oblique::new));
     offsets.clear();
     let mut total = 0;
-    for s in &states {
+    for s in states.iter() {
         offsets.push(total);
         total += s.len;
     }
     offsets.push(total);
     out.clear();
     out.resize(total, 0);
-    let mut cursor = vec![0usize; states.len()];
+    cursor.clear();
+    cursor.resize(states.len(), 0);
     let h = img.height();
     for top in (0..h).step_by(BAND_ROWS) {
         let bottom = top + BAND_ROWS;
@@ -299,7 +310,14 @@ mod tests {
         ];
         for inverted in [false, true] {
             let (mut offsets, mut batch) = (Vec::new(), Vec::new());
-            sample_oblique_batch(&img, &lines, inverted, &mut offsets, &mut batch);
+            sample_oblique_batch(
+                &img,
+                &lines,
+                inverted,
+                &mut offsets,
+                &mut batch,
+                &mut ObliqueWork::default(),
+            );
             let mut single = Vec::new();
             for (k, line) in lines.iter().enumerate() {
                 sample(&img, line, inverted, &mut single);

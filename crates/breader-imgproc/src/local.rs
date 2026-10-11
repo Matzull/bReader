@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use breader_core::{Binarizer, BitMatrix, ImageView};
 
 use crate::otsu::OtsuBinarizer;
@@ -25,12 +27,38 @@ impl Default for LocalBinarizer {
     }
 }
 
+/// Working buffers of one binarization, kept per thread so that scanning
+/// frames of one size does not allocate.
+#[derive(Debug, Default)]
+struct Buffers {
+    thresholds: Vec<u8>,
+    sat: Vec<u64>,
+    pixel_thr: Vec<u8>,
+    mins: Vec<u8>,
+    maxs: Vec<u8>,
+    sums: Vec<u64>,
+    stats: RowStats,
+}
+
+thread_local! {
+    static BUFFERS: RefCell<Buffers> = RefCell::new(Buffers::default());
+}
+
 impl Binarizer for LocalBinarizer {
     fn id(&self) -> &'static str {
         "local"
     }
 
     fn binarize(&self, src: ImageView<'_>, out: &mut BitMatrix) {
+        BUFFERS.with(|cell| match cell.try_borrow_mut() {
+            Ok(mut buffers) => self.binarize_with(src, out, &mut buffers),
+            Err(_) => self.binarize_with(src, out, &mut Buffers::default()),
+        });
+    }
+}
+
+impl LocalBinarizer {
+    fn binarize_with(&self, src: ImageView<'_>, out: &mut BitMatrix, buffers: &mut Buffers) {
         let (w, h) = (src.width(), src.height());
         let block = self.block.max(1);
         let (tw, th) = (w.div_ceil(block), h.div_ceil(block));
@@ -43,12 +71,12 @@ impl Binarizer for LocalBinarizer {
             out.resize(w, h);
         }
 
-        let thresholds = self.tile_thresholds(src, block, tw, th);
-        let sat = summed_area(&thresholds, tw, th);
+        self.tile_thresholds(src, block, tw, th, buffers);
+        summed_area(&buffers.thresholds, tw, th, &mut buffers.sat);
         let sat_stride = tw + 1;
 
         let grid = Grid {
-            sat: &sat,
+            sat: &buffers.sat,
             stride: sat_stride,
             tw,
             th,
@@ -68,10 +96,12 @@ impl Binarizer for LocalBinarizer {
                 );
             return;
         }
-        let mut pixel_thr = vec![0u8; w];
+        let pixel_thr = &mut buffers.pixel_thr;
+        pixel_thr.clear();
+        pixel_thr.resize(w, 0);
         let (words, wpr) = out.words_mut();
         for (ty, chunk) in words.chunks_mut(wpr.max(1) * block).enumerate() {
-            self.pack_tile_row(src, block, ty, &grid, &mut pixel_thr, chunk, wpr.max(1));
+            self.pack_tile_row(src, block, ty, &grid, pixel_thr, chunk, wpr.max(1));
         }
     }
 }
@@ -131,12 +161,20 @@ struct RowStats {
 }
 
 impl RowStats {
+    #[cfg(feature = "rayon")]
     fn new(w: usize) -> Self {
-        Self {
-            col_min: vec![0; w],
-            col_max: vec![0; w],
-            col_sum: vec![0; w],
-        }
+        let mut stats = Self::default();
+        stats.resize(w);
+        stats
+    }
+
+    fn resize(&mut self, w: usize) {
+        self.col_min.clear();
+        self.col_min.resize(w, 0);
+        self.col_max.clear();
+        self.col_max.resize(w, 0);
+        self.col_sum.clear();
+        self.col_sum.resize(w, 0);
     }
 
     /// Min, max and sum of every tile of tile row `ty`.
@@ -239,17 +277,36 @@ impl LocalBinarizer {
         }
     }
 
-    fn tile_thresholds(&self, src: ImageView<'_>, block: usize, tw: usize, th: usize) -> Vec<u8> {
-        let mut thresholds = vec![0u8; tw * th];
+    fn tile_thresholds(
+        &self,
+        src: ImageView<'_>,
+        block: usize,
+        tw: usize,
+        th: usize,
+        buffers: &mut Buffers,
+    ) {
+        let Buffers {
+            thresholds,
+            mins,
+            maxs,
+            sums,
+            stats,
+            ..
+        } = buffers;
+        thresholds.clear();
+        thresholds.resize(tw * th, 0);
         #[cfg(feature = "rayon")]
         if crate::is_large(src.width(), src.height()) {
             use rayon::prelude::*;
             // Statistics of different tile rows are independent; only the
             // fallback for flat tiles needs the previous row, so that part
             // runs in order afterwards.
-            let mut mins = vec![0u8; tw * th];
-            let mut maxs = vec![0u8; tw * th];
-            let mut sums = vec![0u64; tw * th];
+            mins.clear();
+            mins.resize(tw * th, 0);
+            maxs.clear();
+            maxs.resize(tw * th, 0);
+            sums.clear();
+            sums.resize(tw * th, 0);
             mins.par_chunks_mut(tw)
                 .zip(maxs.par_chunks_mut(tw))
                 .zip(sums.par_chunks_mut(tw))
@@ -262,29 +319,24 @@ impl LocalBinarizer {
                 let (done, rest) = thresholds.split_at_mut(ty * tw);
                 let above = (ty > 0).then(|| &done[(ty - 1) * tw..]);
                 let r = ty * tw..(ty + 1) * tw;
-                let stats = (&mins[r.clone()], &maxs[r.clone()], &sums[r]);
-                self.row_thresholds(src, block, ty, stats, above, &mut rest[..tw]);
+                let tile_stats = (&mins[r.clone()], &maxs[r.clone()], &sums[r]);
+                self.row_thresholds(src, block, ty, tile_stats, above, &mut rest[..tw]);
             }
-            return thresholds;
+            return;
         }
-        let mut scratch = RowStats::new(src.width());
-        let mut mins = vec![0u8; tw];
-        let mut maxs = vec![0u8; tw];
-        let mut sums = vec![0u64; tw];
+        stats.resize(src.width());
+        for v in [&mut *mins, &mut *maxs] {
+            v.clear();
+            v.resize(tw, 0);
+        }
+        sums.clear();
+        sums.resize(tw, 0);
         for ty in 0..th {
-            scratch.tiles(src, block, ty, &mut mins, &mut maxs, &mut sums);
+            stats.tiles(src, block, ty, mins, maxs, sums);
             let (done, rest) = thresholds.split_at_mut(ty * tw);
             let above = (ty > 0).then(|| &done[(ty - 1) * tw..]);
-            self.row_thresholds(
-                src,
-                block,
-                ty,
-                (&mins, &maxs, &sums),
-                above,
-                &mut rest[..tw],
-            );
+            self.row_thresholds(src, block, ty, (mins, maxs, sums), above, &mut rest[..tw]);
         }
-        thresholds
     }
 }
 
@@ -308,9 +360,10 @@ fn reduce_columns(lo: &[u8], hi: &[u8], sum: &[u16]) -> (u8, u8, u64) {
     )
 }
 
-fn summed_area(grid: &[u8], tw: usize, th: usize) -> Vec<u64> {
+fn summed_area(grid: &[u8], tw: usize, th: usize, sat: &mut Vec<u64>) {
     let stride = tw + 1;
-    let mut sat = vec![0u64; stride * (th + 1)];
+    sat.clear();
+    sat.resize(stride * (th + 1), 0);
     for y in 0..th {
         let mut run = 0u64;
         for x in 0..tw {
@@ -318,7 +371,6 @@ fn summed_area(grid: &[u8], tw: usize, th: usize) -> Vec<u64> {
             sat[(y + 1) * stride + x + 1] = sat[y * stride + x + 1] + run;
         }
     }
-    sat
 }
 
 #[cfg(test)]

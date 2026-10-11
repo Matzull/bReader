@@ -461,7 +461,7 @@ fn two_symbols_in_one_frame() {
 }
 
 #[test]
-fn reader_initialisation_symbols_are_rejected() {
+fn reader_initialisation_symbols_are_flagged() {
     // 921 as the first data codeword.
     let msg = "\u{0}";
     let _ = msg;
@@ -495,7 +495,11 @@ fn reader_initialisation_symbols_are_rejected() {
         },
         span: (0.0, 10.0),
     };
-    assert!(build_symbol(&found, (1.0, 1.0)).is_none());
+    let sym = build_symbol(&found, (1.0, 1.0)).unwrap();
+    let SymbolMeta::Pdf417(meta) = &sym.meta else {
+        panic!("not a PDF417 symbol");
+    };
+    assert!(meta.reader_init);
 }
 
 #[test]

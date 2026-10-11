@@ -271,6 +271,7 @@ impl Symbol {
                 d.set_item("mirrored", m.mirrored)?;
                 d.set_item("eci", m.eci.clone())?;
                 d.set_item("structured_append", m.structured_append)?;
+                d.set_item("reader_init", m.reader_init)?;
             }
             SymbolMeta::Pdf417(m) => {
                 d.set_item("kind", "pdf417")?;
@@ -280,6 +281,7 @@ impl Symbol {
                 d.set_item("errors_corrected", m.errors_corrected)?;
                 d.set_item("erasures", m.erasures)?;
                 d.set_item("compact", m.compact)?;
+                d.set_item("reader_init", m.reader_init)?;
                 match &m.macro_pdf417 {
                     Some(mc) => {
                         let md = PyDict::new(py);
