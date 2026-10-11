@@ -11,7 +11,7 @@ import pytest
 import breader
 from breader import Reader, Symbol
 
-from conftest import render_qr
+from conftest import render_codabar, render_qr
 
 URL = "https://example.com/breader?x=1"
 ROOT = Path(__file__).resolve().parents[3]
@@ -155,7 +155,7 @@ def test_bad_input_raises_value_error(image, kwargs):
 def test_default_options():
     o = Reader().options
     assert o["effort"] == "balanced" and o["escalation"] is None and o["upscale_max_side"] is None
-    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "micro-qr"]
+    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr"]
     assert o["itf_lengths"] == (14,) and o["min_line_agreement"] == 2
     o["effort"] = "x"
     assert Reader().options["effort"] == "balanced"
@@ -374,6 +374,7 @@ def test_datamatrix_meta_on_synth():
             assert m["rows"] >= 8 and m["cols"] >= 10
             assert isinstance(m["mirrored"], bool) and m["errors_corrected"] >= 0
             assert m["structured_append"] is None
+            assert m["reader_init"] is False
             seen += 1
     assert seen >= 6
 
@@ -400,6 +401,7 @@ def test_pdf417_meta_on_synth():
         assert m["kind"] == "pdf417"
         assert m["rows"] >= 3 and 1 <= m["cols"] <= 30 and 0 <= m["ec_level"] <= 8
         assert isinstance(m["compact"], bool) and m["macro"] is None
+        assert m["reader_init"] is False
         assert m["errors_corrected"] == 0 and m["erasures"] == 0
         seen += 1
     assert seen == 3
@@ -472,3 +474,21 @@ def test_aztec_is_a_known_symbology():
 
 def test_pdf417_is_a_known_symbology():
     assert Reader(symbologies=["pdf417"]).options["symbologies"] == ["pdf417"]
+
+
+def test_codabar_data_excludes_start_stop_and_meta_records_them():
+    img = render_codabar("C294/586D")
+    [s] = Reader().scan(img)
+    assert s.symbology == "codabar" and s.text == "294/586"
+    assert s.aim_id == "]F0"
+    assert s.meta["kind"] == "linear"
+    assert s.meta["codabar_start_stop"] == ("C", "D")
+    assert s.meta["checksum_verified"] is False
+    assert Reader(symbologies=["code39"]).scan(img) == []
+    assert Reader(symbologies=["codabar"]).options["symbologies"] == ["codabar"]
+
+
+def test_codabar_without_stop_is_not_read():
+    full = render_codabar("A123456B")
+    assert Reader().scan(full)
+    assert Reader().scan(render_codabar("A123456", module=3)) == []

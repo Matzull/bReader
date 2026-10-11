@@ -18,7 +18,7 @@ cargo install cargo-fuzz --locked
 | `pipeline`         | `Reader::scan` / `scan_pixels` on images up to 256x256: effort, inversion, symbology subset, pixel format, stride |
 | `qr_grid`          | QR `decode_grid` on arbitrary module grids (valid and invalid dimensions)         |
 | `microqr_grid`     | Micro QR `decode_grid` on arbitrary module grids (valid and invalid dimensions)   |
-| `linear_runs`      | every 1D decoder on arbitrary run-width sequences, both directions and polarities |
+| `linear_runs`      | every 1D decoder (EAN/UPC, Code 128, Code 39, ITF, Codabar) on arbitrary run-width sequences, both directions and polarities |
 | `linear_profile`   | edge detection plus all 1D decoders on arbitrary gray-level profiles              |
 | `dm_grid`          | Data Matrix grid and codeword-stream decoding on arbitrary input                  |
 | `gs1_parse`        | `gs1::parse` / `gs1::hri`                                                         |

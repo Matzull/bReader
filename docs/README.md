@@ -11,7 +11,7 @@ This page is the entry point. Find the audience below, follow the link, and when
 | QR Code | implemented | [qr](symbologies/qr.md) |
 | Data Matrix (ECC 200) | implemented | [datamatrix](symbologies/datamatrix.md) |
 | EAN-13, EAN-8, UPC-A, UPC-E (+ EAN-2/5 add-ons) | implemented | [linear](symbologies/linear.md) |
-| Code 128, Code 39, ITF | implemented | [linear](symbologies/linear.md) |
+| Code 128, Code 39, ITF, Codabar | implemented | [linear](symbologies/linear.md) |
 | PDF417 (+ compact, Macro, ECI) | implemented | [pdf417](symbologies/pdf417.md) |
 | Aztec Code (compact, full-range, Runes) | implemented | [aztec](symbologies/aztec.md) |
 | Micro QR Code (M1 to M4) | implemented | [microqr](symbologies/microqr.md) |

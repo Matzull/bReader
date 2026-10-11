@@ -26,6 +26,7 @@ pub(crate) struct PlacedHit {
     /// Light bars on a dark background. Hits of different polarity never
     /// read the same symbol.
     pub inverted: bool,
+    pub start_stop: Option<(u8, u8)>,
 }
 
 impl PlacedHit {
@@ -41,6 +42,7 @@ impl PlacedHit {
         self.symbology == other.symbology
             && self.inverted == other.inverted
             && self.text == other.text
+            && self.start_stop == other.start_stop
     }
 
     /// True when `other` can be another view of the same physical symbol:
@@ -163,6 +165,12 @@ pub(crate) struct Aggregator {
 }
 
 impl Aggregator {
+    /// Forgets the hits of the previous pass; keeps the allocations.
+    pub fn reset(&mut self) {
+        self.hits.clear();
+        self.groups.clear();
+    }
+
     pub fn push(&mut self, hit: PlacedHit) {
         if self.hits.len() < MAX_HITS {
             self.hits.push(hit);
@@ -203,8 +211,11 @@ impl Aggregator {
 
     fn required(&self, members: &[usize], settings: &Settings) -> u16 {
         let mut min = settings.min_agreement.max(1);
-        if self.hits[members[0]].symbology == Symbology::Itf {
-            min = min.max(ITF_MIN_AGREEMENT);
+        match self.hits[members[0]].symbology {
+            Symbology::Itf => min = min.max(ITF_MIN_AGREEMENT),
+            // No check character either: one more line than the setting asks.
+            Symbology::Codabar => min += 1,
+            _ => {}
         }
         let sparse: Vec<usize> = members
             .iter()
@@ -409,6 +420,7 @@ impl Aggregator {
                     .and_then(|a| String::from_utf8(a.clone()).ok()),
                 checksum_verified: first.checksum_verified,
                 lines_agreeing: c.lines,
+                codabar_start_stop: first.start_stop,
             }),
             quality: quality.clamp(0.0, 1.0),
         }
@@ -480,6 +492,7 @@ mod tests {
             checksum_verified: true,
             short_quiet: false,
             inverted: false,
+            start_stop: None,
         }
     }
 
@@ -606,6 +619,43 @@ mod tests {
         assert_eq!(run(lines(3), &settings(1)).len(), 1);
         assert_eq!(run(lines(3), &settings(2)).len(), 1);
         assert!(run(lines(3), &settings(4)).is_empty());
+    }
+
+    #[test]
+    fn codabar_needs_one_line_more_than_the_setting() {
+        let lines = |n: u32, stops: (u8, u8)| {
+            (0..n)
+                .map(|i| {
+                    let mut h = hit(
+                        Symbology::Codabar,
+                        "1234",
+                        10.0 + 3.0 * i as f32,
+                        0.0,
+                        100.0,
+                        i,
+                    );
+                    h.start_stop = Some(stops);
+                    h
+                })
+                .collect::<Vec<_>>()
+        };
+        assert!(run(lines(1, (b'A', b'B')), &settings(1)).is_empty());
+        assert_eq!(run(lines(2, (b'A', b'B')), &settings(1)).len(), 1);
+        assert!(run(lines(2, (b'A', b'B')), &settings(2)).is_empty());
+        let out = run(lines(3, (b'A', b'B')), &settings(2));
+        assert_eq!(out.len(), 1);
+        let SymbolMeta::Linear(meta) = &out[0].meta else {
+            panic!("linear meta");
+        };
+        assert_eq!(meta.codabar_start_stop, Some((b'A', b'B')));
+        assert!(run(lines(3, (b'A', b'B')), &settings(3)).is_empty());
+        // The same payload with other guards is another symbol.
+        let mut mixed = lines(2, (b'A', b'B'));
+        mixed.extend(lines(2, (b'C', b'D')).into_iter().map(|mut h| {
+            h.line += 2;
+            h
+        }));
+        assert!(run(mixed, &settings(2)).is_empty());
     }
 
     #[test]

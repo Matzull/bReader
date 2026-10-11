@@ -162,6 +162,9 @@ pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
         }
         Err(_) => data.trim_ascii().to_vec(),
     };
+    if sym == Symbology::Codabar {
+        return (sym, strip_codabar_guards(&trimmed).to_vec());
+    }
     if matches!(sym, Symbology::UpcA | Symbology::UpcE) && trimmed.iter().all(u8::is_ascii_digit) {
         let upca = match (sym, trimmed.len()) {
             (Symbology::UpcE, 8) => upce_to_upca(&trimmed),
@@ -178,6 +181,17 @@ pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
         }
     }
     (sym, trimmed)
+}
+
+/// Datasets and other readers spell a Codabar symbol with its start and stop characters
+/// (`A1234B`); the library returns the data between them. Both spellings reduce to the data. A
+/// library read never starts or ends with A-D (such data is rejected), so this is idempotent.
+fn strip_codabar_guards(data: &[u8]) -> &[u8] {
+    let guard = |b: u8| matches!(b.to_ascii_uppercase(), b'A'..=b'D');
+    match data {
+        [first, inner @ .., last] if guard(*first) && guard(*last) => inner,
+        _ => data,
+    }
 }
 
 pub fn score(found: &[Decoded], expected: &[Expected], stats: &mut Stats) {
@@ -332,6 +346,27 @@ mod tests {
         );
         // Not expandable: kept as is.
         assert_eq!(canonical(Symbology::UpcE, b"25096893").0, Symbology::UpcE);
+    }
+
+    #[test]
+    fn codabar_start_and_stop_characters_are_not_part_of_the_comparison() {
+        let mut st = Stats::default();
+        let found = vec![Decoded::new(Symbology::Codabar, b"1234567890".to_vec())];
+        score(&found, &[exp(Symbology::Codabar, "A1234567890B")], &mut st);
+        assert_eq!(st.totals().read, 1);
+        assert_eq!(st.totals().false_positives, 0);
+
+        let mut st = Stats::default();
+        let found = vec![Decoded::new(Symbology::Codabar, b"C1234$D".to_vec())];
+        score(&found, &[exp(Symbology::Codabar, "1234$")], &mut st);
+        assert_eq!(st.totals().read, 1);
+
+        // A different payload still counts as wrong.
+        let mut st = Stats::default();
+        let found = vec![Decoded::new(Symbology::Codabar, b"1234".to_vec())];
+        score(&found, &[exp(Symbology::Codabar, "A1235A")], &mut st);
+        assert_eq!(st.totals().read, 0);
+        assert_eq!(st.totals().false_positives, 1);
     }
 
     #[test]

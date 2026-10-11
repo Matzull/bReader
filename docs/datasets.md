@@ -54,7 +54,7 @@ Every dataset directory (or sample directory) holds an `annotations.json`:
 }
 ```
 
-`format` spellings vary by source (`EAN13`/`EAN_13`, `QRCode`/`QR_CODE`) and are normalized in `tools/bench/src/groundtruth.rs`; a format with no breader counterpart is counted as unsupported. Matching is by symbology and data (`tools/bench/src/matching.rs`); positions are informational.
+`format` spellings vary by source (`EAN13`/`EAN_13`, `QRCode`/`QR_CODE`) and are normalized in `tools/bench/src/groundtruth.rs`; a format with no breader counterpart is counted as unsupported. Matching is by symbology and data (`tools/bench/src/matching.rs`); positions are informational. Codabar labels (zxing-cpp samples `codabar-1`, `codabar-2`) and the other engines' reads spell the start and stop characters (`A1234B`); the library returns the data between them, so the matching drops a leading and a trailing A-D from both sides of a Codabar comparison (`py_bench.py` does the same). No Dynamsoft label is Codabar.
 
 Cleanup on load, applied identically by every engine:
 

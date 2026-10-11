@@ -33,6 +33,7 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::DataMatrix => "datamatrix",
         Symbology::Pdf417 => "pdf417",
         Symbology::Aztec => "aztec",
+        Symbology::Codabar => "codabar",
         Symbology::MicroQr => "micro-qr",
         _ => s.name(),
     }
@@ -184,7 +185,7 @@ impl From<CoreSymbol> for Symbol {
 
 #[pymethods]
 impl Symbol {
-    /// Short symbology id: "qr", "ean13", "ean8", "upca", "upce", "code128", "code39" or "itf".
+    /// Short symbology id: "qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec" or "codabar".
     #[getter]
     fn symbology(&self) -> &str {
         self.symbology
@@ -263,6 +264,11 @@ impl Symbol {
                 d.set_item("addon", m.addon.as_deref())?;
                 d.set_item("checksum_verified", m.checksum_verified)?;
                 d.set_item("lines_agreeing", m.lines_agreeing)?;
+                d.set_item(
+                    "codabar_start_stop",
+                    m.codabar_start_stop
+                        .map(|(a, b)| (char::from(a).to_string(), char::from(b).to_string())),
+                )?;
             }
             SymbolMeta::DataMatrix(m) => {
                 d.set_item("kind", "datamatrix")?;
@@ -272,6 +278,7 @@ impl Symbol {
                 d.set_item("mirrored", m.mirrored)?;
                 d.set_item("eci", m.eci.clone())?;
                 d.set_item("structured_append", m.structured_append)?;
+                d.set_item("reader_init", m.reader_init)?;
             }
             SymbolMeta::Pdf417(m) => {
                 d.set_item("kind", "pdf417")?;
@@ -281,6 +288,7 @@ impl Symbol {
                 d.set_item("errors_corrected", m.errors_corrected)?;
                 d.set_item("erasures", m.erasures)?;
                 d.set_item("compact", m.compact)?;
+                d.set_item("reader_init", m.reader_init)?;
                 match &m.macro_pdf417 {
                     Some(mc) => {
                         let md = PyDict::new(py);

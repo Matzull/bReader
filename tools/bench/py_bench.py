@@ -24,7 +24,7 @@ try:
 except ImportError:
     breader = None
 
-SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Micro QR Code"]
+SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code"]
 
 ALIASES = {
     "QRCODE": "QR Code",
@@ -38,6 +38,7 @@ ALIASES = {
     "CODE39EXTENDED": "Code 39",
     "ITF": "ITF",
     "INTERLEAVED2OF5": "ITF",
+    "CODABAR": "Codabar",
     "DATAMATRIX": "Data Matrix",
     "PDF417": "PDF417",
     "AZTEC": "Aztec",
@@ -55,6 +56,7 @@ BR_FORMATS = {
     "code128": "Code 128",
     "code39": "Code 39",
     "itf": "ITF",
+    "codabar": "Codabar",
     "datamatrix": "Data Matrix",
     "pdf417": "PDF417",
     "aztec": "Aztec",
@@ -81,6 +83,7 @@ class ZxingEngine:
             bf.Code39Std: "Code 39",
             bf.ITF: "ITF",
             bf.ITF14: "ITF",
+            bf.Codabar: "Codabar",
             bf.DataMatrix: "Data Matrix",
             bf.PDF417: "PDF417",
             bf.Aztec: "Aztec",
@@ -192,6 +195,10 @@ def canonical(sym, data):
         data = text.removeprefix("\x1d").encode("utf-8")
     except UnicodeDecodeError:
         data = data.strip()
+    if sym == "Codabar":
+        if len(data) >= 2 and data[:1].upper() in (b"A", b"B", b"C", b"D") and data[-1:].upper() in (b"A", b"B", b"C", b"D"):
+            data = data[1:-1]
+        return (sym, data)
     if sym in ("UPC-A", "UPC-E") and data.isdigit():
         upca = None
         if sym == "UPC-E" and len(data) == 8:

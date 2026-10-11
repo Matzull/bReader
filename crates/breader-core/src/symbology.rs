@@ -25,6 +25,8 @@ pub enum Symbology {
     Pdf417,
     /// Aztec Code, including compact symbols and Aztec Runes.
     Aztec,
+    /// Codabar.
+    Codabar,
     /// Micro QR Code, versions M1 to M4.
     MicroQr,
 }
@@ -43,6 +45,7 @@ impl Symbology {
         Self::DataMatrix,
         Self::Pdf417,
         Self::Aztec,
+        Self::Codabar,
         Self::MicroQr,
     ];
 
@@ -68,6 +71,7 @@ impl Symbology {
             Self::DataMatrix => "Data Matrix",
             Self::Pdf417 => "PDF417",
             Self::Aztec => "Aztec",
+            Self::Codabar => "Codabar",
             Self::MicroQr => "Micro QR Code",
         }
     }

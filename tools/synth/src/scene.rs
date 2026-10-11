@@ -192,6 +192,7 @@ enum Mix {
     DataMatrix,
     Pdf417,
     Aztec,
+    Codabar,
     MicroQr,
 }
 
@@ -218,6 +219,7 @@ fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
             Mix::DataMatrix => Sym::DataMatrix,
             Mix::Pdf417 => Sym::Pdf417,
             Mix::Aztec => Sym::Aztec,
+            Mix::Codabar => Sym::Codabar,
             Mix::MicroQr => Sym::MicroQr,
         };
         let enc = encode::encode(rng, sym);
@@ -352,6 +354,22 @@ pub fn generate_aztec(class: Class, j: usize, seed: u64) -> Option<(GrayImage, V
             let pick = j + class.index() as usize * 3;
             let enc = encode::encode_aztec(rng, pick, j % 3 == 2);
             let (mut img, anns) = single_with(class, Sym::Aztec, enc, rng);
+            degrade(class, &mut img, rng);
+            Some((img, anns))
+        }
+    }
+}
+
+/// Codabar images of a class, generated after the Aztec ones so that every
+/// earlier image stays byte-identical.
+pub fn generate_codabar(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Vec<Annotation>)> {
+    let mut rng = image_rng(seed.wrapping_add(0xC0DA_BA20), class, j);
+    let rng = &mut rng;
+    match class {
+        Class::Negative | Class::Datamatrix => None,
+        Class::Multi => Some(multi(rng, Mix::Codabar)),
+        _ => {
+            let (mut img, anns) = single(class, Sym::Codabar, None, rng);
             degrade(class, &mut img, rng);
             Some((img, anns))
         }

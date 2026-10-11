@@ -78,6 +78,21 @@ struct Work<'g> {
     plausible: u32,
 }
 
+/// The buffers of a `Work` that do not borrow the frame, kept per thread so
+/// that scanning frames of one size does not allocate.
+#[derive(Debug, Default)]
+struct Spare {
+    search: FinderSearch,
+    grid: BitMatrix,
+    runs: Vec<u32>,
+    pts: Vec<(Point, Point)>,
+    cells: Vec<(Point, bool)>,
+}
+
+thread_local! {
+    static SPARE: std::cell::Cell<Option<Spare>> = const { std::cell::Cell::new(None) };
+}
+
 struct Found {
     decoded: DecodedQr,
     h: Mapper,
@@ -533,12 +548,18 @@ impl SymbologyReader for QrReader {
         if bin.width() < 21 || bin.height() < 21 {
             return;
         }
+        let spare = SPARE.take().unwrap_or_default();
         let mut work = Work {
             gray: Some(Gray {
                 img: original,
                 scale,
             }),
-            ..Work::default()
+            search: spare.search,
+            grid: spare.grid,
+            runs: spare.runs,
+            pts: spare.pts,
+            cells: spare.cells,
+            plausible: 0,
         };
         work.search.find_finders(bin, params.row_step);
         if !known.is_empty() {
@@ -602,6 +623,13 @@ impl SymbologyReader for QrReader {
                 );
             }
         }
+        SPARE.set(Some(Spare {
+            search: work.search,
+            grid: work.grid,
+            runs: work.runs,
+            pts: work.pts,
+            cells: work.cells,
+        }));
     }
 }
 

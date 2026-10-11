@@ -104,8 +104,9 @@ fn generate_class(
         count.div_ceil(9)
     };
     let aztec = pdf417;
+    let codabar = pdf417;
     let microqr = pdf417;
-    for i in 0..count + extra + pdf417 + aztec + microqr {
+    for i in 0..count + extra + pdf417 + aztec + codabar + microqr {
         let (img, annotations) = if i < count {
             scene::generate(class, i, seed)
         } else if i < count + extra {
@@ -123,8 +124,14 @@ fn generate_class(
                 Some(g) => g,
                 None => break,
             }
+        } else if i < count + extra + pdf417 + aztec + codabar {
+            match scene::generate_codabar(class, i - count - extra - pdf417 - aztec, seed) {
+                Some(g) => g,
+                None => break,
+            }
         } else {
-            match scene::generate_microqr(class, i - count - extra - pdf417 - aztec, seed) {
+            match scene::generate_microqr(class, i - count - extra - pdf417 - aztec - codabar, seed)
+            {
                 Some(g) => g,
                 None => break,
             }

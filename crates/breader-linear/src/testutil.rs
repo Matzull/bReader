@@ -455,6 +455,46 @@ pub fn code39_modules(body: &str, wide: usize, gap: usize) -> Vec<bool> {
     runs_to_modules(&widths)
 }
 
+/// Codabar patterns as in the specification, `w` for wide elements.
+pub const CODABAR_TABLE: [(char, &str); 20] = [
+    ('0', "nnnnnww"),
+    ('1', "nnnnwwn"),
+    ('2', "nnnwnnw"),
+    ('3', "wwnnnnn"),
+    ('4', "nnwnnwn"),
+    ('5', "wnnnnwn"),
+    ('6', "nwnnnnw"),
+    ('7', "nwnnwnn"),
+    ('8', "nwwnnnn"),
+    ('9', "wnnwnnn"),
+    ('-', "nnnwwnn"),
+    ('$', "nnwwnnn"),
+    (':', "wnnnwnw"),
+    ('/', "wnwnnnw"),
+    ('.', "wnwnwnn"),
+    ('+', "nnwnwnw"),
+    ('A', "nnwwnwn"),
+    ('B', "nnnwnww"),
+    ('C', "nwnwnnw"),
+    ('D', "nnnwwwn"),
+];
+
+/// Codabar symbol of `body` between the `start` and `stop` characters. Wide
+/// elements are `wide` modules, narrow ones one module, characters are `gap`
+/// modules apart.
+pub fn codabar_modules(start: char, body: &str, stop: char, wide: usize, gap: usize) -> Vec<bool> {
+    let mut widths = Vec::new();
+    let text = format!("{start}{body}{stop}");
+    for (i, ch) in text.chars().enumerate() {
+        if i > 0 {
+            widths.push(gap);
+        }
+        let (_, p) = CODABAR_TABLE.iter().find(|(c, _)| *c == ch).unwrap();
+        widths.extend(p.bytes().map(|b| if b == b'w' { wide } else { 1 }));
+    }
+    runs_to_modules(&widths)
+}
+
 const ITF_DIGITS: [&str; 10] = [
     "nnwwn", "wnnnw", "nwnnw", "wwnnn", "nnwnw", "wnwnn", "nwwnn", "nnnww", "wnnwn", "nwnwn",
 ];

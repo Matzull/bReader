@@ -1,8 +1,11 @@
+use std::cell::RefCell;
+
 use breader_core::{
     Effort, FrameContext, ImageView, Point, Symbol, Symbology, SymbologyReader, SymbologySet,
 };
 
 use crate::aggregate::{Aggregator, PlacedHit, Settings};
+use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
 use crate::code128::Code128Decoder;
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
@@ -11,13 +14,25 @@ use crate::edges::{EdgeDetector, EdgeParams, Edges};
 use crate::itf::ItfDecoder;
 use crate::marks::{self, Mark, MarkSet, RawMark};
 use crate::plan::{ScanPlan, Scanline, clip_line};
-use crate::profile::{self, Oblique};
+use crate::profile::{self, Oblique, ObliqueWork};
 use crate::runs::Runs;
 
 /// Decoders tried on every scanline, composed statically.
-type Decoders = (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
+type Decoders = (
+    EanDecoder,
+    Code128Decoder,
+    Code39Decoder,
+    ItfDecoder,
+    CodabarDecoder,
+);
 
-const DECODERS: Decoders = (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
+const DECODERS: Decoders = (
+    EanDecoder,
+    Code128Decoder,
+    Code39Decoder,
+    ItfDecoder,
+    CodabarDecoder,
+);
 
 /// Decode state shared by all scanlines of one `scan` call.
 #[derive(Debug, Default)]
@@ -42,7 +57,28 @@ struct Work {
     oblique: Vec<u8>,
     offsets: Vec<usize>,
     seeds: Vec<PlacedHit>,
+    column_xs: Vec<usize>,
+    oblique_lines: Vec<Scanline>,
+    oblique_work: ObliqueWork,
     stage: Stage,
+}
+
+impl Work {
+    /// Empties everything a scan fills; the allocations stay.
+    fn reset(&mut self) {
+        self.lines.clear();
+        self.seeds.clear();
+        let stage = &mut self.stage;
+        stage.hits.clear();
+        stage.aggregator.reset();
+        stage.edge_params.clear();
+        stage.marks.clear();
+        stage.raw_marks.clear();
+    }
+}
+
+thread_local! {
+    static WORK: RefCell<Work> = RefCell::new(Work::default());
 }
 
 /// Edge variants tried per scanline. Direct differentiation keeps narrow
@@ -127,6 +163,7 @@ fn scan_profile<D: LinearDecoder>(
                 checksum_verified: hit.checksum_verified,
                 short_quiet: hit.short_quiet,
                 inverted: hit.inverted,
+                start_stop: hit.start_stop,
             });
         }
     }
@@ -388,6 +425,7 @@ impl SymbologyReader for LinearReader {
             Symbology::Code128,
             Symbology::Code39,
             Symbology::Itf,
+            Symbology::Codabar,
         ]
         .into_iter()
         .collect()
@@ -417,6 +455,16 @@ impl LinearReader {
         if ctx.pass().inverted || !ctx.options().symbologies.intersects(self.symbologies()) {
             return;
         }
+        WORK.with(|cell| match cell.try_borrow_mut() {
+            Ok(mut work) => {
+                work.reset();
+                self.scan_with(&mut work, ctx, out);
+            }
+            Err(_) => self.scan_with(&mut Work::default(), ctx, out),
+        });
+    }
+
+    fn scan_with(&self, work: &mut Work, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
         let opts = LineOptions::from(ctx.options());
         let effort = ctx.options().effort;
         let min_line_agreement = ctx.options().min_line_agreement;
@@ -428,27 +476,32 @@ impl LinearReader {
             width: img.width(),
             height: img.height(),
         };
-        let mut work = Work::default();
         work.stage
             .edge_params
             .extend_from_slice(edge_variants(effort));
         plan.lines(&mut work.lines);
 
-        let columns: Vec<usize> = work
-            .lines
-            .iter()
-            .filter(|l| l.from.x == l.to.x)
-            .map(|l| l.from.x as usize)
-            .collect();
-        profile::sample_columns(&img, &columns, false, &mut work.columns);
+        work.column_xs.clear();
+        work.column_xs.extend(
+            work.lines
+                .iter()
+                .filter(|l| l.from.x == l.to.x)
+                .map(|l| l.from.x as usize),
+        );
+        profile::sample_columns(&img, &work.column_xs, false, &mut work.columns);
 
         let lines = std::mem::take(&mut work.lines);
-        let oblique: Vec<Scanline> = lines
-            .iter()
-            .filter(|l| Oblique::is_oblique(l))
-            .copied()
-            .collect();
-        profile::sample_oblique_batch(&img, &oblique, false, &mut work.offsets, &mut work.oblique);
+        work.oblique_lines.clear();
+        work.oblique_lines
+            .extend(lines.iter().filter(|l| Oblique::is_oblique(l)).copied());
+        profile::sample_oblique_batch(
+            &img,
+            &work.oblique_lines,
+            false,
+            &mut work.offsets,
+            &mut work.oblique,
+            &mut work.oblique_work,
+        );
         let sources = Sources {
             plan,
             columns: &work.columns,
@@ -485,17 +538,10 @@ impl LinearReader {
         let mut seeds = std::mem::take(&mut work.seeds);
         work.stage.aggregator.seeds(&settings, &mut seeds);
         for seed in seeds.iter().take(REFINE_MAX_SEEDS) {
-            refine(
-                &DECODERS,
-                &img,
-                seed,
-                pass,
-                &opts,
-                &mut work,
-                &mut next_index,
-            );
+            refine(&DECODERS, &img, seed, pass, &opts, work, &mut next_index);
         }
         work.seeds = seeds;
+        work.lines = lines;
         work.stage.aggregator.finish(&settings, out);
         if opts.marks {
             let shared = ctx.shared::<MarkSet>();
@@ -976,6 +1022,45 @@ mod tests {
         let bad = format!("{}{}", &text[..13], (text.as_bytes()[13] - b'0' + 1) % 10);
         let img = wide_picture(&itf_modules(&bad, 3), 2.6, 7.0);
         assert!(scan(&img, &any).is_empty());
+    }
+
+    #[test]
+    fn codabar_reads_without_start_and_stop_in_the_data() {
+        let img = wide_picture(&codabar_modules('B', "40129/5", 'D', 3, 1), 2.6, 7.0);
+        let found = scan(&img, &ScanOptions::default());
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].symbology, Symbology::Codabar);
+        assert_eq!(found[0].data, b"40129/5");
+        assert_eq!(&found[0].aim_id, b"]F0");
+        let meta = linear_meta(&found[0]);
+        assert_eq!(meta.codabar_start_stop, Some((b'B', b'D')));
+        assert!(meta.lines_agreeing >= 3);
+        let off = ScanOptions {
+            symbologies: SymbologySet::all()
+                .iter()
+                .filter(|s| *s != Symbology::Codabar)
+                .collect(),
+            ..ScanOptions::default()
+        };
+        assert!(scan(&img, &off).is_empty());
+        // No stop character: nothing, and nothing else either.
+        let m = codabar_modules('B', "40129/5", 'D', 3, 1);
+        let img = wide_picture(&m[..m.len() - 11], 2.6, 7.0);
+        assert!(scan(&img, &ScanOptions::default()).is_empty());
+    }
+
+    #[test]
+    fn other_symbologies_never_come_out_as_codabar() {
+        for modules in [
+            code39_modules("ABC-1234", 3, 1),
+            itf_modules(&with_gs1_check("0614141999996"), 3),
+            ean13_modules(TEXT),
+        ] {
+            let img = wide_picture(&modules, 2.6, 7.0);
+            for s in scan(&img, &ScanOptions::default()) {
+                assert_ne!(s.symbology, Symbology::Codabar, "{s:?}");
+            }
+        }
     }
 
     #[test]
