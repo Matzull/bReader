@@ -16,8 +16,20 @@
         "false_positives": 0
       }
     },
-    "codabar-1": {},
-    "codabar-2": {},
+    "codabar-1": {
+      "Codabar": {
+        "expected": 11,
+        "read": 10,
+        "false_positives": 0
+      }
+    },
+    "codabar-2": {
+      "Codabar": {
+        "expected": 4,
+        "read": 2,
+        "false_positives": 0
+      }
+    },
     "code128-1": {
       "Code 128": {
         "expected": 6,

@@ -101,6 +101,7 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "CODE128" => Some(Symbology::Code128),
         "CODE39" | "CODE39EXTENDED" => Some(Symbology::Code39),
         "ITF" | "INTERLEAVED2OF5" => Some(Symbology::Itf),
+        "CODABAR" => Some(Symbology::Codabar),
         "DATAMATRIX" => Some(Symbology::DataMatrix),
         "PDF417" => Some(Symbology::Pdf417),
         "AZTEC" | "AZTECCODE" => Some(Symbology::Aztec),

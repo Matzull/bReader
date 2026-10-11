@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod aggregate;
+mod codabar;
 mod code128;
 mod code39;
 mod common;
@@ -43,7 +44,7 @@ mod tests {
     #[test]
     fn symbology_set() {
         let set = LinearReader.symbologies();
-        assert_eq!(set.iter().count(), 7);
+        assert_eq!(set.iter().count(), 8);
         assert!(!set.contains(Symbology::Qr));
         assert!(set.contains(Symbology::Itf));
         assert_eq!(LinearReader.name(), "linear");

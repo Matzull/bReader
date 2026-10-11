@@ -215,6 +215,7 @@ impl LinearDecoder for ItfDecoder {
                         checksum_verified: checked,
                         short_quiet: false,
                         inverted: false,
+                        start_stop: None,
                     });
                 }
             }

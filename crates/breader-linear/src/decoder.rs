@@ -26,6 +26,8 @@ pub(crate) struct LineHit {
     pub short_quiet: bool,
     /// Bars were lighter than spaces. Set by the reader, not by decoders.
     pub inverted: bool,
+    /// Codabar start and stop characters; `None` for other symbologies.
+    pub start_stop: Option<(u8, u8)>,
 }
 
 /// The subset of [`ScanOptions`] the decoders consume, copied once per scan.
@@ -133,6 +135,7 @@ mod tests {
                 checksum_verified: false,
                 short_quiet: false,
                 inverted: false,
+                start_stop: None,
             });
             false
         }

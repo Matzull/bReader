@@ -491,6 +491,7 @@ impl EanDecoder {
             checksum_verified: true,
             short_quiet: false,
             inverted: false,
+            start_stop: None,
         }
     }
 
