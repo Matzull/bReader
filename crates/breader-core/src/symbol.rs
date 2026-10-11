@@ -206,14 +206,19 @@ pub enum EcLevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// Details of a decoded QR Code or Micro QR Code.
+/// Details of a decoded QR Code, Micro QR Code or rMQR Code.
 pub struct QrMeta {
     /// Symbol version, 1 to 40. For [`Symbology::MicroQr`](crate::Symbology::MicroQr)
-    /// 1 to 4 for M1 to M4.
+    /// 1 to 4 for M1 to M4; for [`Symbology::Rmqr`](crate::Symbology::Rmqr) 1 to 32,
+    /// the version indicator plus one (R7x43 is 1, R17x139 is 32).
     pub version: u8,
+    /// Modules per row.
+    pub width: u16,
+    /// Modules per column (equal to `width` for QR and Micro QR).
+    pub height: u16,
     /// Error correction level; [`EcLevel::DetectionOnly`] for Micro QR M1.
     pub ec_level: EcLevel,
-    /// Data mask pattern, 0 to 7 (0 to 3 for Micro QR).
+    /// Data mask pattern, 0 to 7 (0 to 3 for Micro QR; always 0 for rMQR, which has one fixed pattern).
     pub mask: u8,
     /// Codeword errors fixed by Reed-Solomon.
     pub errors_corrected: u32,

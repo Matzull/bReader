@@ -155,7 +155,7 @@ def test_bad_input_raises_value_error(image, kwargs):
 def test_default_options():
     o = Reader().options
     assert o["effort"] == "balanced" and o["escalation"] is None and o["upscale_max_side"] is None
-    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr"]
+    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr", "rmqr"]
     assert o["itf_lengths"] == (14,) and o["min_line_agreement"] == 2
     o["effort"] = "x"
     assert Reader().options["effort"] == "balanced"
@@ -345,13 +345,18 @@ def test_synth_clean_matches_rust_bench():
         want = [b["text"] for b in img["barcodes"]]
         expected += len(want)
         found = [s.text for s in r.scan(np.asarray(Image.open(base / img["file"]).convert("L")))]
+        # Codabar labels spell the start and stop characters, the reader leaves them out.
+        found = [
+            next((w for w in want if len(w) > 2 and w[0] in "ABCD" and w[-1] in "ABCD" and w[1:-1] == f), f)
+            for f in found
+        ]
         for w in want:
             if w in found:
                 read += 1
                 found.remove(w)
         fp += len(found)
-    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 26/26 (20 images plus 3 with Data Matrix and 3 with PDF417), 0 false positives.
-    assert (read, expected, fp) == (26, 26, 0)
+    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 38/38 (20 images plus 3 each with Data Matrix, PDF417, Aztec, Codabar, Micro QR and rMQR), 0 false positives.
+    assert (read, expected, fp) == (38, 38, 0)
 
 
 def test_datamatrix_meta_on_synth():
@@ -466,6 +471,37 @@ def test_micro_qr_meta_on_synth():
 def test_micro_qr_is_a_known_symbology():
     for name in ("micro-qr", "microqr", "Micro_QR"):
         assert Reader(symbologies=[name]).options["symbologies"] == ["micro-qr"]
+
+
+def test_rmqr_meta_on_synth():
+    from PIL import Image
+
+    base = SYNTH_DIR / "clean"
+    if not (base / "annotations.json").exists():
+        pytest.skip("synthetic dataset not generated (set BREADER_SYNTH_DIR)")
+    ann = json.loads((base / "annotations.json").read_text())
+    r = Reader()
+    seen = 0
+    for img in ann["images"]:
+        want = {b["text"] for b in img["barcodes"] if b["format"] == "RMQR_CODE"}
+        if not want:
+            continue
+        found = r.scan(np.asarray(Image.open(base / img["file"]).convert("L")))
+        assert [s.text for s in found] == list(want)
+        s = found[0]
+        assert s.symbology == "rmqr"
+        m = s.meta
+        assert m["kind"] == "qr" and 1 <= m["version"] <= 32 and m["mask"] == 0
+        assert m["height"] in (7, 9, 11, 13, 15, 17) and m["width"] in (27, 43, 59, 77, 99, 139)
+        assert m["ec_level"] in ("M", "H") and isinstance(m["mirrored"], bool)
+        seen += 1
+    if seen == 0:
+        pytest.skip("synthetic dataset has no rMQR images (regenerate it)")
+
+
+def test_rmqr_is_a_known_symbology():
+    for name in ("rmqr", "rMQR", "R_MQR"):
+        assert Reader(symbologies=[name]).options["symbologies"] == ["rmqr"]
 
 
 def test_aztec_is_a_known_symbology():

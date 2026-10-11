@@ -1,6 +1,6 @@
 //! Barcode and QR code reader.
 //!
-//! Supported symbologies: QR Code, Micro QR Code (M1 to M4), Data Matrix (ECC 200, rectangular and DMRE), PDF417 (including compact), Aztec Code (compact, full-range and Runes),
+//! Supported symbologies: QR Code, Micro QR Code (M1 to M4), rMQR Code, Data Matrix (ECC 200, rectangular and DMRE), PDF417 (including compact), Aztec Code (compact, full-range and Runes),
 //! EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39 and Interleaved 2 of 5. GS1 element strings and character sets
 //! are interpreted by the content post-processors.
 //!
@@ -33,7 +33,7 @@
 //!
 //! # Cargo features
 //!
-//! - `qr`, `linear`, `datamatrix`, `pdf417`, `aztec` (default): the QR (with Micro QR), 1D, Data Matrix, PDF417 and Aztec readers.
+//! - `qr`, `linear`, `datamatrix`, `pdf417`, `aztec` (default): the QR (with Micro QR and rMQR), 1D, Data Matrix, PDF417 and Aztec readers.
 //! - `image`: `Reader::scan_file` and `FileError`, decoding PNG and JPEG with the `image` crate.
 //! - `rayon`: multi-threaded kernels and scanning with identical output. Bound
 //!   the thread count by running scans inside `rayon::ThreadPool::install`.

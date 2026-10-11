@@ -20,4 +20,4 @@ Modules: `detect` (finder patterns, triplets), `alignment` (Annex E table), `sam
 
 Later improvements, driven by the benchmarks: piecewise homographies over all alignment patterns for large versions, grayscale sampling, and recovery of a missing finder from two finders plus timing patterns.
 
-Micro QR (M1 to M4) shares the finder scan, the `Plane` view and the Reed-Solomon field with this reader and is described in [microqr.md](microqr.md).
+Micro QR (M1 to M4) shares the finder scan, the `Plane` view and the Reed-Solomon field with this reader and is described in [microqr.md](microqr.md); rMQR shares the same scan and candidate loop ([rmqr.md](rmqr.md)).

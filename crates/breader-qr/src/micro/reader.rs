@@ -10,6 +10,7 @@ use super::geom::{Corners, TEMPLATE_MIN, fit_pose, mapping_for_quadrant};
 use super::refine::refine_corners;
 use crate::detect::Finder;
 use crate::reader::Known;
+use crate::rmqr::reader::{RmqrBuf, try_finder};
 use crate::sample::{Gray, Mapper, read_module, sample_grid_local};
 
 /// Per-effort limits.
@@ -23,10 +24,14 @@ pub(crate) struct MicroParams {
     pub row_step: usize,
     /// Factor from plane to image coordinates.
     pub scale: (f32, f32),
+    /// Micro QR symbols are wanted.
+    pub micro: bool,
+    /// rMQR symbols are wanted.
+    pub rmqr: bool,
 }
 
 impl MicroParams {
-    pub fn new(e: Effort, row_step: usize, scale: (f32, f32)) -> Self {
+    pub fn new(e: Effort, row_step: usize, scale: (f32, f32), micro: bool, rmqr: bool) -> Self {
         let base = match e {
             Effort::Fast => (4, false),
             Effort::Balanced => (10, true),
@@ -37,6 +42,8 @@ impl MicroParams {
             retries: base.1,
             row_step,
             scale,
+            micro,
+            rmqr,
         }
     }
 }
@@ -195,6 +202,8 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
         aim_id: *b"]Q1",
         meta: SymbolMeta::Qr(QrMeta {
             version: dec.version,
+            width: found.dim as u16,
+            height: found.dim as u16,
             ec_level: dec.ec_level,
             mask: dec.mask,
             errors_corrected: dec.errors_corrected,
@@ -211,6 +220,7 @@ pub(crate) struct MicroBuf {
     grid: BitMatrix,
     pts: Vec<(Point, Point)>,
     order: Vec<usize>,
+    rmqr: RmqrBuf,
 }
 
 /// Tries the finders of one polarity as Micro QR corners.
@@ -225,7 +235,12 @@ pub(crate) fn scan(
 ) {
     let (row_step, scale) = (params.row_step, params.scale);
     let strength = |f: &Finder| f.count as f32 * row_step as f32 / (7.0 * f.module.max(0.5));
-    let MicroBuf { grid, pts, order } = buf;
+    let MicroBuf {
+        grid,
+        pts,
+        order,
+        rmqr,
+    } = buf;
     order.clear();
     order.extend(
         (0..finders.len())
@@ -233,7 +248,7 @@ pub(crate) fn scan(
     );
     order.sort_by(|&a, &b| strength(&finders[b]).total_cmp(&strength(&finders[a])));
     let mut tried = 0;
-    for &i in order.iter() {
+    'finders: for &i in order.iter() {
         let f = &finders[i];
         if known.iter().any(|k| k.covers(f.pos, f.module, scale)) {
             continue;
@@ -247,18 +262,26 @@ pub(crate) fn scan(
         };
         debug_assert!(score >= TEMPLATE_MIN);
         let corners = Corners::measure(bin, pose);
-        for q in 0..4 {
-            let Some((d, h)) = mapping_for_quadrant(bin, &corners, q, pts) else {
-                continue;
-            };
-            let Some(found) = try_mapping(bin, gray, h, d, params, grid) else {
-                continue;
-            };
-            if let Some(sym) = build_symbol(&found, scale) {
-                known.extend(Known::new(&sym, scale));
-                out.push(sym);
-                break;
+        if params.micro {
+            for q in 0..4 {
+                let Some((d, h)) = mapping_for_quadrant(bin, &corners, q, pts) else {
+                    continue;
+                };
+                let Some(found) = try_mapping(bin, gray, h, d, params, grid) else {
+                    continue;
+                };
+                if let Some(sym) = build_symbol(&found, scale) {
+                    known.extend(Known::new(&sym, scale));
+                    out.push(sym);
+                    continue 'finders;
+                }
             }
+        }
+        if params.rmqr
+            && let Some(sym) = try_finder(bin, gray, &pose, params.retries, scale, rmqr)
+        {
+            known.extend(Known::new(&sym, scale));
+            out.push(sym);
         }
     }
 }
