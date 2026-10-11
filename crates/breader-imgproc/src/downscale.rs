@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use breader_core::{ImageBuffer, ImageView, Preprocessor};
 
 const MIN_OUTPUT: usize = 32;
@@ -70,10 +72,18 @@ fn reduce<const F: usize>(src: ImageView<'_>, dst: &mut ImageBuffer, ow: usize, 
             );
         return;
     }
-    let mut vsum = vec![0u16; ow * F];
+    let mut vsum = VSUM.take();
+    vsum.clear();
+    vsum.resize(ow * F, 0);
     for oy in 0..oh {
         reduce_row::<F>(src, oy, dst.row_mut(oy), &mut vsum);
     }
+    VSUM.set(vsum);
+}
+
+thread_local! {
+    /// Vertical sums of one output row, kept so that scanning does not allocate.
+    static VSUM: Cell<Vec<u16>> = const { Cell::new(Vec::new()) };
 }
 
 #[inline(always)]

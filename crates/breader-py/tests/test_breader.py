@@ -374,6 +374,7 @@ def test_datamatrix_meta_on_synth():
             assert m["rows"] >= 8 and m["cols"] >= 10
             assert isinstance(m["mirrored"], bool) and m["errors_corrected"] >= 0
             assert m["structured_append"] is None
+            assert m["reader_init"] is False
             seen += 1
     assert seen >= 6
 
@@ -400,6 +401,7 @@ def test_pdf417_meta_on_synth():
         assert m["kind"] == "pdf417"
         assert m["rows"] >= 3 and 1 <= m["cols"] <= 30 and 0 <= m["ec_level"] <= 8
         assert isinstance(m["compact"], bool) and m["macro"] is None
+        assert m["reader_init"] is False
         assert m["errors_corrected"] == 0 and m["erasures"] == 0
         seen += 1
     assert seen == 3

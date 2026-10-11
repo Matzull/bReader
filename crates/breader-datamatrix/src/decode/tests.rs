@@ -868,9 +868,13 @@ fn macros_and_reader_programming() {
     assert_eq!(parsed(&[236]).unwrap().data, b"[)>\x1e05\x1d\x1e\x04");
     assert!(parsed(&[236, 237, 66]).is_err());
     assert!(parsed(&[232, 236, 66]).is_err());
-    // Reader programming is refused.
-    assert!(parsed(&[234, 66]).is_err());
+    // Reader programming is flagged, and only valid as the first codeword.
+    let p = parsed(&[234, 66]).unwrap();
+    assert!(p.reader_programming);
+    assert_eq!(p.data, b"A");
+    assert!(!parsed(&[66]).unwrap().reader_programming);
     assert!(parsed(&[66, 234, 66]).is_err());
+    assert!(parsed(&[234]).is_err());
     // Reserved codewords.
     for cw in [242u8, 250, 254, 255, 0] {
         assert!(parsed(&[66, cw, 66]).is_err(), "{cw}");

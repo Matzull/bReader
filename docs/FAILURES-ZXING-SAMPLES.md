@@ -119,7 +119,7 @@ Columns: px/mod is the estimate from zxing's quad (QR/DM: side / dimension; EAN/
 | datamatrix-1/abcd-36x16.png | 199x97 | 5.0 | 0.3 | 0-255 | 0 | 16x36 | encodation (pad check) | grid perfect, RS ok (0 corrections) /  rejected by the strict 253-state pad check: pads after cw 129 are 0,150,45,195,90 | - | n |
 | datamatrix-1/distorted.png | 60x60 | 3.0 | 0.8 | 0-255 | 0 | 16x16 | plausibility (36% wrong) | 16x16 at 3 px/mod, strong shear: sampled grid 92/256 wrong, true size gated out as implausible | - | n |
 | datamatrix-1/mod-size-1.png | 12x12 | 0.9 | 6.7 | 0-255 | 0 | 10x10 | detection (no candidate) | 10x10 at 0.9 px/mod in a 12x12 image | up-scale | Y |
-| datamatrix-1/readerinit.png | 22x22 | 1.9 | 1.8 | 0-255 | 0 | 10x10 | precheck + policy | 10x10 at 1.9 px/mod in 22x22 /  no candidate passes the L precheck /  also carries Reader Programming (234), rejected by design | - | n |
+| datamatrix-1/readerinit.png | 22x22 | 1.9 | 1.8 | 0-255 | 0 | 10x10 | precheck + policy | 10x10 at 1.9 px/mod in 22x22 /  no candidate passes the L precheck /  also carries Reader Programming (234), flagged since D-035 | - | n |
 | datamatrix-2/16.webp | 240x240 | 2.3 | 2.4 | 51-156 | -2 | 40x40 | size hypothesis | 40x40 at 2.3 px/mod, low contrast photo /  true size never hypothesised | up-scale,pad,sharpen,stretch,flip/rot | Y |
 | datamatrix-3/#794.png | 98x123 | 3.2 | 1.0 | 0-255 | 4 | 26x26 | size hypothesis | 26x26 at 3.2 px/mod, eroded/jagged print, fragmented L and clock /  true size never hypothesised | - | n |
 | datamatrix-3/dm-2x2-#1063.webp | 145x148 | 2.9 | 0.4 | 0-255 | 1 | 44x44 | RS (69/1936 wrong) | 44x44 2x2 regions, 2.9 px/mod, binarised /  errors confined to the left 6-8 columns (sampling drift) | - | n |
