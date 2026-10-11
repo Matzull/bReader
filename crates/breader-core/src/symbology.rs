@@ -29,6 +29,8 @@ pub enum Symbology {
     Codabar,
     /// Micro QR Code, versions M1 to M4.
     MicroQr,
+    /// Rectangular Micro QR Code (rMQR), ISO/IEC 23941.
+    Rmqr,
 }
 
 impl Symbology {
@@ -47,13 +49,14 @@ impl Symbology {
         Self::Aztec,
         Self::Codabar,
         Self::MicroQr,
+        Self::Rmqr,
     ];
 
     /// True for 1D symbologies.
     pub const fn is_linear(self) -> bool {
         !matches!(
             self,
-            Self::Qr | Self::DataMatrix | Self::Pdf417 | Self::Aztec | Self::MicroQr
+            Self::Qr | Self::DataMatrix | Self::Pdf417 | Self::Aztec | Self::MicroQr | Self::Rmqr
         )
     }
 
@@ -73,6 +76,7 @@ impl Symbology {
             Self::Aztec => "Aztec",
             Self::Codabar => "Codabar",
             Self::MicroQr => "Micro QR Code",
+            Self::Rmqr => "rMQR Code",
         }
     }
 }

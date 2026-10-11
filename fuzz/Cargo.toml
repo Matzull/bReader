@@ -46,6 +46,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "rmqr_grid"
+path = "fuzz_targets/rmqr_grid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "linear_runs"
 path = "fuzz_targets/linear_runs.rs"
 test = false

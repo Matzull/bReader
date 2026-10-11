@@ -540,6 +540,11 @@ pub(crate) struct Gray<'a> {
 }
 
 impl Gray<'_> {
+    /// Interpolated luma at a point of the binary plane.
+    pub(crate) fn value_at(&self, p: Point) -> Option<f32> {
+        self.at(p)
+    }
+
     fn at(&self, p: Point) -> Option<f32> {
         let (x, y) = (p.x * self.scale.0 - 0.5, p.y * self.scale.1 - 0.5);
         let (w, h) = (self.img.width() as f32, self.img.height() as f32);

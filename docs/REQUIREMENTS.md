@@ -18,6 +18,7 @@ The library is built as a pipeline of pluggable modules so symbologies and proce
 | Family | Symbologies | Details |
 |---|---|---|
 | 2D matrix | QR Code Model 2 | Versions 1–40, EC levels L/M/Q/H, numeric/alphanumeric/byte/kanji modes, ECI |
+| | rMQR | All 32 sizes (R7x43 to R17x139), EC levels M/H, all modes, ECI, FNC1 ([D-039](decisions.md#d-039)) |
 | Retail 1D | EAN-13, EAN-8, UPC-A, UPC-E | EAN-2 / EAN-5 add-ons |
 | Industrial 1D | Code 128 | Code sets A/B/C, FNC1 (GS1-128) |
 | | Code 39 | Standard, optional Full ASCII, optional mod-43 check |
@@ -29,7 +30,7 @@ The library is built as a pipeline of pluggable modules so symbologies and proce
 - Encoding / generating symbols (encoder crates are used only as test dev-dependencies).
 - WebAssembly and mobile (Android/iOS) targets.
 - Dynamically loaded plugins (`.so`/`.dll`).
-- rMQR, QR Structured Append, Model 1 QR. Micro QR (M1 to M4) is implemented.
+- QR Structured Append, Model 1 QR. Micro QR (M1 to M4) and rMQR (all 32 sizes) are implemented.
 - MaxiCode, MicroPDF417, other 1D symbologies (planned later; the architecture must accommodate them). Data Matrix, PDF417, Aztec and Codabar are implemented.
 
 ## 3. Functional requirements

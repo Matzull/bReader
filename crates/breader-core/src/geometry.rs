@@ -168,7 +168,7 @@ impl Homography {
                 }
             }
         }
-        let h: Vec<f64> = (0..8).map(|i| ata[i][8] / ata[i][i]).collect();
+        let h: [f64; 8] = std::array::from_fn(|i| ata[i][8] / ata[i][i]);
         let hn = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1.0]];
         // H = Timg^-1 * Hn * Tmod
         let tmod = [

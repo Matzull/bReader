@@ -80,3 +80,7 @@ Normalizations that are not overrides (UTF-8 read as Latin-1 in labels, Code 39 
 ### Micro QR labels (zxing-cpp samples and synthetic sets)
 
 `microqrcode-1` (16 images, one label each: M1 to M4 including kanji, binary and mixed-mode symbols, five photographs, one symbol without quiet zone) counts since the Micro QR reader landed: `MICRO_QR_CODE` and the spellings `MicroQRCode` / `MICRO_QR` map to `Symbology::MicroQr` in `tools/bench/src/groundtruth.rs`. No overrides. The synthetic sets gained Micro QR images after the Aztec ones (existing images byte-identical): the seven variants M1, M2-L, M2-M, M3-M, M4-L, M4-M and M4-Q (M3-L is left out because the encoder's M3-L symbols are not valid, see [microqr](symbologies/microqr.md#as-built)), every third image mirrored, all classes but `negative` and `datamatrix`.
+
+### rMQR labels (zxing-cpp samples and synthetic sets)
+
+`rmqrcode-1` (3 images, one label each: `R7x43-H`, its inverted version and `R17x139`) counts since the rMQR reader landed: `RMQR_CODE` and the spellings `RMQRCode` / `RMQR` / `RectangularMicroQRCode` map to `Symbology::Rmqr` in `tools/bench/src/groundtruth.rs`. No overrides. The synthetic sets gained rMQR images after the Micro QR ones (existing images byte-identical): the 32 sizes at levels M and H spread over the images (numeric, alphanumeric and byte payloads of 50 to 100 % of the capacity), every third image mirrored, all classes but `negative` and `datamatrix`. The encoder is the `qrcode-generator` crate (see [rmqr](symbologies/rmqr.md#scope)).

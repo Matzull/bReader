@@ -25,6 +25,7 @@ pub enum Sym {
     Aztec,
     Codabar,
     MicroQr,
+    Rmqr,
 }
 
 impl Sym {
@@ -65,6 +66,7 @@ impl Sym {
             Sym::Aztec => "AZTEC",
             Sym::Codabar => "CODABAR",
             Sym::MicroQr => "MICRO_QR_CODE",
+            Sym::Rmqr => "RMQR_CODE",
         }
     }
 }
@@ -243,7 +245,13 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             let t = to_text(&d);
             (t.clone(), TF::interleaved(&t).expect(fail).encode())
         }
-        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 | Sym::Aztec | Sym::Codabar | Sym::MicroQr => {
+        Sym::Qr
+        | Sym::DataMatrix
+        | Sym::Pdf417
+        | Sym::Aztec
+        | Sym::Codabar
+        | Sym::MicroQr
+        | Sym::Rmqr => {
             unreachable!("not linear")
         }
     };
@@ -555,8 +563,85 @@ pub fn encode_microqr(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Enco
     }
 }
 
+/// rMQR versions of the images: all 32 sizes at levels M and H.
+pub const RMQR_VARIANTS: usize = 64;
+
+fn rmqr_version(i: usize) -> qrcode_generator::rmqr::Version {
+    use qrcode_generator::rmqr::Version::*;
+    [
+        R7x43, R7x59, R7x77, R7x99, R7x139, R9x43, R9x59, R9x77, R9x99, R9x139, R11x27, R11x43,
+        R11x59, R11x77, R11x99, R11x139, R13x27, R13x43, R13x59, R13x77, R13x99, R13x139, R15x43,
+        R15x59, R15x77, R15x99, R15x139, R17x43, R17x59, R17x77, R17x99, R17x139,
+    ][i]
+}
+
+/// rMQR Code of `RMQR_VARIANTS[pick]` (version `pick / 2`, level M for even
+/// picks, H for odd ones), filled to a random share of its capacity;
+/// `mirrored` flips the symbol horizontally.
+pub fn encode_rmqr(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Encoded {
+    use qrcode_generator::Segment;
+    use qrcode_generator::rmqr::{Encoder, ErrorCorrection};
+    let pick = pick % RMQR_VARIANTS;
+    let ec = if pick.is_multiple_of(2) {
+        ErrorCorrection::Medium
+    } else {
+        ErrorCorrection::High
+    };
+    let enc = Encoder::new(ec)
+        .boost_error_correction(false)
+        .version(rmqr_version(pick / 2));
+    let mut len = 400 * rng.random_range(50..=100usize) / 100;
+    loop {
+        let kind = rng.random_range(0..3u8);
+        let text = match kind {
+            0 => to_text(&digits(rng, len.max(1))),
+            1 => pick_string(
+                rng,
+                &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789"),
+                len.max(1),
+            ),
+            _ => pick_string(rng, &pool(BYTE_ASCII), len.max(1)),
+        };
+        let text = text.trim().to_string();
+        if !text.is_empty() {
+            let seg = match kind {
+                0 => Segment::numeric(&text),
+                1 => Segment::alphanumeric(&text),
+                _ => Ok(Segment::bytes(text.as_bytes())),
+            };
+            if let Ok(seg) = seg
+                && let Ok(sym) = enc.encode_segments(&[seg])
+            {
+                let (w, h) = (sym.width(), sym.height());
+                let mut modules = vec![false; w * h];
+                for y in 0..h {
+                    for x in 0..w {
+                        let c = if mirrored { w - 1 - x } else { x };
+                        modules[y * w + c] = sym.module(x, y).unwrap_or(false);
+                    }
+                }
+                return Encoded {
+                    text,
+                    format: Sym::Rmqr.label(),
+                    modules,
+                    cols: w,
+                    rows: h,
+                    cell_h: 1.0,
+                    qz_x: 2.0,
+                    qz_y: 2.0,
+                };
+            }
+        }
+        len = (len * 4 / 5).max(1);
+    }
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
+        Sym::Rmqr => {
+            let pick = rng.random_range(0..RMQR_VARIANTS);
+            encode_rmqr(rng, pick, false)
+        }
         Sym::Codabar => encode_codabar(rng),
         Sym::MicroQr => {
             let pick = rng.random_range(0..MICRO_QR_VARIANTS.len());
@@ -643,6 +728,25 @@ mod tests {
     }
 
     #[test]
+    fn rmqr_covers_the_variants_and_mirrors() {
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        for pick in 0..RMQR_VARIANTS {
+            let m = encode_rmqr(&mut rng, pick, false);
+            assert_eq!(m.modules.len(), m.cols * m.rows);
+            assert!([7, 9, 11, 13, 15, 17].contains(&m.rows));
+            assert!([27, 43, 59, 77, 99, 139].contains(&m.cols));
+            assert!(!m.text.is_empty());
+        }
+        let a = encode_rmqr(&mut ChaCha8Rng::seed_from_u64(9), 40, false);
+        let b = encode_rmqr(&mut ChaCha8Rng::seed_from_u64(9), 40, true);
+        assert_eq!(a.text, b.text);
+        let (w, h) = (a.cols, a.rows);
+        assert!(
+            (0..h).all(|y| (0..w).all(|x| a.modules[y * w + x] == b.modules[y * w + w - 1 - x]))
+        );
+    }
+
+    #[test]
     fn all_symbologies_encode_many_times() {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         for _ in 0..200 {
@@ -652,6 +756,7 @@ mod tests {
                 Sym::Aztec,
                 Sym::Codabar,
                 Sym::MicroQr,
+                Sym::Rmqr,
             ]) {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);

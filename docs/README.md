@@ -15,6 +15,7 @@ This page is the entry point. Find the audience below, follow the link, and when
 | PDF417 (+ compact, Macro, ECI) | implemented | [pdf417](symbologies/pdf417.md) |
 | Aztec Code (compact, full-range, Runes) | implemented | [aztec](symbologies/aztec.md) |
 | Micro QR Code (M1 to M4) | implemented | [microqr](symbologies/microqr.md) |
+| rMQR Code (R7x43 to R17x139) | implemented | [rmqr](symbologies/rmqr.md) |
 | rMQR, DataBar, Codabar | not started | [index](symbologies/README.md) |
 
 Headline numbers (Balanced; zero false positives at every effort on every gated dataset; these are dated snapshots, the current tables, other efforts, other engines and latency are in [BASELINES](BASELINES.md)):
