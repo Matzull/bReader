@@ -165,6 +165,12 @@ pub(crate) struct Aggregator {
 }
 
 impl Aggregator {
+    /// Forgets the hits of the previous pass; keeps the allocations.
+    pub fn reset(&mut self) {
+        self.hits.clear();
+        self.groups.clear();
+    }
+
     pub fn push(&mut self, hit: PlacedHit) {
         if self.hits.len() < MAX_HITS {
             self.hits.push(hit);

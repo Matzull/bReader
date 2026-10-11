@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use breader_core::{
     Effort, FrameContext, ImageView, Point, Symbol, Symbology, SymbologyReader, SymbologySet,
 };
@@ -12,7 +14,7 @@ use crate::edges::{EdgeDetector, EdgeParams, Edges};
 use crate::itf::ItfDecoder;
 use crate::marks::{self, Mark, MarkSet, RawMark};
 use crate::plan::{ScanPlan, Scanline, clip_line};
-use crate::profile::{self, Oblique};
+use crate::profile::{self, Oblique, ObliqueWork};
 use crate::runs::Runs;
 
 /// Decoders tried on every scanline, composed statically.
@@ -55,7 +57,28 @@ struct Work {
     oblique: Vec<u8>,
     offsets: Vec<usize>,
     seeds: Vec<PlacedHit>,
+    column_xs: Vec<usize>,
+    oblique_lines: Vec<Scanline>,
+    oblique_work: ObliqueWork,
     stage: Stage,
+}
+
+impl Work {
+    /// Empties everything a scan fills; the allocations stay.
+    fn reset(&mut self) {
+        self.lines.clear();
+        self.seeds.clear();
+        let stage = &mut self.stage;
+        stage.hits.clear();
+        stage.aggregator.reset();
+        stage.edge_params.clear();
+        stage.marks.clear();
+        stage.raw_marks.clear();
+    }
+}
+
+thread_local! {
+    static WORK: RefCell<Work> = RefCell::new(Work::default());
 }
 
 /// Edge variants tried per scanline. Direct differentiation keeps narrow
@@ -432,6 +455,16 @@ impl LinearReader {
         if ctx.pass().inverted || !ctx.options().symbologies.intersects(self.symbologies()) {
             return;
         }
+        WORK.with(|cell| match cell.try_borrow_mut() {
+            Ok(mut work) => {
+                work.reset();
+                self.scan_with(&mut work, ctx, out);
+            }
+            Err(_) => self.scan_with(&mut Work::default(), ctx, out),
+        });
+    }
+
+    fn scan_with(&self, work: &mut Work, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
         let opts = LineOptions::from(ctx.options());
         let effort = ctx.options().effort;
         let min_line_agreement = ctx.options().min_line_agreement;
@@ -443,27 +476,32 @@ impl LinearReader {
             width: img.width(),
             height: img.height(),
         };
-        let mut work = Work::default();
         work.stage
             .edge_params
             .extend_from_slice(edge_variants(effort));
         plan.lines(&mut work.lines);
 
-        let columns: Vec<usize> = work
-            .lines
-            .iter()
-            .filter(|l| l.from.x == l.to.x)
-            .map(|l| l.from.x as usize)
-            .collect();
-        profile::sample_columns(&img, &columns, false, &mut work.columns);
+        work.column_xs.clear();
+        work.column_xs.extend(
+            work.lines
+                .iter()
+                .filter(|l| l.from.x == l.to.x)
+                .map(|l| l.from.x as usize),
+        );
+        profile::sample_columns(&img, &work.column_xs, false, &mut work.columns);
 
         let lines = std::mem::take(&mut work.lines);
-        let oblique: Vec<Scanline> = lines
-            .iter()
-            .filter(|l| Oblique::is_oblique(l))
-            .copied()
-            .collect();
-        profile::sample_oblique_batch(&img, &oblique, false, &mut work.offsets, &mut work.oblique);
+        work.oblique_lines.clear();
+        work.oblique_lines
+            .extend(lines.iter().filter(|l| Oblique::is_oblique(l)).copied());
+        profile::sample_oblique_batch(
+            &img,
+            &work.oblique_lines,
+            false,
+            &mut work.offsets,
+            &mut work.oblique,
+            &mut work.oblique_work,
+        );
         let sources = Sources {
             plan,
             columns: &work.columns,
@@ -500,17 +538,10 @@ impl LinearReader {
         let mut seeds = std::mem::take(&mut work.seeds);
         work.stage.aggregator.seeds(&settings, &mut seeds);
         for seed in seeds.iter().take(REFINE_MAX_SEEDS) {
-            refine(
-                &DECODERS,
-                &img,
-                seed,
-                pass,
-                &opts,
-                &mut work,
-                &mut next_index,
-            );
+            refine(&DECODERS, &img, seed, pass, &opts, work, &mut next_index);
         }
         work.seeds = seeds;
+        work.lines = lines;
         work.stage.aggregator.finish(&settings, out);
         if opts.marks {
             let shared = ctx.shared::<MarkSet>();

@@ -85,6 +85,19 @@ The library is built as a pipeline of pluggable modules so symbologies and proce
 - **NFR-2 Robustness**: no panics, infinite loops or unbounded allocations on any input; decoders are fuzzed.
 - **NFR-3 Determinism**: identical input and options give identical output in single-threaded mode.
 - **NFR-4 Allocation**: in steady state (same resolution, `Fast` effort) scanning a frame performs no heap allocation beyond the returned results; buffers live in a reusable `Scratch`.
+
+  Measured and gated by `crates/breader/tests/allocation.rs` (counting global allocator, three warm-up scans of the same frame, then one counted scan; `cargo test --release -p breader --test allocation -- --nocapture` prints the table). 2026-10-11, allocations per scan, default build, 800x600 gray frames (320x240 frames, which take the up-scale retry, give the same zeros and slightly different counts):
+
+  | Reader (alone) | blank Fast / Bal / Exh | texture Fast / Bal / Exh | one QR Fast / Bal / Exh |
+  |---|---|---|---|
+  | linear | 0 / 0 / 0 (before: 33 / 54 / 60) | 0 / 0 / 0 (49 / 77 / 89) | 0 / 0 / 0 |
+  | Data Matrix | 0 / 0 / 0 (12 / 14 / 23) | 0 / 0 / 0 | 0 / 0 / 0 |
+  | PDF417 (with linear) | 0 / 0 / 0 (33 / 54 / 60) | 0 / 14 / 38 (49 / 91 / 127) | 0 / 0 / 0 |
+  | QR | 0 / 0 / 0 (13 / 27 / 27) | 1 / 6 / 4 (54 / 209 / 193) | 17 / 20 / 20 (result included) |
+  | Aztec | 0 / 0 / 0 (12 / 23 / 23) | 360 / 6450 / 16055 (372 / 6473 / 16078) | 0 / 320 / 320 |
+  | default pipeline | 0 / 0 / 0 (44 / 78 / 84) | 361 / 6470 / 16097 | 17 / 340 / 340 |
+
+  Blank frames never allocate at any effort. Fixed on the way: per-scan temporaries of the pass loop (pass list, reader list), the local binarizer (tile, summed-area and row buffers), the down-scale row sums, the linear reader's `Work` (now kept per thread, like Data Matrix's) and the QR reader's finder and grid buffers. Remaining: on textured frames the QR (stable sort of triplets), PDF417 (boundary growth) and Aztec readers allocate inside candidate verification (geometry fits and least-squares solves, per candidate); the test asserts measured bounds with margin for them and exactly zero for linear and Data Matrix. A frame with a symbol allocates for the result itself (`Symbol` data, segments, content) and for per-symbol decoding state. With the `rayon` feature the parallel kernels (frames of 2^19 pixels or more, which includes the 3x up-scaled retry copy of a small frame) allocate per task; the test skips the bounds for those frames.
 - **NFR-5 Performance**: latency targets (p50/p95 per resolution and effort) are set after the first benchmark against the baselines (§6) and recorded here.
 - **NFR-6 Threads**: single-threaded by default; `rayon` parallelism behind a cargo feature.
 - **NFR-7 Platforms**: Linux, Windows, macOS on x86_64 and aarch64. MSRV 1.94, edition 2024.

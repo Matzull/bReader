@@ -126,6 +126,11 @@ impl Pipeline {
     /// Ordered passes for the given options. Cheap passes first so the
     /// common case exits early.
     pub fn passes(&self, options: &ScanOptions) -> Vec<Pass> {
+        self.pass_iter(options).collect()
+    }
+
+    /// The passes of [`Pipeline::passes`] without collecting them.
+    fn pass_iter(&self, options: &ScanOptions) -> impl Iterator<Item = Pass> + use<> {
         let invert = options.invert_enabled();
         let (binarizers, preprocessors) = match options.effort {
             Effort::Fast => (1, 0),
@@ -135,23 +140,18 @@ impl Pipeline {
             ),
             Effort::Exhaustive => (self.binarizers.len(), self.preprocessors.len()),
         };
-        let images = std::iter::once(None).chain((0..preprocessors).map(Some));
-        let mut passes = Vec::new();
-        for preprocessor in images {
-            for binarizer in 0..binarizers {
-                for inverted in [false, true] {
-                    if inverted && !invert {
-                        continue;
-                    }
-                    passes.push(Pass {
-                        preprocessor,
+        (0..=preprocessors).flat_map(move |image| {
+            (0..binarizers).flat_map(move |binarizer| {
+                [false, true]
+                    .into_iter()
+                    .filter(move |&inverted| !inverted || invert)
+                    .map(move |inverted| Pass {
+                        preprocessor: image.checked_sub(1),
                         binarizer,
                         inverted,
-                    });
-                }
-            }
-        }
-        passes
+                    })
+            })
+        })
     }
 
     /// Scans `image` and returns the symbols found, in discovery order.
@@ -176,15 +176,8 @@ impl Pipeline {
             &self.binarizers,
             scratch,
         );
-        let readers: Vec<&dyn SymbologyReader> = self
-            .readers
-            .iter()
-            .map(|r| r.as_ref())
-            .filter(|r| r.symbologies().intersects(options.symbologies))
-            .collect();
-
         let mut symbols = Vec::new();
-        self.run_passes(&mut ctx, &readers, start, &mut symbols);
+        self.run_passes(&mut ctx, start, &mut symbols);
 
         if let Some(up) = &self.upscale {
             let limit = options.upscale_max_side();
@@ -203,7 +196,7 @@ impl Pipeline {
                     &self.binarizers,
                     &mut inner,
                 );
-                self.run_passes(&mut big, &readers, start, &mut symbols);
+                self.run_passes(&mut big, start, &mut symbols);
                 for s in &mut symbols {
                     for c in &mut s.quad.corners {
                         *c = Point::new(c.x * sx, c.y * sy);
@@ -221,28 +214,21 @@ impl Pipeline {
     }
 
     /// Runs the regular passes of `ctx`, appending to `symbols`.
-    fn run_passes(
-        &self,
-        ctx: &mut FrameContext<'_>,
-        readers: &[&dyn SymbologyReader],
-        start: Instant,
-        symbols: &mut Vec<Symbol>,
-    ) {
+    fn run_passes(&self, ctx: &mut FrameContext<'_>, start: Instant, symbols: &mut Vec<Symbol>) {
         let options = ctx.options();
-        let mut gray_done: Vec<(Option<usize>, bool)> = Vec::new();
         let mut found = 0;
-        for pass in self.passes(options) {
+        for pass in self.pass_iter(options) {
             if options.time_budget.is_some_and(|b| start.elapsed() >= b) {
                 break;
             }
             ctx.set_pass(pass);
-            let gray_key = (pass.preprocessor, pass.inverted);
-            let gray_new = !gray_done.contains(&gray_key);
-            if gray_new {
-                gray_done.push(gray_key);
-            }
-            for reader in readers {
-                if reader.handles_inversion() && pass.inverted {
+            // Passes that differ only in the binarizer share the gray image,
+            // and the first binarizer comes first for every image variant.
+            let gray_new = pass.binarizer == 0;
+            for reader in &self.readers {
+                if !reader.symbologies().intersects(options.symbologies)
+                    || (reader.handles_inversion() && pass.inverted)
+                {
                     continue;
                 }
                 if reader.uses_binary() || gray_new {

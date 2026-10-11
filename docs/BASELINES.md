@@ -236,7 +236,7 @@ PDF417 reads, release build (zxing-cpp 3.1.1 Python, default options; rxing with
 
 (rxing reads no PDF417 symbol anywhere with the bench's default hints; it is listed for completeness.) The synthetic classes `clean`, `rotated`, `blur`, `low-res`, `illumination`, `inverted`, `noise` read 100 % at Balanced on seed 1; the misses are compact or perspective symbols (`perspective` 2 of 3 on seed 1, 4 of 7 on seed 2024). The dataset sizes changed with the new images: seed 1 286 to 319 symbols, seed 2024 831 to 911.
 
-False-positive triage: none occurred on any set. The zxing-cpp samples label `13-readerinit` ("$I"): the symbol starts with the reader initialisation codeword, which breader rejects by design (like Data Matrix reader programming), so it stays a miss. `pdf417-4` (Macro PDF417 split over several images) has no per-image labels and is not scored; `03-01.png` there reads.
+False-positive triage: none occurred on any set. The zxing-cpp samples label `13-readerinit` ("$I"): the symbol starts with the reader initialisation codeword, which breader rejected by design at the time (superseded by [D-035](decisions.md#d-035): it now reads, see [Reader initialisation symbols](#reader-initialisation-symbols-2026-10-09)). `pdf417-4` (Macro PDF417 split over several images) has no per-image labels and is not scored; `03-01.png` there reads.
 
 Latency, `challenging-images`, interleaved before/after runs (three each, medians of the p50): Fast 4.61 to 4.73 ms, Balanced 16.75 to 17.0 ms (+0.25), Exhaustive 40.42 to 41.13 ms. The matcher on the linear scan's runs is the only cost of frames without PDF417. Frames with a symbol cost more: the 3 MP `air-travel-ticket` takes a few ms extra for the row lines.
 
@@ -270,6 +270,10 @@ Misses found and fixed while measuring (all were decoder or sampler causes, none
 Latency, `challenging-images`, Balanced, interleaved before/after runs of one binary with the reader switched off by a temporary environment check (five each, medians of the p50): 17.08 ms to 17.36 ms (+0.28 ms), p95 about +3 ms. Scanning every pass instead of the first costs about +7 ms ([D-033](decisions.md#d-033)). Fast and Exhaustive latency were not measured.
 
 Known limits seen in the unit and synthetic runs: modules of about 2.5 px or less are not detected reliably (2.75 px reads); 151-module symbols (32 layers) need about 3.5 px per module when rotated; strongly tilted large full-range symbols rely on the reference-grid anchors.
+
+## Reader initialisation symbols (2026-10-09)
+
+Data Matrix (Reader Programming, codeword 234 first) and PDF417 (codeword 921 first) now return such symbols with `reader_init` set instead of dropping them ([D-035](decisions.md#d-035)), as Aztec already did. zxing-cpp samples, reads / false positives: Data Matrix 79 / 86 / 89 -> 79 / 87 / 90 and PDF417 51 / 55 / 54 -> 51 / 56 / 55 at Fast / Balanced / Exhaustive (the two samples `datamatrix-1/readerinit.png` and `pdf417-1/13-readerinit.png` read from Balanced, matching their labels; Fast still does not find them), 0 false positives at every effort. Baselines `zxing-samples-{fast,balanced,exhaustive}.json` rewritten; the diff is two additions each at Balanced and Exhaustive and nothing at Fast. Other datasets unchanged.
 
 ## Codabar (2026-10-11)
 

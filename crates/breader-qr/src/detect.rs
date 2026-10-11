@@ -43,6 +43,7 @@ pub(crate) struct Triplet {
 #[derive(Debug, Default)]
 pub(crate) struct FinderSearch {
     edges: Vec<u32>,
+    row_hits: Vec<RowHit>,
     pub finders: Vec<Finder>,
     pub triplets: Vec<Triplet>,
     order: Vec<usize>,
@@ -263,7 +264,7 @@ impl FinderSearch {
             return;
         }
         let mut bounds = std::mem::take(&mut self.edges);
-        let mut hits = Vec::new();
+        let mut hits = std::mem::take(&mut self.row_hits);
         for y in (first..m.height()).step_by(step) {
             self.age_recent(y);
             hits.clear();
@@ -271,6 +272,7 @@ impl FinderSearch {
             self.apply_hits(m, &hits);
         }
         self.edges = bounds;
+        self.row_hits = hits;
     }
 
     /// Run extraction is independent per row; only the clustering of hits

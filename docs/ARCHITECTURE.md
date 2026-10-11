@@ -8,7 +8,7 @@ Status: draft v0.1 (2026-10-06). See [REQUIREMENTS.md](REQUIREMENTS.md) for the 
 crates/
   breader-core      types, traits, FrameContext, Pipeline. No dependencies.
   breader-imgproc   pixel conversion, preprocessors, binarizers
-  breader-ecc       Reed-Solomon over GF(256)
+  breader-ecc       Reed-Solomon: GF(256), GF(929) (PDF417) and generic GF(2^m) (Aztec)
   breader-linear    1D detection and decoders (EAN/UPC, Code 128, Code 39, ITF, Codabar)
   breader-qr        QR detection, sampling and decoding
   breader-datamatrix  Data Matrix ECC 200 detection, sampling and decoding
@@ -24,7 +24,7 @@ tools/
   fetch-datasets.sh, check-regression.sh
 ```
 
-Dependency direction is strictly downward: every module crate depends only on `breader-core` (and `breader-ecc` where needed); only the facade knows about all of them. A third-party crate can provide a module by depending on `breader-core` alone.
+Dependency direction is strictly downward: every module crate depends only on `breader-core` (and `breader-ecc` where needed); only the facade knows about all of them. The one documented exception: `breader-pdf417` also depends on `breader-linear`, because the PDF417 start and stop patterns are found inside the linear scan and shared through `FrameContext::shared` ([D-026](decisions.md#d-026)). A third-party crate can provide a module by depending on `breader-core` alone.
 
 ## 2. Pipeline
 
@@ -54,7 +54,7 @@ A `Pass` is `{ preprocessor: Option<usize>, binarizer: usize, inverted: bool }`.
 
 | Effort | Image variants | Binarizers | Inversion |
 |---|---|---|---|
-| Fast | original | first | only readers that handle both polarities themselves (1D, QR) |
+| Fast | original | first | none as a pass; all five readers handle polarity themselves: 1D, QR and PDF417 read both polarities in every effort, Data Matrix and Aztec search dark-on-light only at Fast |
 | Balanced | original + first preprocessor | first two | yes |
 | Exhaustive | all | all | yes |
 
@@ -64,7 +64,7 @@ Fine-grained options override the preset (`try_invert`, `upscale_retry`, later p
 
 ### 2.3 FrameContext and caching
 
-`FrameContext` is the only thing readers see. It exposes the original image, the current pass, the pass image and the pass binarization. Derived products are computed on first request and cached for the rest of the frame, so readers sharing a pass share the work (a reader can also publish its own per-frame product through `FrameContext::shared`; the linear scan records the PDF417 start and stop patterns this way, so the PDF417 reader needs no scan of its own): the QR reader and a future Data Matrix reader binarize once. Grayscale-based readers (1D readers read edges on grayscale scanlines, which is more robust to blur than binarized rows) never trigger binarization.
+`FrameContext` is the only thing readers see. It exposes the original image, the current pass, the pass image and the pass binarization. Derived products are computed on first request and cached for the rest of the frame, so readers sharing a pass share the work. QR, Data Matrix and Aztec use the binarization and so binarize once between them; the linear and PDF417 readers work on grayscale (1D readers read edges on grayscale scanlines, which is more robust to blur than binarized rows) and never trigger binarization. A reader can also publish its own per-frame product through `FrameContext::shared`: the linear scan records the PDF417 start and stop patterns this way, so the PDF417 reader needs no scan of its own, and the Aztec reader leaves a "suspect" flag when a pass saw a bullseye it could not read, which makes the later passes search again.
 
 All buffers live in `Scratch`, owned by the caller and reused between frames, which keeps steady-state scanning allocation-free (NFR-4).
 
@@ -91,12 +91,15 @@ Validation is part of each decoder, not an optional post-step: a `SymbologyReade
 - **Code 39**: optional mod-43, inter-character gaps, minimum length, quiet zones, scanline agreement.
 - **Codabar**: start and stop in A-D with none inside, minimum data length, clear wide/narrow classification of every element, bounded gaps, 10-module quiet zones, one scanline more than `min_line_agreement` ([D-036](decisions.md#d-036)).
 - **ITF**: accepted length list, quiet zones, bar-width ratio consistency, scanline agreement (ITF is the most false-positive-prone symbology and is gated hardest).
+- **Data Matrix**: before Reed-Solomon, a precheck of the L finder and clock tracks on the candidate, a size that is in the ECC 200 table, and a plausibility bound on the sampled grid's finder and clock mismatch. Reed-Solomon per block with corrections capped below the standard for small blocks (reserve 2 up to 7 check codewords, 1 up to 12). After it, the pad sequence must follow the 253-state rule for corrected or small blocks, and the encodation stream must be well formed (no data after an unlatch it does not allow, no empty payload). See [datamatrix](symbologies/datamatrix.md).
+- **PDF417**: before Reed-Solomon, start and stop patterns of the same polarity and module width, row numbers and column count voted from the row indicators, and an erasure budget. Reed-Solomon over GF(929) with `2 * errors + erasures <= ec - reserve` (reserve 2 up to 16 check codewords, 1 above; level 0 detects only). After it, the symbol length descriptor must match exactly and the compaction stream must be well formed. See [pdf417](symbologies/pdf417.md).
+- **Aztec**: before Reed-Solomon, a finder gate (80 % of the bullseye, 10 of 12 orientation-mark modules) and a mode message that is itself Reed-Solomon protected, capped at 1 (compact) or 2 (full-range) corrections and consistent with the grid side. Data Reed-Solomon over GF(64) to GF(4096) with the same reserve rule as Data Matrix; data codewords of all zeros or all ones are erasures. After it, bit unstuffing and the high-level tables must parse without leftovers. See [aztec](symbologies/aztec.md).
 
 `Reject` reasons are returned by decoders for diagnostics and tests; they are not part of the public result.
 
 ### 2.6 Results
 
-`Symbol` carries symbology, raw bytes, optional text, `Content` classification, `Quad` (corners in symbol order, image coordinates of the original frame, independent of the preprocessor scale), orientation, AIM identifier, `SymbolMeta` (`Qr` or `Linear`) and a quality estimate. `quality` is informational only and never used to accept a result.
+`Symbol` carries symbology, raw bytes, optional text, `Content` classification, `Quad` (corners in symbol order, image coordinates of the original frame, independent of the preprocessor scale), orientation, AIM identifier, `SymbolMeta` (`Qr`, `Linear`, `DataMatrix`, `Pdf417` or `Aztec`) and a quality estimate. `quality` is informational only and never used to accept a result.
 
 ## 3. Symbology families
 
@@ -206,3 +209,10 @@ Work items, in priority order. Each must keep read counts and 0 FP unchanged.
 ## 6. Planned extensions
 
 - **More symbologies**: Micro QR, DataBar and Codabar as new `SymbologyReader` crates reusing the cached binarizations.
+
+### Known technical debt
+
+- QR (`sample.rs`: `Warped`, `timing_warp`) and Data Matrix (`sample.rs`: `Warp`, `clock_warp`) carry two near-identical per-axis pitch corrections.
+- Data Matrix keeps its own `f64` homography `Mapper` instead of `breader_core::Homography`.
+
+Unify only with a gate run (`tools/check-regression.sh --all`) proving that reads are unchanged.

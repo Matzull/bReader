@@ -25,6 +25,7 @@ pub(crate) struct DecodedDm {
     pub eci: Vec<u32>,
     pub structured_append: Option<(u8, u8, u16)>,
     pub mirrored: bool,
+    pub reader_programming: bool,
     /// ISO/IEC 15424 identifier: ]d1..]d6.
     pub aim_id: [u8; 3],
 }
@@ -96,6 +97,7 @@ fn decode_oriented(grid: &BitMatrix, mirrored: bool) -> Result<DecodedDm, Reject
         eci: parsed.eci,
         structured_append: parsed.structured_append,
         mirrored,
+        reader_programming: parsed.reader_programming,
         aim_id: parsed.aim_id,
     })
 }

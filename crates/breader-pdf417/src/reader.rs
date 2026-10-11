@@ -605,9 +605,6 @@ fn corners(f: &Found) -> Option<[Point; 4]> {
 
 fn build_symbol(f: &Found, scale: (f32, f32)) -> Option<Symbol> {
     let dec = &f.solved.decoded;
-    if dec.reader_init {
-        return None;
-    }
     let pts = corners(f)?.map(|p| Point::new(p.x * scale.0, p.y * scale.1));
     let quad = Quad::new(pts);
     Some(Symbol {
@@ -627,6 +624,7 @@ fn build_symbol(f: &Found, scale: (f32, f32)) -> Option<Symbol> {
             erasures: dec.erasures,
             compact: f.solved.compact,
             macro_pdf417: dec.macro_pdf417.clone(),
+            reader_init: dec.reader_init,
         }),
         quality: 1.0 / (1.0 + 0.1 * (dec.errors_corrected + dec.erasures) as f32),
     })

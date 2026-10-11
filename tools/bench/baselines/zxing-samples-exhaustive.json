@@ -77,7 +77,7 @@
     "datamatrix-1": {
       "Data Matrix": {
         "expected": 30,
-        "read": 27,
+        "read": 28,
         "false_positives": 0
       }
     },
@@ -176,7 +176,7 @@
     "pdf417-1": {
       "PDF417": {
         "expected": 17,
-        "read": 16,
+        "read": 17,
         "false_positives": 0
       }
     },
