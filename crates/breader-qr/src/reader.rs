@@ -7,6 +7,7 @@ use breader_core::{
 
 use crate::decode::{DecodedQr, decode_grid, read_version};
 use crate::detect::{FinderSearch, Triplet, candidate_dims, find_alignment};
+use crate::micro::reader::{MicroBuf, MicroParams, scan as micro_scan};
 use crate::sample::{
     Gray, Mapper, finders_plausible, fourth_point, module_axes, module_size, pattern_cells,
     predict_alignment, refine_finder, sample_grid, sample_grid_local, timing_plausible,
@@ -73,6 +74,7 @@ struct Work<'g> {
     runs: Vec<u32>,
     pts: Vec<(Point, Point)>,
     cells: Vec<(Point, bool)>,
+    micro: MicroBuf,
     /// Grids that passed the plausibility checks since the last `try_triplet`.
     plausible: u32,
 }
@@ -86,6 +88,7 @@ struct Spare {
     runs: Vec<u32>,
     pts: Vec<(Point, Point)>,
     cells: Vec<(Point, bool)>,
+    micro: MicroBuf,
 }
 
 thread_local! {
@@ -475,7 +478,7 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
 }
 
 /// A symbol already reported in this frame.
-struct Known {
+pub(crate) struct Known {
     quad: Quad,
     /// Module size in the coordinates of the binary plane.
     module: f32,
@@ -486,13 +489,17 @@ struct Known {
 const NESTED_MODULE_RATIO: f32 = 0.5;
 
 impl Known {
-    fn new(s: &Symbol, scale: (f32, f32)) -> Option<Self> {
+    pub(crate) fn new(s: &Symbol, scale: (f32, f32)) -> Option<Self> {
         let SymbolMeta::Qr(meta) = &s.meta else {
             return None;
         };
         let c = s.quad.corners;
         let side = (0..4).map(|i| c[i].distance(c[(i + 1) % 4])).sum::<f32>() / 4.0;
-        let dim = 17.0 + 4.0 * f32::from(meta.version);
+        let dim = if s.symbology == Symbology::MicroQr {
+            9.0 + 2.0 * f32::from(meta.version)
+        } else {
+            17.0 + 4.0 * f32::from(meta.version)
+        };
         Some(Self {
             quad: s.quad,
             module: side / dim / ((scale.0 + scale.1) / 2.0),
@@ -501,7 +508,7 @@ impl Known {
 
     /// Whether a finder (plane coordinates) lies on this symbol rather than
     /// on a much smaller one nested inside it.
-    fn covers(&self, pos: Point, module: f32, scale: (f32, f32)) -> bool {
+    pub(crate) fn covers(&self, pos: Point, module: f32, scale: (f32, f32)) -> bool {
         self.quad
             .contains(Point::new(pos.x * scale.0, pos.y * scale.1))
             && module >= NESTED_MODULE_RATIO * self.module
@@ -514,7 +521,9 @@ impl SymbologyReader for QrReader {
     }
 
     fn symbologies(&self) -> SymbologySet {
-        SymbologySet::EMPTY.with(Symbology::Qr)
+        SymbologySet::EMPTY
+            .with(Symbology::Qr)
+            .with(Symbology::MicroQr)
     }
 
     fn handles_inversion(&self) -> bool {
@@ -523,10 +532,17 @@ impl SymbologyReader for QrReader {
 
     fn scan(&self, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
         let params = Params::for_effort(ctx.options().effort);
+        let want = ctx.options().symbologies;
+        let want_qr = want.contains(Symbology::Qr);
+        let want_micro = want.contains(Symbology::MicroQr);
+        if !want_qr && !want_micro {
+            return;
+        }
+        let micro = MicroParams::new(ctx.options().effort, params.row_step, ctx.scale());
         let scale = ctx.scale();
         let mut known: Vec<Known> = out
             .iter()
-            .filter(|s| s.symbology == Symbology::Qr)
+            .filter(|s| matches!(s.symbology, Symbology::Qr | Symbology::MicroQr))
             .filter_map(|s| Known::new(s, scale))
             .collect();
         let original = ctx.original();
@@ -545,6 +561,7 @@ impl SymbologyReader for QrReader {
             runs: spare.runs,
             pts: spare.pts,
             cells: spare.cells,
+            micro: spare.micro,
             plausible: 0,
         };
         work.search.find_finders(bin, params.row_step);
@@ -557,8 +574,12 @@ impl SymbologyReader for QrReader {
         // per polarity.
         for inverted in [false, true] {
             let plane = Plane::new(bin, inverted);
-            work.search
-                .select_triplets(plane, params.max_finders, params.row_step);
+            if want_qr {
+                work.search
+                    .select_triplets(plane, params.max_finders, params.row_step);
+            } else {
+                work.search.triplets.clear();
+            }
             let mut failures = 0;
             let mut syn_failures = 0;
             let mut successes = 0;
@@ -594,6 +615,17 @@ impl SymbologyReader for QrReader {
                     out.push(sym);
                 }
             }
+            if want_micro {
+                micro_scan(
+                    plane,
+                    work.gray,
+                    &work.search.finders,
+                    micro,
+                    &mut work.micro,
+                    &mut known,
+                    out,
+                );
+            }
         }
         SPARE.set(Some(Spare {
             search: work.search,
@@ -601,6 +633,7 @@ impl SymbologyReader for QrReader {
             runs: work.runs,
             pts: work.pts,
             cells: work.cells,
+            micro: work.micro,
         }));
     }
 }

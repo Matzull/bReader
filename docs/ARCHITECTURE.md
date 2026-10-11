@@ -111,7 +111,7 @@ EAN/UPC, Code 128, Code 39, ITF and Codabar over gray scanline profiles: scan pl
 
 ### 3.2 QR (`breader-qr`)
 
-Finder patterns, triplets, homography sampling, Reed-Solomon, retries (local threshold, pitch correction, nested symbols). Design: [symbologies/qr.md](symbologies/qr.md).
+Finder patterns, triplets, homography sampling, Reed-Solomon, retries (local threshold, pitch correction, nested symbols). Design: [symbologies/qr.md](symbologies/qr.md). Micro QR (M1 to M4) is read by the same `QrReader` from the finders of the same scan that no decoded symbol consumed: [symbologies/microqr.md](symbologies/microqr.md).
 
 ### 3.3 Error correction (`breader-ecc`)
 

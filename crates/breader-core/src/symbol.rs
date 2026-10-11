@@ -84,7 +84,7 @@ pub struct Gs1Element {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum SymbolMeta {
-    /// QR Code details.
+    /// QR Code and Micro QR Code details.
     Qr(QrMeta),
     /// 1D symbology details.
     Linear(LinearMeta),
@@ -201,16 +201,19 @@ pub enum EcLevel {
     Q,
     /// About 30 %.
     H,
+    /// Error detection only, no correction (Micro QR version M1).
+    DetectionOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// Details of a decoded QR Code.
+/// Details of a decoded QR Code or Micro QR Code.
 pub struct QrMeta {
-    /// Symbol version, 1 to 40.
+    /// Symbol version, 1 to 40. For [`Symbology::MicroQr`](crate::Symbology::MicroQr)
+    /// 1 to 4 for M1 to M4.
     pub version: u8,
-    /// Error correction level.
+    /// Error correction level; [`EcLevel::DetectionOnly`] for Micro QR M1.
     pub ec_level: EcLevel,
-    /// Data mask pattern, 0 to 7.
+    /// Data mask pattern, 0 to 7 (0 to 3 for Micro QR).
     pub mask: u8,
     /// Codeword errors fixed by Reed-Solomon.
     pub errors_corrected: u32,

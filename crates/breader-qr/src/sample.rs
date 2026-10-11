@@ -340,7 +340,7 @@ const FINDER_TOLERANCE: u32 = 48;
 /// Reads one module: outer `None` when the mapping fails, inner `None` when
 /// the module lies outside the image. Large modules take the majority of
 /// five sub-samples.
-fn read_module(
+pub(crate) fn read_module(
     bin: Plane<'_>,
     h: &Mapper,
     c: usize,

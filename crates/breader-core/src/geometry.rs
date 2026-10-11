@@ -113,17 +113,26 @@ impl Homography {
         if n < 4 {
             return None;
         }
-        let norm = |pts: &mut dyn Iterator<Item = Point>| -> (f64, f64, f64) {
-            let v: Vec<(f64, f64)> = pts.map(|p| (f64::from(p.x), f64::from(p.y))).collect();
+        // Mean and mean distance to it of one side of the pairs, in two
+        // passes so that no buffer is needed.
+        let norm = |side: fn(&(Point, Point)) -> Point| -> (f64, f64, f64) {
+            let at = |p: &(Point, Point)| {
+                let q = side(p);
+                (f64::from(q.x), f64::from(q.y))
+            };
             let (cx, cy) = (
-                v.iter().map(|p| p.0).sum::<f64>() / n as f64,
-                v.iter().map(|p| p.1).sum::<f64>() / n as f64,
+                pairs.iter().map(|p| at(p).0).sum::<f64>() / n as f64,
+                pairs.iter().map(|p| at(p).1).sum::<f64>() / n as f64,
             );
-            let md = v.iter().map(|p| (p.0 - cx).hypot(p.1 - cy)).sum::<f64>() / n as f64;
+            let md = pairs
+                .iter()
+                .map(|p| (at(p).0 - cx).hypot(at(p).1 - cy))
+                .sum::<f64>()
+                / n as f64;
             (cx, cy, if md > 1e-9 { md } else { 1.0 })
         };
-        let (mcx, mcy, mmd) = norm(&mut pairs.iter().map(|p| p.0));
-        let (icx, icy, imd) = norm(&mut pairs.iter().map(|p| p.1));
+        let (mcx, mcy, mmd) = norm(|p| p.0);
+        let (icx, icy, imd) = norm(|p| p.1);
         let mut ata = [[0.0f64; 9]; 8];
         for (s, d) in pairs {
             let u = (f64::from(s.x) - mcx) / mmd;

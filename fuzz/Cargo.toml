@@ -39,6 +39,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "microqr_grid"
+path = "fuzz_targets/microqr_grid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "linear_runs"
 path = "fuzz_targets/linear_runs.rs"
 test = false

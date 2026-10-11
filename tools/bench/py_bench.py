@@ -24,7 +24,7 @@ try:
 except ImportError:
     breader = None
 
-SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar"]
+SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code"]
 
 ALIASES = {
     "QRCODE": "QR Code",
@@ -43,6 +43,8 @@ ALIASES = {
     "PDF417": "PDF417",
     "AZTEC": "Aztec",
     "AZTECCODE": "Aztec",
+    "MICROQRCODE": "Micro QR Code",
+    "MICROQR": "Micro QR Code",
 }
 
 BR_FORMATS = {
@@ -58,6 +60,7 @@ BR_FORMATS = {
     "datamatrix": "Data Matrix",
     "pdf417": "PDF417",
     "aztec": "Aztec",
+    "micro-qr": "Micro QR Code",
 }
 
 
@@ -84,6 +87,7 @@ class ZxingEngine:
             bf.DataMatrix: "Data Matrix",
             bf.PDF417: "PDF417",
             bf.Aztec: "Aztec",
+            bf.MicroQRCode: "Micro QR Code",
         }
 
     def read(self, gray):
