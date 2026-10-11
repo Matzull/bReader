@@ -25,6 +25,8 @@ pub enum Symbology {
     Pdf417,
     /// Aztec Code, including compact symbols and Aztec Runes.
     Aztec,
+    /// Codabar.
+    Codabar,
 }
 
 impl Symbology {
@@ -41,6 +43,7 @@ impl Symbology {
         Self::DataMatrix,
         Self::Pdf417,
         Self::Aztec,
+        Self::Codabar,
     ];
 
     /// True for 1D symbologies.
@@ -65,6 +68,7 @@ impl Symbology {
             Self::DataMatrix => "Data Matrix",
             Self::Pdf417 => "PDF417",
             Self::Aztec => "Aztec",
+            Self::Codabar => "Codabar",
         }
     }
 }

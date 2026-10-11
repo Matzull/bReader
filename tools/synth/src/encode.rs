@@ -23,6 +23,7 @@ pub enum Sym {
     DataMatrix,
     Pdf417,
     Aztec,
+    Codabar,
 }
 
 impl Sym {
@@ -61,6 +62,7 @@ impl Sym {
             Sym::DataMatrix => "DATAMATRIX",
             Sym::Pdf417 => "PDF417",
             Sym::Aztec => "AZTEC",
+            Sym::Codabar => "CODABAR",
         }
     }
 }
@@ -239,7 +241,9 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             let t = to_text(&d);
             (t.clone(), TF::interleaved(&t).expect(fail).encode())
         }
-        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 | Sym::Aztec => unreachable!("not linear"),
+        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 | Sym::Aztec | Sym::Codabar => {
+            unreachable!("not linear")
+        }
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
@@ -422,8 +426,61 @@ pub fn encode_aztec(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Encode
     }
 }
 
+/// Codabar characters and their element widths (`w` wide), as in the
+/// specification table.
+const CODABAR: [(char, &str); 20] = [
+    ('0', "nnnnnww"),
+    ('1', "nnnnwwn"),
+    ('2', "nnnwnnw"),
+    ('3', "wwnnnnn"),
+    ('4', "nnwnnwn"),
+    ('5', "wnnnnwn"),
+    ('6', "nwnnnnw"),
+    ('7', "nwnnwnn"),
+    ('8', "nwwnnnn"),
+    ('9', "wnnwnnn"),
+    ('-', "nnnwwnn"),
+    ('$', "nnwwnnn"),
+    (':', "wnnnwnw"),
+    ('/', "wnwnnnw"),
+    ('.', "wnwnwnn"),
+    ('+', "nnwnwnw"),
+    ('A', "nnwwnwn"),
+    ('B', "nnnwnww"),
+    ('C', "nwnwnnw"),
+    ('D', "nnnwwwn"),
+];
+
+/// Codabar with start and stop characters (kept in the label, as the
+/// zxing-cpp samples spell it), wide elements of 2 or 3 modules.
+fn encode_codabar(rng: &mut ChaCha8Rng) -> Encoded {
+    let guards = pool("ABCD");
+    let len = rng.random_range(4..=12);
+    let body = pick_string(rng, &pool("0123456789-$:/.+"), len);
+    let text = format!(
+        "{}{body}{}",
+        guards[rng.random_range(0..4)],
+        guards[rng.random_range(0..4)]
+    );
+    let wide = rng.random_range(2..=3usize);
+    let mut bars: Vec<u8> = Vec::new();
+    for (i, ch) in text.chars().enumerate() {
+        if i > 0 {
+            bars.push(0);
+        }
+        let (_, p) = CODABAR.iter().find(|(c, _)| *c == ch).expect("table entry");
+        for (k, b) in p.bytes().enumerate() {
+            let w = if b == b'w' { wide } else { 1 };
+            bars.extend(std::iter::repeat_n(u8::from(k % 2 == 0), w));
+        }
+    }
+    let height = linear_height(rng, bars.len());
+    Encoded::linear(text, Sym::Codabar.label(), &bars, height)
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
+        Sym::Codabar => encode_codabar(rng),
         Sym::DataMatrix => encode_dm(rng, DmShape::Square),
         Sym::Pdf417 => encode_pdf417(rng),
         Sym::Aztec => {
@@ -478,12 +535,25 @@ mod tests {
     }
 
     #[test]
+    fn codabar_has_guards_and_the_expected_width() {
+        let mut rng = ChaCha8Rng::seed_from_u64(4);
+        for _ in 0..50 {
+            let e = encode(&mut rng, Sym::Codabar);
+            assert_eq!(e.format, "CODABAR");
+            let t = e.text.as_bytes();
+            assert!(matches!(t[0], b'A'..=b'D') && matches!(t[t.len() - 1], b'A'..=b'D'));
+            assert!(e.modules[0] && e.modules[e.cols - 1]);
+        }
+    }
+
+    #[test]
     fn all_symbologies_encode_many_times() {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         for _ in 0..200 {
-            for s in Sym::ALL
-                .into_iter()
-                .chain([Sym::DataMatrix, Sym::Pdf417, Sym::Aztec])
+            for s in
+                Sym::ALL
+                    .into_iter()
+                    .chain([Sym::DataMatrix, Sym::Pdf417, Sym::Aztec, Sym::Codabar])
             {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);

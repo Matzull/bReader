@@ -5,6 +5,7 @@ use breader_core::{
 };
 
 use crate::aggregate::{Aggregator, PlacedHit, Settings};
+use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
 use crate::code128::Code128Decoder;
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
@@ -17,9 +18,21 @@ use crate::profile::{self, Oblique, ObliqueWork};
 use crate::runs::Runs;
 
 /// Decoders tried on every scanline, composed statically.
-type Decoders = (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
+type Decoders = (
+    EanDecoder,
+    Code128Decoder,
+    Code39Decoder,
+    ItfDecoder,
+    CodabarDecoder,
+);
 
-const DECODERS: Decoders = (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
+const DECODERS: Decoders = (
+    EanDecoder,
+    Code128Decoder,
+    Code39Decoder,
+    ItfDecoder,
+    CodabarDecoder,
+);
 
 /// Decode state shared by all scanlines of one `scan` call.
 #[derive(Debug, Default)]
@@ -150,6 +163,7 @@ fn scan_profile<D: LinearDecoder>(
                 checksum_verified: hit.checksum_verified,
                 short_quiet: hit.short_quiet,
                 inverted: hit.inverted,
+                start_stop: hit.start_stop,
             });
         }
     }
@@ -411,6 +425,7 @@ impl SymbologyReader for LinearReader {
             Symbology::Code128,
             Symbology::Code39,
             Symbology::Itf,
+            Symbology::Codabar,
         ]
         .into_iter()
         .collect()
@@ -1007,6 +1022,45 @@ mod tests {
         let bad = format!("{}{}", &text[..13], (text.as_bytes()[13] - b'0' + 1) % 10);
         let img = wide_picture(&itf_modules(&bad, 3), 2.6, 7.0);
         assert!(scan(&img, &any).is_empty());
+    }
+
+    #[test]
+    fn codabar_reads_without_start_and_stop_in_the_data() {
+        let img = wide_picture(&codabar_modules('B', "40129/5", 'D', 3, 1), 2.6, 7.0);
+        let found = scan(&img, &ScanOptions::default());
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].symbology, Symbology::Codabar);
+        assert_eq!(found[0].data, b"40129/5");
+        assert_eq!(&found[0].aim_id, b"]F0");
+        let meta = linear_meta(&found[0]);
+        assert_eq!(meta.codabar_start_stop, Some((b'B', b'D')));
+        assert!(meta.lines_agreeing >= 3);
+        let off = ScanOptions {
+            symbologies: SymbologySet::all()
+                .iter()
+                .filter(|s| *s != Symbology::Codabar)
+                .collect(),
+            ..ScanOptions::default()
+        };
+        assert!(scan(&img, &off).is_empty());
+        // No stop character: nothing, and nothing else either.
+        let m = codabar_modules('B', "40129/5", 'D', 3, 1);
+        let img = wide_picture(&m[..m.len() - 11], 2.6, 7.0);
+        assert!(scan(&img, &ScanOptions::default()).is_empty());
+    }
+
+    #[test]
+    fn other_symbologies_never_come_out_as_codabar() {
+        for modules in [
+            code39_modules("ABC-1234", 3, 1),
+            itf_modules(&with_gs1_check("0614141999996"), 3),
+            ean13_modules(TEXT),
+        ] {
+            let img = wide_picture(&modules, 2.6, 7.0);
+            for s in scan(&img, &ScanOptions::default()) {
+                assert_ne!(s.symbology, Symbology::Codabar, "{s:?}");
+            }
+        }
     }
 
     #[test]

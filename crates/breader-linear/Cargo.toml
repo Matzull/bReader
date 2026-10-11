@@ -13,5 +13,8 @@ rayon = ["dep:rayon"]
 breader-core.workspace = true
 rayon = { version = "1", optional = true }
 
+[dev-dependencies]
+barcoders = { version = "2", default-features = false, features = ["std"] }
+
 [lints]
 workspace = true

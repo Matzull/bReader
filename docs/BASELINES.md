@@ -274,3 +274,21 @@ Known limits seen in the unit and synthetic runs: modules of about 2.5 px or les
 ## Reader initialisation symbols (2026-10-09)
 
 Data Matrix (Reader Programming, codeword 234 first) and PDF417 (codeword 921 first) now return such symbols with `reader_init` set instead of dropping them ([D-035](decisions.md#d-035)), as Aztec already did. zxing-cpp samples, reads / false positives: Data Matrix 79 / 86 / 89 -> 79 / 87 / 90 and PDF417 51 / 55 / 54 -> 51 / 56 / 55 at Fast / Balanced / Exhaustive (the two samples `datamatrix-1/readerinit.png` and `pdf417-1/13-readerinit.png` read from Balanced, matching their labels; Fast still does not find them), 0 false positives at every effort. Baselines `zxing-samples-{fast,balanced,exhaustive}.json` rewritten; the diff is two additions each at Balanced and Exhaustive and nothing at Fast. Other datasets unchanged.
+
+## Codabar (2026-10-11)
+
+First measurement of the Codabar decoder ([design](symbologies/linear.md#codabar), [D-036](decisions.md#d-036)). Release build, Ryzen 5 5500U, `tools/bench` (breader; rxing with `--features baselines`). Synthetic sets were generated into a worktree-local directory (`synth-local/seed1`, `synth-local/seed2024`) with the new Codabar images appended to every class but `negative` and `datamatrix`; earlier synthetic images were compared byte for byte with `data/synth` and `data/synth-2024` and are identical. The shared synthetic baselines are rewritten when the sets are regenerated.
+
+| Set | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing (TryHarder) | zxing-cpp |
+|---|---|---|---|---|---|---|
+| zxing samples `codabar-1` | 11 | 8 | 10 | 10 | 11 | not measured |
+| zxing samples `codabar-2` | 4 | 2 | 2 | 2 | 2 | not measured |
+| synthetic seed 1 | 66 | 62 | 66 | 66 | 38 (Balanced) | not measured |
+| synthetic seed 2024 | 162 | 124 | 154 | 154 | 84 (Balanced) | not measured |
+
+zxing-cpp could not be run (the Python package is not installed in this environment). Dynamsoft sets have no Codabar labels.
+
+- **False positives: 0** on every dataset and effort, including the 46 zxing `falsepositives-*` images, the negative synthetic class and the Code 39 / ITF / EAN / Code 128 images (checked with `BENCH_SHOW_FP=1`). `tools/bench` `--check` passes at all three efforts on the seven gated sets with the existing baselines: no read count dropped for any symbology, so no Code 39 or ITF read turned into a Codabar read or the reverse. zxing-samples baselines were rewritten (Codabar additions only: `codabar-1` and `codabar-2`).
+- **Misses.** `codabar-1/01`: no quiet zone, the bars touch the image border. `codabar-1/14` and `15` (Fast only): 1 px narrow elements, read after the up-scale retry from Balanced. `codabar-2/03` and `04`: quiet zones of about 3 modules, below the 10-module guard.
+- **Latency** (`challenging-images`, p50 of 6 interleaved runs with and without the Codabar decoder doing any work, indicative on a shared machine): Fast 4.97 to 5.06 ms, Balanced 19.4 to 17.9 ms (noise); synthetic seed 1: Fast 1.76 to 1.76 ms, Balanced 5.94 to 6.13 ms. No measurable cost, so Codabar runs at every effort including Fast.
+

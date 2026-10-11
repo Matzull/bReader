@@ -250,6 +250,7 @@ dependencies = [
 name = "breader-linear"
 version = "0.1.0"
 dependencies = [
+ "barcoders",
  "breader-core",
  "rayon",
 ]

@@ -38,6 +38,29 @@ def render_ean13(first12, module=3, height=80, quiet=12):
     return np.pad(img, 20, constant_values=255), code
 
 
+_CODABAR = {
+    "0": "nnnnnww", "1": "nnnnwwn", "2": "nnnwnnw", "3": "wwnnnnn", "4": "nnwnnwn",
+    "5": "wnnnnwn", "6": "nwnnnnw", "7": "nwnnwnn", "8": "nwwnnnn", "9": "wnnwnnn",
+    "-": "nnnwwnn", "$": "nnwwnnn", ":": "wnnnwnw", "/": "wnwnnnw", ".": "wnwnwnn",
+    "+": "nnwnwnw", "A": "nnwwnwn", "B": "nnnwnww", "C": "nwnwnnw", "D": "nnnwwwn",
+}
+
+
+def render_codabar(text, module=3, wide=3, height=80, quiet=12):
+    """Codabar symbol; `text` includes the start and stop characters."""
+    widths = []
+    for i, ch in enumerate(text):
+        if i:
+            widths.append(1)
+        widths += [wide if c == "w" else 1 for c in _CODABAR[ch]]
+    row = []
+    for i, w in enumerate(widths):
+        row += [0 if i % 2 == 0 else 255] * (w * module)
+    row = np.pad(np.array(row, dtype=np.uint8), quiet * module, constant_values=255)
+    img = np.tile(row, (height, 1))
+    return np.pad(img, 20, constant_values=255)
+
+
 @pytest.fixture(scope="session")
 def qr_image():
     return render_qr("https://example.com/breader?x=1", error="m")

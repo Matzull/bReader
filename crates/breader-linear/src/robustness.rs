@@ -5,6 +5,7 @@ use breader_core::{
     SymbologyReader,
 };
 
+use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
 use crate::code128::Code128Decoder;
 use crate::decoder::{LineOptions, LinearDecoder};
@@ -24,8 +25,19 @@ fn all_params() -> [EdgeParams; 4] {
     ]
 }
 
-const ALL: (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder) =
-    (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
+const ALL: (
+    EanDecoder,
+    Code128Decoder,
+    Code39Decoder,
+    ItfDecoder,
+    CodabarDecoder,
+) = (
+    EanDecoder,
+    Code128Decoder,
+    Code39Decoder,
+    ItfDecoder,
+    CodabarDecoder,
+);
 
 /// The most permissive configuration: every length of ITF, Code 39 without a
 /// minimum length, and optional add-ons.
@@ -234,10 +246,10 @@ fn to_runs(modules: &[bool], px: f32) -> Runs {
 /// was drawn, and random Code 128 characters rarely pass the checksum.
 #[test]
 fn structured_random_symbols_never_decode_to_something_else() {
-    use crate::testutil::{code39_modules, code128_modules_raw, itf_modules};
+    use crate::testutil::{codabar_modules, code39_modules, code128_modules_raw, itf_modules};
     let mut rng = Rng(0xfeed_f00d);
     let opts = options();
-    let (mut c128_hits, mut c39_hits, mut itf_hits) = (0, 0, 0);
+    let (mut c128_hits, mut c39_hits, mut itf_hits, mut cb_hits) = (0, 0, 0, 0);
     for _ in 0..3000 {
         let px = 1.5 + rng.unit() * 3.0;
         let n = 1 + rng.below(12) as usize;
@@ -277,10 +289,34 @@ fn structured_random_symbols_never_decode_to_something_else() {
             "{digits}: {hits:?}"
         );
         itf_hits += hits.len();
+
+        const CB: &[u8] = b"0123456789-$:/.+";
+        const GUARDS: &[u8] = b"ABCD";
+        let body: String = (0..4 + rng.below(8))
+            .map(|_| char::from(CB[rng.below(16) as usize]))
+            .collect();
+        let (a, z) = (
+            char::from(GUARDS[rng.below(4) as usize]),
+            char::from(GUARDS[rng.below(4) as usize]),
+        );
+        let hits = run_decode(
+            &CodabarDecoder,
+            &to_runs(
+                &codabar_modules(a, &body, z, 2 + rng.below(2) as usize, 1),
+                px,
+            ),
+            &opts,
+        );
+        assert!(
+            hits.iter().all(|h| h.text == body.as_bytes()),
+            "{a}{body}{z}: {hits:?}"
+        );
+        cb_hits += hits.len();
     }
     // Random check characters pass one time in 103.
     assert!(c128_hits < 120, "{c128_hits}");
     assert!(c39_hits > 2000 && itf_hits > 2000, "{c39_hits} {itf_hits}");
+    assert!(cb_hits > 1500, "{cb_hits}");
 }
 
 struct Half;

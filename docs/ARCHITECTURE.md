@@ -9,7 +9,7 @@ crates/
   breader-core      types, traits, FrameContext, Pipeline. No dependencies.
   breader-imgproc   pixel conversion, preprocessors, binarizers
   breader-ecc       Reed-Solomon: GF(256), GF(929) (PDF417) and generic GF(2^m) (Aztec)
-  breader-linear    1D detection and decoders (EAN/UPC, Code 128, Code 39, ITF)
+  breader-linear    1D detection and decoders (EAN/UPC, Code 128, Code 39, ITF, Codabar)
   breader-qr        QR detection, sampling and decoding
   breader-datamatrix  Data Matrix ECC 200 detection, sampling and decoding
   breader-pdf417    PDF417 detection, row sampling, grid votes and decoding (GF(929) Reed-Solomon)
@@ -89,6 +89,7 @@ Validation is part of each decoder, not an optional post-step: a `SymbologyReade
 - **EAN/UPC**: check digit, guard patterns, quiet zones, module-width consistency, ≥ `min_line_agreement` agreeing scanlines.
 - **Code 128**: mod-103 checksum, stop pattern, quiet zones, scanline agreement.
 - **Code 39**: optional mod-43, inter-character gaps, minimum length, quiet zones, scanline agreement.
+- **Codabar**: start and stop in A-D with none inside, minimum data length, clear wide/narrow classification of every element, bounded gaps, 10-module quiet zones, one scanline more than `min_line_agreement` ([D-036](decisions.md#d-036)).
 - **ITF**: accepted length list, quiet zones, bar-width ratio consistency, scanline agreement (ITF is the most false-positive-prone symbology and is gated hardest).
 - **Data Matrix**: before Reed-Solomon, a precheck of the L finder and clock tracks on the candidate, a size that is in the ECC 200 table, and a plausibility bound on the sampled grid's finder and clock mismatch. Reed-Solomon per block with corrections capped below the standard for small blocks (reserve 2 up to 7 check codewords, 1 up to 12). After it, the pad sequence must follow the 253-state rule for corrected or small blocks, and the encodation stream must be well formed (no data after an unlatch it does not allow, no empty payload). See [datamatrix](symbologies/datamatrix.md).
 - **PDF417**: before Reed-Solomon, start and stop patterns of the same polarity and module width, row numbers and column count voted from the row indicators, and an erasure budget. Reed-Solomon over GF(929) with `2 * errors + erasures <= ec - reserve` (reserve 2 up to 16 check codewords, 1 above; level 0 detects only). After it, the symbol length descriptor must match exactly and the compaction stream must be well formed. See [pdf417](symbologies/pdf417.md).
@@ -106,7 +107,7 @@ The per-family designs live in [symbologies/](symbologies/README.md) (one page p
 
 ### 3.1 Linear (`breader-linear`)
 
-EAN/UPC, Code 128, Code 39 and ITF over gray scanline profiles: scan plan, edges, runs, per-symbology decoders, aggregation with conflict removal. Design: [symbologies/linear.md](symbologies/linear.md).
+EAN/UPC, Code 128, Code 39, ITF and Codabar over gray scanline profiles: scan plan, edges, runs, per-symbology decoders, aggregation with conflict removal. Design: [symbologies/linear.md](symbologies/linear.md).
 
 ### 3.2 QR (`breader-qr`)
 
@@ -126,7 +127,7 @@ Post-processors, in this order: `Dedup`, `TextDecoder`, `ContentClassifier`.
    - **Declared segments:** each segment is decoded with its charset and the results are concatenated. Any unknown ECI or invalid sequence leaves `text = None`; `data` is always kept.
    - **Defaults per symbology:**
      - Code 128: Latin-1.
-     - Code 39, ITF, EAN/UPC: ASCII.
+     - Code 39, ITF, Codabar, EAN/UPC: ASCII.
      - QR without segments: same rule as `Undeclared`.
    - **`Undeclared` QR byte mode, in this order:**
      1. strict UTF-8;
