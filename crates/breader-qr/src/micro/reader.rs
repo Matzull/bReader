@@ -205,24 +205,35 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
     })
 }
 
+/// Buffers kept between scans.
+#[derive(Debug, Default)]
+pub(crate) struct MicroBuf {
+    grid: BitMatrix,
+    pts: Vec<(Point, Point)>,
+    order: Vec<usize>,
+}
+
 /// Tries the finders of one polarity as Micro QR corners.
 pub(crate) fn scan(
     bin: Plane<'_>,
     gray: Option<Gray<'_>>,
     finders: &[Finder],
     params: MicroParams,
+    buf: &mut MicroBuf,
     known: &mut Vec<Known>,
     out: &mut Vec<Symbol>,
 ) {
     let (row_step, scale) = (params.row_step, params.scale);
     let strength = |f: &Finder| f.count as f32 * row_step as f32 / (7.0 * f.module.max(0.5));
-    let mut order: Vec<usize> = (0..finders.len())
-        .filter(|&i| finders[i].inv == bin.inverted() && finders[i].module >= 1.4)
-        .collect();
+    let MicroBuf { grid, pts, order } = buf;
+    order.clear();
+    order.extend(
+        (0..finders.len())
+            .filter(|&i| finders[i].inv == bin.inverted() && finders[i].module >= 1.4),
+    );
     order.sort_by(|&a, &b| strength(&finders[b]).total_cmp(&strength(&finders[a])));
-    let mut grid = BitMatrix::default();
     let mut tried = 0;
-    for i in order {
+    for &i in order.iter() {
         let f = &finders[i];
         if known.iter().any(|k| k.covers(f.pos, f.module, scale)) {
             continue;
@@ -237,10 +248,10 @@ pub(crate) fn scan(
         debug_assert!(score >= TEMPLATE_MIN);
         let corners = Corners::measure(bin, pose);
         for q in 0..4 {
-            let Some((d, h)) = mapping_for_quadrant(bin, &corners, q) else {
+            let Some((d, h)) = mapping_for_quadrant(bin, &corners, q, pts) else {
                 continue;
             };
-            let Some(found) = try_mapping(bin, gray, h, d, params, &mut grid) else {
+            let Some(found) = try_mapping(bin, gray, h, d, params, grid) else {
                 continue;
             };
             if let Some(sym) = build_symbol(&found, scale) {

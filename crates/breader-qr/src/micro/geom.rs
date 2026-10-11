@@ -402,6 +402,7 @@ pub(super) fn mapping_for_quadrant(
     plane: Plane<'_>,
     corners: &Corners,
     q: usize,
+    pts: &mut Vec<(Point, Point)>,
 ) -> Option<(usize, Homography)> {
     // Turning the symbol by a quarter moves its (0,0) corner to the next
     // finder corner.
@@ -428,7 +429,8 @@ pub(super) fn mapping_for_quadrant(
             return None;
         }
         d = n + 6;
-        let mut pts: Vec<(Point, Point)> = finder.to_vec();
+        pts.clear();
+        pts.extend_from_slice(&finder);
         for (t, column) in [(ta, false), (tb, true)] {
             let Some(t) = t.filter(|t| t.n == n) else {
                 continue;
@@ -443,8 +445,8 @@ pub(super) fn mapping_for_quadrant(
                 pts.push((m, h.map(e)?));
             }
         }
-        add_boundary_points(plane, &h, d, &mut pts);
-        h = Homography::fit(&pts)?;
+        add_boundary_points(plane, &h, d, pts);
+        h = Homography::fit(pts)?;
     }
     // The fitted mapping must still show the pattern on both axes.
     let (a, b) = (

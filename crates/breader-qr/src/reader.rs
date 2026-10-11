@@ -7,7 +7,7 @@ use breader_core::{
 
 use crate::decode::{DecodedQr, decode_grid, read_version};
 use crate::detect::{FinderSearch, Triplet, candidate_dims, find_alignment};
-use crate::micro::reader::{MicroParams, scan as micro_scan};
+use crate::micro::reader::{MicroBuf, MicroParams, scan as micro_scan};
 use crate::sample::{
     Gray, Mapper, finders_plausible, fourth_point, module_axes, module_size, pattern_cells,
     predict_alignment, refine_finder, sample_grid, sample_grid_local, timing_plausible,
@@ -74,6 +74,7 @@ struct Work<'g> {
     runs: Vec<u32>,
     pts: Vec<(Point, Point)>,
     cells: Vec<(Point, bool)>,
+    micro: MicroBuf,
     /// Grids that passed the plausibility checks since the last `try_triplet`.
     plausible: u32,
 }
@@ -87,6 +88,7 @@ struct Spare {
     runs: Vec<u32>,
     pts: Vec<(Point, Point)>,
     cells: Vec<(Point, bool)>,
+    micro: MicroBuf,
 }
 
 thread_local! {
@@ -559,6 +561,7 @@ impl SymbologyReader for QrReader {
             runs: spare.runs,
             pts: spare.pts,
             cells: spare.cells,
+            micro: spare.micro,
             plausible: 0,
         };
         work.search.find_finders(bin, params.row_step);
@@ -618,6 +621,7 @@ impl SymbologyReader for QrReader {
                     work.gray,
                     &work.search.finders,
                     micro,
+                    &mut work.micro,
                     &mut known,
                     out,
                 );
@@ -629,6 +633,7 @@ impl SymbologyReader for QrReader {
             runs: work.runs,
             pts: work.pts,
             cells: work.cells,
+            micro: work.micro,
         }));
     }
 }
