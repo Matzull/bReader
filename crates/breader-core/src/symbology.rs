@@ -27,6 +27,8 @@ pub enum Symbology {
     Aztec,
     /// Codabar.
     Codabar,
+    /// Micro QR Code, versions M1 to M4.
+    MicroQr,
     /// GS1 DataBar Omnidirectional and Truncated (one row).
     DataBar,
     /// GS1 DataBar Limited.
@@ -50,6 +52,7 @@ impl Symbology {
         Self::Pdf417,
         Self::Aztec,
         Self::Codabar,
+        Self::MicroQr,
         Self::DataBar,
         Self::DataBarLimited,
         Self::DataBarExpanded,
@@ -59,7 +62,7 @@ impl Symbology {
     pub const fn is_linear(self) -> bool {
         !matches!(
             self,
-            Self::Qr | Self::DataMatrix | Self::Pdf417 | Self::Aztec
+            Self::Qr | Self::DataMatrix | Self::Pdf417 | Self::Aztec | Self::MicroQr
         )
     }
 
@@ -78,6 +81,7 @@ impl Symbology {
             Self::Pdf417 => "PDF417",
             Self::Aztec => "Aztec",
             Self::Codabar => "Codabar",
+            Self::MicroQr => "Micro QR Code",
             Self::DataBar => "GS1 DataBar",
             Self::DataBarLimited => "GS1 DataBar Limited",
             Self::DataBarExpanded => "GS1 DataBar Expanded",

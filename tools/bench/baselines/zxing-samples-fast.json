@@ -171,7 +171,13 @@
     "maxicode-1": {},
     "maxicode-2": {},
     "micropdf417-1": {},
-    "microqrcode-1": {},
+    "microqrcode-1": {
+      "Micro QR Code": {
+        "expected": 16,
+        "read": 12,
+        "false_positives": 0
+      }
+    },
     "multi-1": {},
     "pdf417-1": {
       "PDF417": {

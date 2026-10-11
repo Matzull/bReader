@@ -215,7 +215,11 @@ fn try_symbol(runs: &Runs, j: isize, n: usize, head_module: f32, out: &mut Vec<L
     }
     let widths = &widths[..len];
     // Positions decrease along reversed runs.
-    let sign = if runs.end(0) >= runs.start(0) { 1.0 } else { -1.0 };
+    let sign = if runs.end(0) >= runs.start(0) {
+        1.0
+    } else {
+        -1.0
+    };
     let start = if first_cut {
         runs.start(0) - sign * guard
     } else {
@@ -425,7 +429,10 @@ mod tests {
             );
             sizes.extend(got.iter().map(|(_, n)| *n));
         }
-        assert!(sizes.contains(&4) && sizes.contains(&5) && sizes.len() > 8, "{sizes:?}");
+        assert!(
+            sizes.contains(&4) && sizes.contains(&5) && sizes.len() > 8,
+            "{sizes:?}"
+        );
     }
 
     #[test]
@@ -445,7 +452,10 @@ mod tests {
                 ..Render::px(1.8 + rng.unit() * 2.5)
             };
             let got = read(&t, render);
-            assert!(got.iter().any(|(s, _)| *s == readable(&t)), "{t:?}: {got:?}");
+            assert!(
+                got.iter().any(|(s, _)| *s == readable(&t)),
+                "{t:?}: {got:?}"
+            );
             sizes.extend(got.iter().map(|(_, n)| *n));
         }
         assert!(sizes.len() >= 12, "{sizes:?}");

@@ -116,7 +116,10 @@ mod tests {
 
     fn check<const K: usize>(n: i32, max: u8, no_narrow: bool) {
         let all = enumerate::<K>(n, max, no_narrow);
-        assert_eq!(count(K as u32, n, i32::from(max), no_narrow) as usize, all.len());
+        assert_eq!(
+            count(K as u32, n, i32::from(max), no_narrow) as usize,
+            all.len()
+        );
         for (i, c) in all.iter().enumerate() {
             assert_eq!(rank(c, max, no_narrow), Some(i as u32), "{c:?} {n} {max}");
         }

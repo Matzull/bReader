@@ -150,8 +150,10 @@ pub(super) fn decode(row: &Row, out: &mut Vec<LineHit>) -> bool {
     let Some(q) = quantize(w, true, &SEGMENTS, module, TOLERANCE, &mut n) else {
         return true;
     };
-    let (Some(left), Some(right)) = (finder_of(&super::array(&n[9..14])), finder_of(&super::reversed(&n[30..35])))
-    else {
+    let (Some(left), Some(right)) = (
+        finder_of(&super::array(&n[9..14])),
+        finder_of(&super::reversed(&n[30..35])),
+    ) else {
         return true;
     };
     let chars: [[u8; 8]; 4] = [
@@ -223,7 +225,12 @@ mod tests {
         let mut next = 0;
         for g in 0..5 {
             assert_eq!(OUT_BASE[g], next);
-            let odd = count(4, i32::from(OUT_ODD_SUM[g]), i32::from(OUT_ODD_MAX[g]), false);
+            let odd = count(
+                4,
+                i32::from(OUT_ODD_SUM[g]),
+                i32::from(OUT_ODD_MAX[g]),
+                false,
+            );
             let even_sum = 16 - i32::from(OUT_ODD_SUM[g]);
             let even = count(4, even_sum, 9 - i32::from(OUT_ODD_MAX[g]), true);
             assert_eq!(u32::from(OUT_EVEN_COUNT[g]), even, "group {g}");
@@ -302,7 +309,10 @@ mod tests {
             &Render::px(3.0).profile(&inverted),
             &opts(),
         );
-        assert!(hits.iter().any(|h| h.inverted && h.text == b"0120012345678909"));
+        assert!(
+            hits.iter()
+                .any(|h| h.inverted && h.text == b"0120012345678909")
+        );
         // The symbol fills the profile: guard bars cut by both borders.
         let render = Render {
             quiet_left: 0.0,

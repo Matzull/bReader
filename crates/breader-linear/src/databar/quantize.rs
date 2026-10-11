@@ -187,8 +187,38 @@ mod tests {
     #[test]
     fn hostile_input_is_refused() {
         let mut out = [0u8; 2];
-        assert!(quantize(&[f32::NAN, 1.0], true, &[Segment::new(0, 2, 2)], 1.0, 0.4, &mut out).is_none());
-        assert!(quantize(&[0.0, 0.0], true, &[Segment::new(0, 2, 2)], 1.0, 0.4, &mut out).is_none());
-        assert!(quantize(&[1.0, 1.0], true, &[Segment::new(0, 2, 2)], f32::INFINITY, 0.4, &mut out).is_none());
+        assert!(
+            quantize(
+                &[f32::NAN, 1.0],
+                true,
+                &[Segment::new(0, 2, 2)],
+                1.0,
+                0.4,
+                &mut out
+            )
+            .is_none()
+        );
+        assert!(
+            quantize(
+                &[0.0, 0.0],
+                true,
+                &[Segment::new(0, 2, 2)],
+                1.0,
+                0.4,
+                &mut out
+            )
+            .is_none()
+        );
+        assert!(
+            quantize(
+                &[1.0, 1.0],
+                true,
+                &[Segment::new(0, 2, 2)],
+                f32::INFINITY,
+                0.4,
+                &mut out
+            )
+            .is_none()
+        );
     }
 }

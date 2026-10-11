@@ -1079,7 +1079,12 @@ mod tests {
         let img = wide_picture(&databar_omni_modules("2001234567890"), 3.0, 0.0);
         let others = SymbologySet::all()
             .iter()
-            .filter(|s| !matches!(s, Symbology::DataBar | Symbology::DataBarLimited | Symbology::DataBarExpanded))
+            .filter(|s| {
+                !matches!(
+                    s,
+                    Symbology::DataBar | Symbology::DataBarLimited | Symbology::DataBarExpanded
+                )
+            })
             .collect();
         let off = ScanOptions {
             symbologies: others,

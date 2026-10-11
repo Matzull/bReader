@@ -43,6 +43,11 @@
         "read": 1,
         "false_positives": 0
       },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "PDF417": {
         "expected": 3,
         "read": 3,
@@ -98,6 +103,11 @@
       "ITF": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "PDF417": {
@@ -164,6 +174,11 @@
         "read": 2,
         "false_positives": 0
       },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "PDF417": {
         "expected": 3,
         "read": 3,
@@ -219,6 +234,11 @@
       "ITF": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "PDF417": {
@@ -278,6 +298,11 @@
         "read": 1,
         "false_positives": 0
       },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 2,
+        "false_positives": 0
+      },
       "PDF417": {
         "expected": 3,
         "read": 3,
@@ -333,6 +358,11 @@
       "ITF": {
         "expected": 8,
         "read": 6,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 12,
+        "read": 11,
         "false_positives": 0
       },
       "PDF417": {
@@ -393,6 +423,11 @@
         "read": 2,
         "false_positives": 0
       },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 2,
+        "false_positives": 0
+      },
       "PDF417": {
         "expected": 3,
         "read": 3,
@@ -450,6 +485,11 @@
         "read": 0,
         "false_positives": 0
       },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "PDF417": {
         "expected": 3,
         "read": 2,
@@ -505,6 +545,11 @@
       "ITF": {
         "expected": 2,
         "read": 0,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "PDF417": {

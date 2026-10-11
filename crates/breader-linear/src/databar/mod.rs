@@ -89,7 +89,9 @@ impl Row {
         let last = j + ROW_RUNS as isize - 1;
         let first_cut = j < 0;
         let last_cut = last >= n;
-        if (first_cut && runs.lead() < 1.0) || (last_cut && (runs.trail() < 1.0 || runs.is_bar(runs.len() - 1))) {
+        if (first_cut && runs.lead() < 1.0)
+            || (last_cut && (runs.trail() < 1.0 || runs.is_bar(runs.len() - 1)))
+        {
             return None;
         }
         let real = |k: isize| runs.widths()[k as usize];
@@ -106,7 +108,11 @@ impl Row {
             return None;
         }
         // Positions decrease along reversed runs.
-        let sign = if runs.end(0) >= runs.start(0) { 1.0 } else { -1.0 };
+        let sign = if runs.end(0) >= runs.start(0) {
+            1.0
+        } else {
+            -1.0
+        };
         let start = if first_cut {
             runs.start(0) - sign * a
         } else {
@@ -188,4 +194,3 @@ pub(super) fn element_string(body: u64) -> Vec<u8> {
     text.extend_from_slice(&digits);
     text
 }
-

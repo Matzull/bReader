@@ -19,3 +19,5 @@ Modules: `detect` (finder patterns, triplets), `alignment` (Annex E table), `sam
    - *Nested symbols:* a finder inside a decoded quad is kept when its module is below half of that symbol's module size, so a small code printed over the data area of a large one is read as well; finders of the same scale stay skipped.
 
 Later improvements, driven by the benchmarks: piecewise homographies over all alignment patterns for large versions, grayscale sampling, and recovery of a missing finder from two finders plus timing patterns.
+
+Micro QR (M1 to M4) shares the finder scan, the `Plane` view and the Reed-Solomon field with this reader and is described in [microqr.md](microqr.md).
