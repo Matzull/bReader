@@ -342,7 +342,8 @@ def test_synth_clean_matches_rust_bench():
     r = Reader()
     read = expected = fp = 0
     for img in ann["images"]:
-        want = [b["text"] for b in img["barcodes"]]
+        # Codabar labels spell the start and stop characters, which `text` leaves out.
+        want = [b["text"][1:-1] if b["format"] == "CODABAR" else b["text"] for b in img["barcodes"]]
         expected += len(want)
         found = [s.text for s in r.scan(np.asarray(Image.open(base / img["file"]).convert("L")))]
         # Codabar labels spell the start and stop characters, the reader leaves them out.
