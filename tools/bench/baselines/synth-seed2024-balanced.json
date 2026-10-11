@@ -8,6 +8,11 @@
         "read": 7,
         "false_positives": 0
       },
+      "Codabar": {
+        "expected": 7,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 7,
         "read": 6,
@@ -56,6 +61,11 @@
     },
     "clean": {
       "Aztec": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Codabar": {
         "expected": 7,
         "read": 7,
         "false_positives": 0
@@ -119,6 +129,11 @@
         "read": 7,
         "false_positives": 0
       },
+      "Codabar": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 7,
         "read": 7,
@@ -167,6 +182,11 @@
     },
     "inverted": {
       "Aztec": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Codabar": {
         "expected": 7,
         "read": 7,
         "false_positives": 0
@@ -223,6 +243,11 @@
         "read": 7,
         "false_positives": 0
       },
+      "Codabar": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 7,
         "read": 7,
@@ -271,6 +296,11 @@
     },
     "multi": {
       "Aztec": {
+        "expected": 25,
+        "read": 25,
+        "false_positives": 0
+      },
+      "Codabar": {
         "expected": 25,
         "read": 25,
         "false_positives": 0
@@ -328,6 +358,11 @@
         "read": 7,
         "false_positives": 0
       },
+      "Codabar": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 7,
         "read": 7,
@@ -380,6 +415,11 @@
         "read": 7,
         "false_positives": 0
       },
+      "Codabar": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 7,
         "read": 7,
@@ -428,6 +468,11 @@
     },
     "rotated": {
       "Aztec": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "Codabar": {
         "expected": 7,
         "read": 7,
         "false_positives": 0
