@@ -342,7 +342,8 @@ def test_synth_clean_matches_rust_bench():
     r = Reader()
     read = expected = fp = 0
     for img in ann["images"]:
-        want = [b["text"] for b in img["barcodes"]]
+        # Codabar labels spell the start and stop characters, which `text` leaves out.
+        want = [b["text"][1:-1] if b["format"] == "CODABAR" else b["text"] for b in img["barcodes"]]
         expected += len(want)
         found = [s.text for s in r.scan(np.asarray(Image.open(base / img["file"]).convert("L")))]
         for w in want:
@@ -350,8 +351,8 @@ def test_synth_clean_matches_rust_bench():
                 read += 1
                 found.remove(w)
         fp += len(found)
-    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 26/26 (20 images plus 3 with Data Matrix and 3 with PDF417), 0 false positives.
-    assert (read, expected, fp) == (26, 26, 0)
+    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 35/35 (20 images plus 3 each of Data Matrix, PDF417, Aztec, Codabar and Micro QR), 0 false positives.
+    assert (read, expected, fp) == (35, 35, 0)
 
 
 def test_datamatrix_meta_on_synth():
