@@ -8,6 +8,7 @@ use breader_core::{
 use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
 use crate::code128::Code128Decoder;
+use crate::databar::DataBarDecoder;
 use crate::decoder::{LineOptions, LinearDecoder};
 use crate::ean::EanDecoder;
 use crate::edges::{EdgeDetector, EdgeParams, Edges};
@@ -31,12 +32,14 @@ const ALL: (
     Code39Decoder,
     ItfDecoder,
     CodabarDecoder,
+    DataBarDecoder,
 ) = (
     EanDecoder,
     Code128Decoder,
     Code39Decoder,
     ItfDecoder,
     CodabarDecoder,
+    DataBarDecoder,
 );
 
 /// The most permissive configuration: every length of ITF, Code 39 without a

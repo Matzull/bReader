@@ -15,6 +15,7 @@ rayon = { version = "1", optional = true }
 
 [dev-dependencies]
 barcoders = { version = "2", default-features = false, features = ["std"] }
+anyd = { version = "0.2", default-features = false, features = ["std", "alloc", "encode", "databar"] }
 
 [lints]
 workspace = true

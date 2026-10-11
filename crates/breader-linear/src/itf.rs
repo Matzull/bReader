@@ -216,6 +216,7 @@ impl LinearDecoder for ItfDecoder {
                         short_quiet: false,
                         inverted: false,
                         start_stop: None,
+                        segments: 0,
                     });
                 }
             }

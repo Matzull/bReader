@@ -27,6 +27,7 @@ pub(crate) struct PlacedHit {
     /// read the same symbol.
     pub inverted: bool,
     pub start_stop: Option<(u8, u8)>,
+    pub segments: u8,
 }
 
 impl PlacedHit {
@@ -43,6 +44,7 @@ impl PlacedHit {
             && self.inverted == other.inverted
             && self.text == other.text
             && self.start_stop == other.start_stop
+            && self.segments == other.segments
     }
 
     /// True when `other` can be another view of the same physical symbol:
@@ -421,6 +423,7 @@ impl Aggregator {
                 checksum_verified: first.checksum_verified,
                 lines_agreeing: c.lines,
                 codabar_start_stop: first.start_stop,
+                databar_segments: (first.segments > 0).then_some(first.segments),
             }),
             quality: quality.clamp(0.0, 1.0),
         }
@@ -493,6 +496,7 @@ mod tests {
             short_quiet: false,
             inverted: false,
             start_stop: None,
+            segments: 0,
         }
     }
 

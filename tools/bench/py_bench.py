@@ -24,7 +24,7 @@ try:
 except ImportError:
     breader = None
 
-SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar"]
+SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "GS1 DataBar", "GS1 DataBar Limited", "GS1 DataBar Expanded"]
 
 ALIASES = {
     "QRCODE": "QR Code",
@@ -43,6 +43,17 @@ ALIASES = {
     "PDF417": "PDF417",
     "AZTEC": "Aztec",
     "AZTECCODE": "Aztec",
+    "DATABAR": "GS1 DataBar",
+    "GS1DATABAR": "GS1 DataBar",
+    "RSS14": "GS1 DataBar",
+    "DATABAROMNIDIRECTIONAL": "GS1 DataBar",
+    "DATABARTRUNCATED": "GS1 DataBar",
+    "DATABARLIMITED": "GS1 DataBar Limited",
+    "GS1DATABARLIMITED": "GS1 DataBar Limited",
+    "RSSLIMITED": "GS1 DataBar Limited",
+    "DATABAREXPANDED": "GS1 DataBar Expanded",
+    "GS1DATABAREXPANDED": "GS1 DataBar Expanded",
+    "RSSEXPANDED": "GS1 DataBar Expanded",
 }
 
 BR_FORMATS = {
@@ -58,6 +69,9 @@ BR_FORMATS = {
     "datamatrix": "Data Matrix",
     "pdf417": "PDF417",
     "aztec": "Aztec",
+    "databar": "GS1 DataBar",
+    "databarlimited": "GS1 DataBar Limited",
+    "databarexpanded": "GS1 DataBar Expanded",
 }
 
 
@@ -84,6 +98,12 @@ class ZxingEngine:
             bf.DataMatrix: "Data Matrix",
             bf.PDF417: "PDF417",
             bf.Aztec: "Aztec",
+            bf.DataBarOmni: "GS1 DataBar",
+            bf.DataBarStkOmni: "GS1 DataBar",
+            bf.DataBarStk: "GS1 DataBar",
+            bf.DataBarLtd: "GS1 DataBar Limited",
+            bf.DataBarExp: "GS1 DataBar Expanded",
+            bf.DataBarExpStk: "GS1 DataBar Expanded",
         }
 
     def read(self, gray):
@@ -195,6 +215,8 @@ def canonical(sym, data):
         if len(data) >= 2 and data[:1].upper() in (b"A", b"B", b"C", b"D") and data[-1:].upper() in (b"A", b"B", b"C", b"D"):
             data = data[1:-1]
         return (sym, data)
+    if sym.startswith("GS1 DataBar"):
+        return (sym, bytes(b for b in data if b not in b"()\x1d"))
     if sym in ("UPC-A", "UPC-E") and data.isdigit():
         upca = None
         if sym == "UPC-E" and len(data) == 8:

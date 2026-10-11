@@ -8,6 +8,7 @@ use crate::aggregate::{Aggregator, PlacedHit, Settings};
 use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
 use crate::code128::Code128Decoder;
+use crate::databar::DataBarDecoder;
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::ean::EanDecoder;
 use crate::edges::{EdgeDetector, EdgeParams, Edges};
@@ -24,6 +25,7 @@ type Decoders = (
     Code39Decoder,
     ItfDecoder,
     CodabarDecoder,
+    DataBarDecoder,
 );
 
 const DECODERS: Decoders = (
@@ -32,6 +34,7 @@ const DECODERS: Decoders = (
     Code39Decoder,
     ItfDecoder,
     CodabarDecoder,
+    DataBarDecoder,
 );
 
 /// Decode state shared by all scanlines of one `scan` call.
@@ -164,6 +167,7 @@ fn scan_profile<D: LinearDecoder>(
                 short_quiet: hit.short_quiet,
                 inverted: hit.inverted,
                 start_stop: hit.start_stop,
+                segments: hit.segments,
             });
         }
     }
@@ -426,6 +430,9 @@ impl SymbologyReader for LinearReader {
             Symbology::Code39,
             Symbology::Itf,
             Symbology::Codabar,
+            Symbology::DataBar,
+            Symbology::DataBarLimited,
+            Symbology::DataBarExpanded,
         ]
         .into_iter()
         .collect()
@@ -1022,6 +1029,68 @@ mod tests {
         let bad = format!("{}{}", &text[..13], (text.as_bytes()[13] - b'0' + 1) % 10);
         let img = wide_picture(&itf_modules(&bad, 3), 2.6, 7.0);
         assert!(scan(&img, &any).is_empty());
+    }
+
+    #[test]
+    fn databar_variants_read_in_every_orientation_with_their_meta() {
+        let cases = [
+            (
+                databar_omni_modules("2001234567890"),
+                Symbology::DataBar,
+                &b"0120012345678909"[..],
+                None,
+            ),
+            (
+                databar_limited_modules("1234567890123"),
+                Symbology::DataBarLimited,
+                &b"0112345678901231"[..],
+                None,
+            ),
+            (
+                databar_expanded_modules("01900123456789083103001750"),
+                Symbology::DataBarExpanded,
+                &b"01900123456789083103001750"[..],
+                Some(6),
+            ),
+        ];
+        for (modules, symbology, data, segments) in cases {
+            for angle in [0.0, 90.0, 180.0, 270.0, 23.0, 211.0] {
+                for invert in [false, true] {
+                    let mut img = wide_picture(&modules, 3.0, angle);
+                    if invert {
+                        invert_image(&mut img);
+                    }
+                    let found = scan(&img, &ScanOptions::default());
+                    let ours: Vec<_> = found.iter().filter(|s| s.symbology == symbology).collect();
+                    assert_eq!(ours.len(), 1, "{symbology:?} {angle} {invert}: {found:?}");
+                    assert_eq!(ours[0].data, data);
+                    assert_eq!(&ours[0].aim_id, b"]e0");
+                    let meta = linear_meta(ours[0]);
+                    assert!(meta.checksum_verified && meta.lines_agreeing >= 2);
+                    assert_eq!(meta.databar_segments, segments);
+                    assert_eq!(found.len(), 1, "{found:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn databar_is_off_when_not_asked_for() {
+        let img = wide_picture(&databar_omni_modules("2001234567890"), 3.0, 0.0);
+        let others = SymbologySet::all()
+            .iter()
+            .filter(|s| !matches!(s, Symbology::DataBar | Symbology::DataBarLimited | Symbology::DataBarExpanded))
+            .collect();
+        let off = ScanOptions {
+            symbologies: others,
+            ..ScanOptions::default()
+        };
+        assert!(scan(&img, &off).is_empty());
+        let only = ScanOptions {
+            symbologies: [Symbology::DataBarLimited].into_iter().collect(),
+            ..ScanOptions::default()
+        };
+        assert!(scan(&img, &only).is_empty());
     }
 
     #[test]

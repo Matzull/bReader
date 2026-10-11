@@ -232,6 +232,7 @@ impl LinearDecoder for CodabarDecoder {
                     short_quiet: read.short_quiet,
                     inverted: false,
                     start_stop: Some((read.start, read.stop)),
+                    segments: 0,
                 });
             }
             j += 2;

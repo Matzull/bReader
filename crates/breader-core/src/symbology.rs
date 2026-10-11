@@ -27,6 +27,12 @@ pub enum Symbology {
     Aztec,
     /// Codabar.
     Codabar,
+    /// GS1 DataBar Omnidirectional and Truncated (one row).
+    DataBar,
+    /// GS1 DataBar Limited.
+    DataBarLimited,
+    /// GS1 DataBar Expanded (one row).
+    DataBarExpanded,
 }
 
 impl Symbology {
@@ -44,6 +50,9 @@ impl Symbology {
         Self::Pdf417,
         Self::Aztec,
         Self::Codabar,
+        Self::DataBar,
+        Self::DataBarLimited,
+        Self::DataBarExpanded,
     ];
 
     /// True for 1D symbologies.
@@ -69,6 +78,9 @@ impl Symbology {
             Self::Pdf417 => "PDF417",
             Self::Aztec => "Aztec",
             Self::Codabar => "Codabar",
+            Self::DataBar => "GS1 DataBar",
+            Self::DataBarLimited => "GS1 DataBar Limited",
+            Self::DataBarExpanded => "GS1 DataBar Expanded",
         }
     }
 }

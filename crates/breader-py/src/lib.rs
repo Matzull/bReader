@@ -34,6 +34,9 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::Pdf417 => "pdf417",
         Symbology::Aztec => "aztec",
         Symbology::Codabar => "codabar",
+        Symbology::DataBar => "databar",
+        Symbology::DataBarLimited => "databarlimited",
+        Symbology::DataBarExpanded => "databarexpanded",
         _ => s.name(),
     }
 }
@@ -268,6 +271,7 @@ impl Symbol {
                     m.codabar_start_stop
                         .map(|(a, b)| (char::from(a).to_string(), char::from(b).to_string())),
                 )?;
+                d.set_item("databar_segments", m.databar_segments)?;
             }
             SymbolMeta::DataMatrix(m) => {
                 d.set_item("kind", "datamatrix")?;

@@ -7,6 +7,7 @@ use breader_core::{
 use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
 use crate::code128::Code128Decoder;
+use crate::databar::DataBarDecoder;
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::ean::EanDecoder;
 use crate::edges::{EdgeDetector, EdgeParams, Edges};
@@ -59,6 +60,7 @@ fn decode_all(runs: &mut Runs, reversed: &mut Runs, opts: &LineOptions, out: &mu
         Code39Decoder,
         ItfDecoder,
         CodabarDecoder,
+        DataBarDecoder,
     );
     Runs::reverse_from(runs, reversed);
     let mut hits: Vec<LineHit> = Vec::new();

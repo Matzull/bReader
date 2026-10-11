@@ -232,4 +232,7 @@ pub struct LinearMeta {
     /// Codabar start and stop characters (`b'A'..=b'D'`), which `data`
     /// leaves out. `None` for other symbologies.
     pub codabar_start_stop: Option<(u8, u8)>,
+    /// GS1 DataBar Expanded: symbol characters in the row, check character
+    /// included (4 to 22). `None` for other symbologies.
+    pub databar_segments: Option<u8>,
 }
