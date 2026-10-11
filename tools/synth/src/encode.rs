@@ -23,6 +23,7 @@ pub enum Sym {
     DataMatrix,
     Pdf417,
     Aztec,
+    MicroQr,
 }
 
 impl Sym {
@@ -61,6 +62,7 @@ impl Sym {
             Sym::DataMatrix => "DATAMATRIX",
             Sym::Pdf417 => "PDF417",
             Sym::Aztec => "AZTEC",
+            Sym::MicroQr => "MICRO_QR_CODE",
         }
     }
 }
@@ -239,7 +241,9 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             let t = to_text(&d);
             (t.clone(), TF::interleaved(&t).expect(fail).encode())
         }
-        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 | Sym::Aztec => unreachable!("not linear"),
+        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 | Sym::Aztec | Sym::MicroQr => {
+            unreachable!("not linear")
+        }
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
@@ -422,8 +426,87 @@ pub fn encode_aztec(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Encode
     }
 }
 
+/// Micro QR versions and levels of the images. M3-L is left out: the
+/// encoder's M3-L symbols are not valid (a real one is read by the decoder
+/// and by zxing-cpp, the encoder's are not).
+pub const MICRO_QR_VARIANTS: [(i16, EcLevel); 7] = [
+    (1, EcLevel::L),
+    (2, EcLevel::L),
+    (2, EcLevel::M),
+    (3, EcLevel::M),
+    (4, EcLevel::L),
+    (4, EcLevel::M),
+    (4, EcLevel::Q),
+];
+
+/// The encoder's padding underflows for M3 data that leaves 4 to 6 bits of
+/// the last full codeword free, so such payloads are skipped (in a release
+/// build the subtraction would wrap and the padding loop would not end).
+fn micro_code(data: &[u8], version: i16, level: EcLevel) -> Option<QrCode> {
+    let v = Version::Micro(version);
+    let mut bits = qrcode::bits::Bits::new(v);
+    bits.push_optimal_data(data).ok()?;
+    if version == 3 && (58..=60).contains(&bits.len()) {
+        return None;
+    }
+    QrCode::with_version(data, v, level).ok()
+}
+
+/// Micro QR Code of `MICRO_QR_VARIANTS[pick]`, filled to a random share of
+/// its capacity; `mirrored` transposes the modules.
+pub fn encode_microqr(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Encoded {
+    let (version, level) = MICRO_QR_VARIANTS[pick % MICRO_QR_VARIANTS.len()];
+    let mut len = match version {
+        1 => 5,
+        2 => 8,
+        3 => 12,
+        _ => 24,
+    } * rng.random_range(50..=100usize)
+        / 100;
+    loop {
+        let kind = if version == 1 {
+            0
+        } else {
+            rng.random_range(0..3u8)
+        };
+        let text = match kind {
+            0 => to_text(&digits(rng, len.max(1))),
+            1 => pick_string(
+                rng,
+                &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789"),
+                len.max(1),
+            ),
+            _ if version >= 3 => pick_string(rng, &pool(BYTE_ASCII), len.max(1)),
+            _ => to_text(&digits(rng, len.max(1))),
+        };
+        let text = text.trim().to_string();
+        if !text.is_empty()
+            && let Some(code) = micro_code(text.as_bytes(), version, level)
+        {
+            let n = code.width();
+            let colors = code.to_colors();
+            let mut modules = vec![false; n * n];
+            for y in 0..n {
+                for x in 0..n {
+                    let (r, c) = if mirrored { (x, y) } else { (y, x) };
+                    modules[r * n + c] = colors[y * n + x] == Color::Dark;
+                }
+            }
+            let mut e = Encoded::matrix(text, Sym::MicroQr.label(), modules, n);
+            e.qz_x = 2.0;
+            e.qz_y = 2.0;
+            return e;
+        }
+        len = (len * 4 / 5).max(1);
+    }
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
+        Sym::MicroQr => {
+            let pick = rng.random_range(0..MICRO_QR_VARIANTS.len());
+            encode_microqr(rng, pick, false)
+        }
         Sym::DataMatrix => encode_dm(rng, DmShape::Square),
         Sym::Pdf417 => encode_pdf417(rng),
         Sym::Aztec => {
@@ -478,12 +561,28 @@ mod tests {
     }
 
     #[test]
+    fn microqr_covers_the_variants_and_mirrors() {
+        let mut rng = ChaCha8Rng::seed_from_u64(4);
+        for (pick, &(v, _)) in MICRO_QR_VARIANTS.iter().enumerate() {
+            let m = encode_microqr(&mut rng, pick, false);
+            assert_eq!(m.cols, 9 + 2 * v as usize);
+            assert!(!m.text.is_empty());
+        }
+        let a = encode_microqr(&mut ChaCha8Rng::seed_from_u64(9), 5, false);
+        let b = encode_microqr(&mut ChaCha8Rng::seed_from_u64(9), 5, true);
+        assert_eq!(a.text, b.text);
+        let n = a.cols;
+        assert!((0..n).all(|y| (0..n).all(|x| a.modules[y * n + x] == b.modules[x * n + y])));
+    }
+
+    #[test]
     fn all_symbologies_encode_many_times() {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         for _ in 0..200 {
-            for s in Sym::ALL
-                .into_iter()
-                .chain([Sym::DataMatrix, Sym::Pdf417, Sym::Aztec])
+            for s in
+                Sym::ALL
+                    .into_iter()
+                    .chain([Sym::DataMatrix, Sym::Pdf417, Sym::Aztec, Sym::MicroQr])
             {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);

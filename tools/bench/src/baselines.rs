@@ -19,6 +19,7 @@ fn map_rxing(format: &BarcodeFormat) -> Option<Symbology> {
         BarcodeFormat::ITF => Some(Symbology::Itf),
         BarcodeFormat::DATA_MATRIX => Some(Symbology::DataMatrix),
         BarcodeFormat::AZTEC => Some(Symbology::Aztec),
+        BarcodeFormat::MICRO_QR_CODE => Some(Symbology::MicroQr),
         _ => None,
     }
 }

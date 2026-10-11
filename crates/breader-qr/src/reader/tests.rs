@@ -8,7 +8,7 @@ use breader_core::{
 use super::*;
 use crate::detect::FinderSearch;
 
-mod render;
+use crate::testrender as render;
 use render::{Modules, Render, make_modules, similarity_quad, threshold};
 
 struct Threshold;

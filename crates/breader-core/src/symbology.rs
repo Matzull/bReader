@@ -25,6 +25,8 @@ pub enum Symbology {
     Pdf417,
     /// Aztec Code, including compact symbols and Aztec Runes.
     Aztec,
+    /// Micro QR Code, versions M1 to M4.
+    MicroQr,
 }
 
 impl Symbology {
@@ -41,13 +43,14 @@ impl Symbology {
         Self::DataMatrix,
         Self::Pdf417,
         Self::Aztec,
+        Self::MicroQr,
     ];
 
     /// True for 1D symbologies.
     pub const fn is_linear(self) -> bool {
         !matches!(
             self,
-            Self::Qr | Self::DataMatrix | Self::Pdf417 | Self::Aztec
+            Self::Qr | Self::DataMatrix | Self::Pdf417 | Self::Aztec | Self::MicroQr
         )
     }
 
@@ -65,6 +68,7 @@ impl Symbology {
             Self::DataMatrix => "Data Matrix",
             Self::Pdf417 => "PDF417",
             Self::Aztec => "Aztec",
+            Self::MicroQr => "Micro QR Code",
         }
     }
 }

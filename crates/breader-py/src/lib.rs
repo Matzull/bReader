@@ -33,6 +33,7 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::DataMatrix => "datamatrix",
         Symbology::Pdf417 => "pdf417",
         Symbology::Aztec => "aztec",
+        Symbology::MicroQr => "micro-qr",
         _ => s.name(),
     }
 }
@@ -42,7 +43,7 @@ fn parse_symbology(name: &str) -> PyResult<Symbology> {
     Symbology::ALL
         .iter()
         .copied()
-        .find(|s| symbology_id(*s) == key || (key == "qrcode" && *s == Symbology::Qr))
+        .find(|s| symbology_id(*s).replace('-', "") == key || (key == "qrcode" && *s == Symbology::Qr))
         .ok_or_else(|| {
             let known: Vec<_> = Symbology::ALL.iter().map(|s| symbology_id(*s)).collect();
             value_err(format!(

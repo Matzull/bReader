@@ -104,6 +104,7 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "DATAMATRIX" => Some(Symbology::DataMatrix),
         "PDF417" => Some(Symbology::Pdf417),
         "AZTEC" | "AZTECCODE" => Some(Symbology::Aztec),
+        "MICROQRCODE" | "MICROQR" => Some(Symbology::MicroQr),
         _ => None,
     }
 }
