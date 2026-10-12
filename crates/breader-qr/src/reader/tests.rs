@@ -601,3 +601,63 @@ fn mixed_polarity_found_in_every_effort() {
         );
     }
 }
+
+fn foreshortened(version: i16, fx: f32, fy: f32, skew: f32) -> (usize, usize, Vec<u8>) {
+    let m = make_modules(version, &payload(version));
+    let s = m.dim as f32 * 6.0;
+    let (w, h) = ((s * 1.5) as usize, (s * 1.5) as usize);
+    let o = s * 0.25;
+    let (sx, sy) = (s * fx, s * fy);
+    let quad = [
+        Point::new(o, o + sy * skew),
+        Point::new(o + sx, o),
+        Point::new(o + sx, o + sy),
+        Point::new(o, o + sy * (1.0 - skew)),
+    ];
+    let r = Render {
+        w,
+        h,
+        quad,
+        mirrored: false,
+        blur: 0,
+        invert: false,
+    };
+    (w, h, r.draw(&m))
+}
+
+#[test]
+fn foreshortened_symbols_are_read_through_the_loose_tier() {
+    let mut loose_seen = 0;
+    for version in [7, 10] {
+        for (fx, fy, skew) in [(0.7, 1.0, 0.0), (0.7, 1.0, 0.08), (1.0, 0.65, 0.0)] {
+            let (w, h, img) = foreshortened(version, fx, fy, skew);
+            let bin = threshold(&img, w, h);
+            let mut s = FinderSearch::default();
+            s.find_finders(&bin, 1);
+            s.select_triplets(Plane::new(&bin, false), 30, 1);
+            loose_seen += usize::from(s.triplets.first().is_some_and(|t| t.loose));
+            assert!(
+                !s.triplets.windows(2).any(|p| p[0].loose && !p[1].loose),
+                "strict triplets must come first"
+            );
+            let out = scan_one(&img, w, h, Effort::Balanced);
+            assert_eq!(out.len(), 1, "v{version} {fx} {fy} {skew}");
+            assert_eq!(out[0].data, payload(version), "v{version}");
+        }
+    }
+    assert!(loose_seen > 0, "no case exercised the loose tier");
+}
+
+#[test]
+fn clean_symbols_never_use_the_loose_tier_first() {
+    for version in [2, 7, 15] {
+        for deg in [0.0, 30.0, 100.0] {
+            let (_, r, img) = render_case(version, 4.0, deg, 0, false);
+            let bin = threshold(&img, r.w, r.h);
+            let mut s = FinderSearch::default();
+            s.find_finders(&bin, 1);
+            s.select_triplets(Plane::new(&bin, false), 30, 1);
+            assert!(s.triplets.first().is_some_and(|t| !t.loose));
+        }
+    }
+}
