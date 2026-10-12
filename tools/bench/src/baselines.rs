@@ -64,7 +64,13 @@ impl Engine for RxingEngine {
                     if s == Symbology::DataBar && text.len() == 14 {
                         text.splice(0..0, *b"01");
                     }
-                    Decoded::new(s, text)
+                    let mut d = Decoded::new(s, text);
+                    d.quad = r
+                        .getPoints()
+                        .iter()
+                        .map(|p| [f64::from(p.x), f64::from(p.y)])
+                        .collect();
+                    d
                 })
             })
             .collect())

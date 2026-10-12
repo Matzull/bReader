@@ -1,0 +1,305 @@
+{
+  "version": 1,
+  "effort": "fast",
+  "groups": {
+    "Artelab": {
+      "Data Matrix": {
+        "expected": 7,
+        "read": 6,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 404,
+        "read": 211,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 25,
+        "read": 5,
+        "false_positives": 0
+      }
+    },
+    "Artelab Extended": {
+      "Code 128": {
+        "expected": 9,
+        "read": 5,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 1,
+        "read": 0,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 152,
+        "read": 98,
+        "false_positives": 0
+      }
+    },
+    "Bodnar": {
+      "QR Code": {
+        "expected": 94,
+        "read": 83,
+        "false_positives": 0
+      }
+    },
+    "Deal Kaist": {
+      "Code 39": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 33,
+        "read": 24,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 2521,
+        "read": 1720,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 47,
+        "read": 40,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 2,
+        "read": 0,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 28,
+        "read": 19,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 263,
+        "read": 194,
+        "false_positives": 0
+      }
+    },
+    "Dubska": {
+      "QR Code": {
+        "expected": 802,
+        "read": 450,
+        "false_positives": 0
+      }
+    },
+    "InventBar": {
+      "Code 128": {
+        "expected": 193,
+        "read": 124,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 147,
+        "read": 37,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 2,
+        "read": 0,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 159,
+        "read": 135,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 10,
+        "read": 10,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 25,
+        "read": 20,
+        "false_positives": 0
+      }
+    },
+    "Muenster": {
+      "Code 128": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 1056,
+        "read": 838,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 2,
+        "read": 2,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 1,
+        "read": 0,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 2,
+        "read": 1,
+        "false_positives": 0
+      }
+    },
+    "Open Food Facts": {
+      "Data Matrix": {
+        "expected": 2,
+        "read": 2,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 122,
+        "read": 82,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 5,
+        "read": 5,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 3,
+        "read": 1,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 17,
+        "read": 13,
+        "false_positives": 0
+      }
+    },
+    "ParcelBar": {
+      "Code 128": {
+        "expected": 1119,
+        "read": 230,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 3,
+        "read": 0,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 3,
+        "read": 0,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 11,
+        "read": 8,
+        "false_positives": 0
+      }
+    },
+    "SKUU DSP Lab": {
+      "Code 128": {
+        "expected": 23,
+        "read": 10,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 3,
+        "read": 2,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 251,
+        "read": 137,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 49,
+        "read": 31,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 8,
+        "read": 7,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 8,
+        "read": 5,
+        "false_positives": 0
+      }
+    },
+    "Szentandrasi-Dubska QR": {
+      "QR Code": {
+        "expected": 227,
+        "read": 182,
+        "false_positives": 0
+      }
+    },
+    "ZVZ-real": {
+      "Aztec": {
+        "expected": 14,
+        "read": 11,
+        "false_positives": 0
+      },
+      "Code 128": {
+        "expected": 83,
+        "read": 55,
+        "false_positives": 0
+      },
+      "Code 39": {
+        "expected": 46,
+        "read": 32,
+        "false_positives": 0
+      },
+      "Data Matrix": {
+        "expected": 61,
+        "read": 58,
+        "false_positives": 0
+      },
+      "EAN-13": {
+        "expected": 302,
+        "read": 241,
+        "false_positives": 0
+      },
+      "EAN-8": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "ITF": {
+        "expected": 20,
+        "read": 1,
+        "false_positives": 0
+      },
+      "PDF417": {
+        "expected": 67,
+        "read": 25,
+        "false_positives": 0
+      },
+      "QR Code": {
+        "expected": 131,
+        "read": 88,
+        "false_positives": 0
+      },
+      "UPC-A": {
+        "expected": 12,
+        "read": 9,
+        "false_positives": 0
+      }
+    }
+  }
+}

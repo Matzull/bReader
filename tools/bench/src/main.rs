@@ -6,16 +6,17 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use breader::{Effort, Escalation};
+use image::{ImageDecoder, metadata::Orientation};
 use serde_json::{Value, json};
 
 use benchlib::gate::{Baseline, Counts, Groups};
-use benchlib::{engine, groundtruth, matching};
+use benchlib::{barber, engine, groundtruth, matching};
 use engine::{BreaderEngine, Engine};
 use groundtruth::Expected;
 use matching::Stats;
 
 const USAGE: &str = "usage: bench <dataset-dir> [--engine breader|rxing|rqrr|all] \
-[--effort fast|balanced|exhaustive] [--escalation all|found|stable] [--json out.json] [--no-overrides] [--check baseline.json | --write-baseline baseline.json]";
+[--effort fast|balanced|exhaustive] [--escalation all|found|stable] [--json out.json] [--no-overrides] [--subset N] [--only SOURCE] [--check baseline.json | --write-baseline baseline.json]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EngineSel {
@@ -32,6 +33,8 @@ struct Args {
     escalation: Option<Escalation>,
     json: Option<PathBuf>,
     overrides: bool,
+    subset: u64,
+    only: Option<String>,
     check: Option<PathBuf>,
     write_baseline: Option<PathBuf>,
 }
@@ -43,6 +46,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut escalation = None;
     let mut json = None;
     let mut overrides = true;
+    let mut subset = 1;
+    let mut only = None;
     let mut check = None;
     let mut write_baseline = None;
     let mut args = args;
@@ -75,6 +80,14 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
             }
             "--json" => json = Some(args.next().ok_or("--json needs a path")?.into()),
             "--no-overrides" => overrides = false,
+            "--only" => only = Some(args.next().ok_or("--only needs a name")?),
+            "--subset" => {
+                subset = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|&n| n >= 1)
+                    .ok_or("--subset needs a positive integer")?;
+            }
             "--check" => check = Some(args.next().ok_or("--check needs a path")?.into()),
             "--write-baseline" => {
                 write_baseline = Some(args.next().ok_or("--write-baseline needs a path")?.into());
@@ -100,6 +113,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
         escalation,
         json,
         overrides,
+        subset,
+        only,
         check,
         write_baseline,
     })
@@ -149,12 +164,99 @@ fn find_annotation_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-struct Dataset {
-    name: String,
-    images: Vec<(PathBuf, Vec<Expected>)>,
+struct Item {
+    path: PathBuf,
+    expected: Vec<Expected>,
+    /// Polygons of undecodable symbols: a read there is not a false positive.
+    ignore: Vec<Vec<[f64; 2]>>,
 }
 
-fn load_datasets(root: &Path, use_overrides: bool) -> Result<Vec<Dataset>, String> {
+struct Dataset {
+    name: String,
+    images: Vec<Item>,
+}
+
+/// Keeps an image when a hash of its name falls in the 1/`n` share; `n` of 0 or 1 keeps all.
+fn in_subset(file: &str, n: u64) -> bool {
+    n <= 1 || {
+        let h = file.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+        });
+        (h >> 16) % n == 0
+    }
+}
+
+/// BarBeR: one dataset per source (VIA project file), ground truth converted in memory.
+fn load_barber(
+    via: &Path,
+    use_overrides: bool,
+    subset: u64,
+    only: &Option<String>,
+) -> Result<Vec<Dataset>, String> {
+    let overrides = groundtruth::parse_overrides(groundtruth::OVERRIDES_JSON)?;
+    let base = barber::image_dir(via);
+    let mut datasets = Vec::new();
+    for mut source in barber::load_sources(via)? {
+        if only
+            .as_ref()
+            .is_some_and(|o| !source.name.contains(o.as_str()))
+        {
+            continue;
+        }
+        let name = source.name.clone();
+        if use_overrides {
+            let n = groundtruth::apply_overrides(
+                &mut source.annotations,
+                barber::OVERRIDES_KEY,
+                &overrides,
+            );
+            if n > 0 {
+                eprintln!("{name}: applied {n} GT override(s)");
+            }
+        }
+        let removed = groundtruth::dedup_annotations(&mut source.annotations);
+        eprintln!("{name}: removed {removed} duplicate GT entries");
+        let mut images = Vec::new();
+        for img in source.annotations.images {
+            if !in_subset(&img.file, subset) {
+                continue;
+            }
+            let path = base.join(&img.file);
+            if !path.is_file() {
+                eprintln!("{name}: skipping {}: labelled but no such image", img.file);
+                continue;
+            }
+            let (barcodes, ignore) = barber::split_undecodable(img.barcodes);
+            let ann = groundtruth::Annotations {
+                format: String::new(),
+                images: vec![groundtruth::ImageEntry {
+                    file: img.file.clone(),
+                    barcodes,
+                }],
+            };
+            let expected = groundtruth::expected_by_file(&ann)
+                .remove(&img.file)
+                .unwrap_or_default();
+            images.push(Item {
+                path,
+                expected,
+                ignore,
+            });
+        }
+        datasets.push(Dataset { name, images });
+    }
+    Ok(datasets)
+}
+
+fn load_datasets(
+    root: &Path,
+    use_overrides: bool,
+    subset: u64,
+    only: &Option<String>,
+) -> Result<Vec<Dataset>, String> {
+    if let Some(via) = barber::find_via_dir(root) {
+        return load_barber(&via, use_overrides, subset, only);
+    }
     let mut files = Vec::new();
     find_annotation_files(root, &mut files);
     if files.is_empty() {
@@ -200,7 +302,11 @@ fn load_datasets(root: &Path, use_overrides: bool) -> Result<Vec<Dataset>, Strin
         let mut images = Vec::new();
         for (file, expected) in groundtruth::expected_by_file(&ann) {
             match groundtruth::resolve_image(base, &file, &mut index) {
-                Some(path) => images.push((path, expected)),
+                Some(path) => images.push(Item {
+                    path,
+                    expected,
+                    ignore: Vec::new(),
+                }),
                 None => eprintln!("{name}: skipping {file}: labelled but no such image"),
             }
         }
@@ -210,26 +316,36 @@ fn load_datasets(root: &Path, use_overrides: bool) -> Result<Vec<Dataset>, Strin
 }
 
 /// Decodes by content, not extension (some `.png` files in the datasets are JPEGs).
-fn load_gray(path: &Path) -> Result<image::GrayImage, String> {
+fn load_gray(path: &Path) -> Result<(image::GrayImage, Orientation), String> {
     let reader = image::ImageReader::open(path)
         .and_then(|r| r.with_guessed_format())
         .map_err(|e| e.to_string())?;
-    Ok(reader.decode().map_err(|e| e.to_string())?.into_luma8())
+    let mut decoder = reader.into_decoder().map_err(|e| e.to_string())?;
+    let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
+    let img = image::DynamicImage::from_decoder(decoder).map_err(|e| e.to_string())?;
+    Ok((img.into_luma8(), orientation))
 }
 
 fn run_dataset(engine: &mut dyn Engine, ds: &Dataset) -> Stats {
     let mut stats = Stats::default();
-    for (path, expected) in &ds.images {
+    for Item {
+        path,
+        expected,
+        ignore,
+    } in &ds.images
+    {
         stats.images += 1;
-        let gray = match load_gray(path) {
+        let (gray, orientation) = match load_gray(path) {
             Ok(img) => img,
             Err(e) => {
                 eprintln!("{}: {e}", path.display());
                 stats.errors += 1;
-                matching::score(&[], expected, &mut stats);
+                matching::score_masked(&[], expected, ignore, &mut stats);
                 continue;
             }
         };
+        // Ground-truth polygons are in the EXIF-corrected frame, the engines see the raw pixels.
+        let ignore = &barber::to_raw_frame(ignore, orientation, gray.width(), gray.height());
         let start = Instant::now();
         let result = engine.decode(&gray);
         stats.latencies.push(start.elapsed());
@@ -241,7 +357,7 @@ fn run_dataset(engine: &mut dyn Engine, ds: &Dataset) -> Stats {
         if std::env::var_os("BENCH_SHOW_FP").is_some() {
             eprintln!("image {}", path.display());
         }
-        matching::score(&found, expected, &mut stats);
+        matching::score_masked(&found, expected, ignore, &mut stats);
     }
     stats
 }
@@ -324,7 +440,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let datasets = match load_datasets(&args.dataset, args.overrides) {
+    let datasets = match load_datasets(&args.dataset, args.overrides, args.subset, &args.only) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{e}");

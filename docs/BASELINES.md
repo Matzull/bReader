@@ -194,6 +194,64 @@ Where breader reads less than zxing-cpp:
 - Data Matrix: `datamatrix-5` (0 of 5) and a few in `datamatrix-3`.
 - A kana-only Shift JIS QR payload (`qrcode-2`) is reported with `text` as Latin-1, since the heuristic requires a double-byte character; `data` is the exact payload.
 
+## BarBeR (2026-10-11)
+
+First measurement on [BarBeR](datasets.md#barber): 8748 real photos of 12 source datasets, 8585 supported expected symbols (227 more labels are postal codes, IATA 2 of 5 and EAN-2, excluded; about 1000 regions are undecodable or of unknown value and are not expected reads). Internal use only (no license). Loader rules, ground-truth findings and overrides: [datasets](datasets.md#barber); the gate: [testing](testing.md#the-barber-gate). Measured on the tree with the Aztec, Codabar, Micro QR, rMQR and DataBar readers (none of the last four has a BarBeR label). Release build, zxing-cpp 3.1.1 Python with default options, rxing with `--features baselines` (`TryHarder`, multi). Read count / false positives; the machine was shared with other jobs, so latency is indicative only.
+
+| Symbology | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing | zxing-cpp |
+|---|---|---|---|---|---|---|
+| EAN-13 | 4970 | 3462 / 0 | 4015 / 0 | 4121 / 0 | 3487 / 77 | 3841 / 76 |
+| UPC-A | 327 | 227 / 0 | 272 / 0 | 280 / 0 | 237 / 14 | 259 / 0 |
+| EAN-8 | 70 | 63 / 0 | 67 / 0 | 69 / 0 | 60 / 126 | 64 / 1 |
+| Code 128 | 1428 | 425 / 0 | 597 / 0 | 671 / 0 | 431 / 6 | 450 / 2 |
+| Code 39 | 198 | 71 / 0 | 122 / 0 | 133 / 0 | 114 / 3 | 151 / 1 |
+| ITF | 72 | 32 / 0 | 34 / 0 | 38 / 0 | 50 / 6 | 58 / 2 |
+| QR Code | 1329 | 858 / 0 | 945 / 0 | 949 / 0 | 1030 / 3 | 1150 / 3 |
+| Data Matrix | 110 | 93 / 0 | 95 / 0 | 96 / 0 | 67 / 0 | 99 / 0 |
+| PDF417 | 67 | 25 / 0 | 26 / 0 | 24 / 0 | 0 / 0 | 36 / 1 |
+| Aztec | 14 | 11 / 0 | 14 / 0 | 14 / 0 | 0 / 0 | 11 / 0 |
+| **Total** | 8585 | 5267 / 0 (61.4 %) | 6187 / 0 (72.1 %) | 6395 / 0 (74.5 %) | 5476 / 828 (63.8 %) | 6119 / 95 (71.3 %) |
+
+Latency per image, p50 / p95 ms: breader Fast 6.1 / 26, Balanced 23.5 / 110, Exhaustive 58 / 278; zxing-cpp 34 / 209; rxing 157 / 1033 (it is run on a worker thread with a 30 s timeout and took 4.6 hours for the set). Scan errors: breader 0, rxing 0, zxing-cpp 5 (images it fails on). zxing-cpp also reports 9 UPC-E reads for labels that are never UPC-E (counted in its false positives; no label is UPC-E). **The rxing column predates the last label overrides** (it was run with 8585 expected symbols but before the overrides for `Special_0329`, `8886467105357` and `Special_0177` and before the Aztec and newline rules; it has no Aztec reader in any case); breader and zxing-cpp are on the final labels.
+
+Read rate (all symbologies) per source dataset, read rate / false positives, Balanced latency p50 / p95 ms:
+
+| Source | Images | Expected | Fast | Balanced | Exhaustive | rxing | zxing-cpp | Balanced ms |
+|---|---|---|---|---|---|---|---|---|
+| Artelab | 430 | 436 | 50.9 % / 0 | 68.3 % / 0 | 72.9 % / 0 | 48.4 % / 20 | 53.0 % / 6 | 21 / 107 |
+| Artelab Extended | 155 | 162 | 63.6 % / 0 | 75.3 % / 0 | 76.5 % / 0 | 64.2 % / 8 | 63.6 % / 0 | 7 / 16 |
+| Bodnar | 98 | 94 | 88.3 % / 0 | 94.7 % / 0 | 94.7 % / 0 | 89.4 % / 1 | 91.5 % / 0 | 33 / 74 |
+| Deal Kaist | 3308 | 2895 | 69.0 % / 0 | 83.5 % / 0 | 85.5 % / 0 | 72.1 % / 385 | 78.2 % / 38 | 19 / 108 |
+| Dubska | 810 | 802 | 56.1 % / 0 | 61.1 % / 0 | 61.3 % / 0 | 77.4 % / 77 | 86.9 % / 0 | 20 / 53 |
+| InventBar | 527 | 536 | 60.8 % / 0 | 76.9 % / 0 | 81.0 % / 0 | 69.6 % / 19 | 82.6 % / 0 | 7 / 13 |
+| Muenster | 1055 | 1064 | 79.3 % / 0 | 80.5 % / 0 | 82.0 % / 0 | 79.0 % / 95 | 88.0 % / 27 | 44 / 100 |
+| Open Food Facts | 185 | 149 | 69.1 % / 0 | 76.5 % / 0 | 80.5 % / 0 | 65.8 % / 29 | 73.8 % / 3 | 25 / 133 |
+| ParcelBar | 844 | 1136 | 21.0 % / 0 | 32.2 % / 0 | 37.3 % / 0 | 21.3 % / 59 | 20.4 % / 2 | 20 / 28 |
+| SKUU DSP Lab | 325 | 345 | 56.5 % / 0 | 68.4 % / 0 | 71.3 % / 0 | 56.5 % / 28 | 62.9 % / 9 | 34 / 50 |
+| Szentandrasi-Dubska QR | 90 | 227 | 80.2 % / 0 | 83.7 % / 0 | 84.6 % / 0 | 81.5 % / 6 | 85.0 % / 3 | 86 / 131 |
+| ZVZ-real | 921 | 739 | 70.8 % / 0 | 80.5 % / 0 | 82.3 % / 0 | 58.9 % / 101 | 82.3 % / 7 | 52 / 196 |
+
+(Dubska counts 23 images shared with Szentandrasi-Dubska QR, which therefore has 90 instead of 115.) breader trails zxing-cpp on QR (71 % against 87 %, mostly Dubska: small and blurred codes in 2560 px photos), ITF, Code 39 and PDF417, ties it on Aztec at Fast and leads at Balanced and Exhaustive, and is ahead on Code 128, UPC-A and EAN-13 from Balanced on. ParcelBar (Code 128 on postal parcels) is hard for all engines. At Balanced breader decodes a value on about 300 regions the dataset calls undecodable (masked reads, not false positives).
+
+### False-positive triage (breader)
+
+Zero false positives at every effort, full set and subset. The first Balanced run had 42 false positives, all ground-truth or normalization problems; the Aztec reader added one more of the same kind, and the Exhaustive-only UPC-E misread of `EAN13_09_0093.jpg` (a clean EAN-13 `5909990748518` read as UPC-E `0190000009995`) was fixed in the reader on main before the final measurement. Nothing was changed in the readers for this triage.
+
+(a) Ground truth, fixed in the loader or by an override (each checked on the image):
+
+- ZVZ-real payload encoding (23: 22 PDF417, among them `Special_0008`, and 1 Data Matrix): binary and 8-bit payloads of PDF417 / Data Matrix are labelled as IBM437 text or as hex of UTF-16 units, with `^` for both NUL and caret. Fixed in the loader (`legacy_payload`); ambiguous (`^`) payloads are treated as unknown (32 regions).
+- Line endings (`Special_0001`, 3 x `Special_0253`, `Special_0036`): QR payloads with CR or CR LF, labelled with LF. Fixed in `matching::canonical` (general rule, unit test).
+- Label typos and wrong labels (overrides): `20140607_203354` (12 digits, invalid check digit; the symbol is 8809073220054), `20140607_203927` (4971381329321 for 4971381320321), `[P]ISBN_18_0067` (...824 for ...827), `[S]ISBN_02_0074` (truncated, 9785699632657), `Special_0331` (garbled Code 128 for the printed AU170360RZTCASA221C03Z0), `IMG_20120226_165417` and `IMG_3029` (`http//` for `http://`), `PostBarcode362_0` and `PostBarcode831` (literal `\000001` prefix), `QR-photo_26_0021` (the label is the URL of another plant), `Special_0329` (a 13-bar Code 128 holding `1`, labelled `Q1` as an EAN-2), `Special_0177` (the Aztec of a Trenitalia ticket is labelled with the printed ticket number; its real payload is binary and unknown, so the region is masked as undecodable).
+- Unannotated symbols (overrides): `4305399070402-01_N95` (no annotation at all), `20140607_203543` (a QR next to the labelled EAN-13), `8886467105357` (the EAN-13 carries only an undecodable polygon outside the image).
+
+(b) Genuine breader misreads: none left at this commit.
+
+Other engines (summary): rxing 828 false positives (EAN-8 126, EAN-13 77, QR 3, ...; mostly wrong digits of real symbols, e.g. 385 in Deal Kaist), zxing-cpp 95 (EAN-13 76, UPC-E 9, ...): mostly EAN-13 values with a few wrong digits read from a real symbol; some are the same label problems (for example 3 `jdi.na.vutbr.cz` QR in `IMG_20120226_1644xx`, which the dataset does not annotate). They were not triaged individually.
+
+### Gate
+
+`tools/check-regression.sh --barber` (1/8 subset, about 1100 images: fast 51 s, balanced 67 s, exhaustive 133 s, 4.2 minutes in total on the shared machine) and `--barber-full` / `--all` (fast 297 s, balanced 549 s, exhaustive 1071 s). Baselines `barber-subset-*.json` and `barber-*.json`, written from real runs with 0 false positives: groups are the 12 sources, items the symbologies. The full gate is over the 3 minute budget per effort (Balanced and Exhaustive), so the quick check is the subset; the trade-off is a 1/8 sample (about 12 images from the smallest source) against exact coverage, and a regression below about 8 reads of one source and symbology can hide in the sample. Run `--barber-full` before changing a reader.
+
 ## Dynamsoft `UPS-Synthetic-Labels` and `pdf417-small-module-size` (2026-10-09)
 
 Two more Dynamsoft sets, gated by `dynamsoft-ups-*.json` and `dynamsoft-pdf417-*.json` (`tools/check-regression.sh --dynamsoft`). Their ground truth is already in the `barcode-benchmark/1.0` format but lives in `annotation/annotations_min.json` and `annotation/test-results.json`, with image names the bench resolves by stem (UPS names have no extension; PDF417 names end in `_annotated` while the files are `Images/1-1-4.jpeg`). Labels whose image is missing are skipped with a notice. All coordinates in both files are zero (no quads).

@@ -8,6 +8,8 @@ usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|both] [--effort fast
                    [--json out.json] [--no-overrides]
 """
 import json
+import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -120,7 +122,9 @@ class ZxingEngine:
             if r.format in self.formats:
                 data = bytes(r.bytes)
                 text = r.text.encode("utf-8", "replace")
-                out.append((self.formats[r.format], data, [text] if text != data else []))
+                pos = r.position
+                quad = [(p.x, p.y) for p in (pos.top_left, pos.top_right, pos.bottom_right, pos.bottom_left)]
+                out.append((self.formats[r.format], data, [text] if text != data else [], quad))
         return out
 
 
@@ -137,7 +141,7 @@ class BreaderEngine:
             if s.symbology in BR_FORMATS:
                 fmt = BR_FORMATS[s.symbology]
                 full = code39_full_ascii(s.data) if fmt == "Code 39" else None
-                out.append((fmt, s.data, [full] if full not in (None, s.data) else []))
+                out.append((fmt, s.data, [full] if full not in (None, s.data) else [], list(s.corners)))
         return out
 
 
@@ -215,7 +219,7 @@ def canonical(sym, data):
         text = data.decode("utf-8")
         if sym == "Aztec":
             text = strip_aztec_structured_append(text)
-        text = text.strip().replace("{GS}", "\x1d")
+        text = text.strip().replace("{GS}", "\x1d").replace("\r\n", "\n").replace("\r", "\n")
         data = text.removeprefix("\x1d").encode("utf-8")
     except UnicodeDecodeError:
         data = data.strip()
@@ -267,10 +271,28 @@ class Stats:
         return t
 
 
-def score(found, expected, stats):
-    """`found` items are (symbology, data, alts); alts are other forms a label may use."""
-    found_keys = [canonical(s, d) for s, d, _ in found]
-    alt_keys = [[canonical(s, a) for a in alts] for s, _, alts in found]
+SHOW_FP = bool(os.environ.get("BENCH_SHOW_FP"))
+
+
+def overlaps_region(quad, region):
+    """A read lies on a GT polygon: a corner or the centre is inside it, the polygon's centre is inside
+    the read, or the bounding boxes share a quarter of the smaller one."""
+    if not quad or not region:
+        return False
+    if any(inside(region, p) for p in quad) or inside(region, centroid(quad)) or inside(quad, centroid(region)):
+        return True
+    a, b = bbox(quad), bbox(region)
+    w = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    h = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return smaller > 0 and w * h >= 0.25 * smaller
+
+
+def score(found, expected, stats, ignore=()):
+    """`found` items are (symbology, data, alts, quad); alts are other forms a label may use. An
+    unexpected read on an `ignore` polygon (undecodable symbol of unknown value) is not a false positive."""
+    found_keys = [canonical(f[0], f[1]) for f in found]
+    alt_keys = [[canonical(f[0], a) for a in f[2]] for f in found]
     exp_keys = [canonical(s, d) if s else None for s, d in expected]
     used = [False] * len(found)
     for (sym, _), key in zip(expected, exp_keys):
@@ -288,6 +310,12 @@ def score(found, expected, stats):
     for i, fk in enumerate(found_keys):
         if used[i] or fk in known or any(k in known for k in alt_keys[i]):
             continue
+        if any(overlaps_region(found[i][3], r) for r in ignore):
+            if SHOW_FP:
+                print(f"masked read (undecodable region): {found[i][0]} {fk[1][:80]!r}", file=sys.stderr)
+            continue
+        if SHOW_FP:
+            print(f"false positive: {found[i][0]} {fk[1][:80]!r}", file=sys.stderr)
         stats.row(found[i][0])["false_positives"] += 1
 
 
@@ -450,6 +478,190 @@ def dedup_annotations(ann):
     return removed
 
 
+UNDECODABLE = "UNDECODABLE"
+BARBER_OVERRIDES_KEY = "barber"
+
+
+def html_unescape(s):
+    """The XML character references the ZVZ-real strings carry."""
+    names = {"amp": "&", "lt": "<", "gt": ">", "quot": '"', "apos": "'"}
+
+    def one(m):
+        n = m.group(1)
+        if n in names:
+            return names[n]
+        try:
+            return chr(int(n[2:], 16) if n[1] in "xX" else int(n[1:]))
+        except (ValueError, OverflowError):
+            return m.group(0)
+
+    return re.sub(r"&(amp|lt|gt|quot|apos|#[0-9]+|#[xX][0-9a-fA-F]+);", one, s)
+
+
+def is_unknown_value(s):
+    t = s.strip()
+    return t == "" or t == "-1" or (t.startswith("^") and t[1:].strip() == "")
+
+
+def strip_gs1_parentheses(s):
+    if not s.startswith("("):
+        return s
+    out, in_ai = [], False
+    for c in s:
+        if c == "(" and not in_ai:
+            in_ai = True
+        elif c == ")" and in_ai:
+            in_ai = False
+        else:
+            out.append(c)
+    return "".join(out)
+
+
+def map_region(ty, string):
+    """VIA (Type, String) -> (format, text); the format is UNDECODABLE without a usable value.
+    Mirrors benchlib::barber::map_region."""
+    text = html_unescape(string)
+    if is_unknown_value(text):
+        return UNDECODABLE, text
+    t = text.strip()
+    digits = t.isascii() and t.isdigit()
+    n = len(t)
+    if ty == "EAN13":
+        fmt = {13: "EAN_13", 12: "UPC_A", 8: "EAN_8"}.get(n) if digits else None
+    elif ty in ("UPCS", "UPCA"):
+        fmt = {12: "UPC_A", 8: "UPC_E"}.get(n) if digits else None
+    elif ty == "C39":
+        if len(t) >= 2 and t.startswith("*") and t.endswith("*"):
+            t = t[1:-1]
+        return "CODE_39", t
+    elif ty == "UCC128":
+        return "CODE_128", strip_gs1_parentheses(text)
+    else:
+        fmt = {
+            "EAN8": "EAN_8", "C128": "CODE_128", "I2O5": "ITF", "QR": "QR_CODE", "DATAMATRIX": "DATAMATRIX",
+            "PDF417": "PDF417", "AZTEC": "AZTEC", "2-DIGIT": "EAN_2", "IATA25": "IATA_2_OF_5",
+            "INTELLIGENTMAIL": "INTELLIGENT_MAIL", "JAPANPOST": "JAPAN_POST", "KIX": "KIX",
+            "POSTNET": "POSTNET", "ROYALMAILCODE": "ROYAL_MAIL",
+        }.get(ty)
+    if fmt is None:
+        return UNDECODABLE, text
+    return fmt, text
+
+
+def cp437_byte(c):
+    if c.isascii():
+        return ord(c)
+    try:
+        b = c.encode("cp437")
+    except UnicodeEncodeError:
+        return None
+    return b[0] if len(b) == 1 else None
+
+
+def legacy_payload(ty, text):
+    """ZVZ-real shows PDF417 / Data Matrix / Aztec payload bytes as IBM437 text, and binary payloads as the
+    hex of its UTF-16 units (a NUL and a real '^' both show as '^'). Returns bytes, "ambiguous" (a '^' unit)
+    or None for plain text. Mirrors benchlib::barber::legacy_payload."""
+    if ty not in ("PDF417", "DATAMATRIX", "AZTEC"):
+        return None
+    t = text.rstrip("\r\n")
+    if len(t) >= 8 and len(t) % 4 == 0 and re.fullmatch(r"[0-9A-F]+", t):
+        units = [chr(int(t[i:i + 4], 16)) for i in range(0, len(t), 4)]
+        latin1 = all(ord(c) <= 0xFF for c in units)
+        out = [ord(c) if latin1 else cp437_byte(c) for c in units]
+        if None in out:
+            return None
+        return "ambiguous" if "^" in units else bytes(out)
+    # Text with box-drawing or Greek characters is bytes shown as IBM437; accented letters alone are real UTF-8.
+    if ty == "PDF417" and any(c == "\u00f7" or "\u0393" <= c <= "\u03c9" or "\u2190" <= c <= "\u25ff" for c in t):
+        out = [cp437_byte(c) for c in t]
+        return None if None in out else bytes(out)
+    return None
+
+
+def shape_points(shape):
+    if shape.get("name") == "polygon":
+        return [[x, y] for x, y in zip(shape.get("all_points_x", []), shape.get("all_points_y", []))]
+    if shape.get("name") == "ellipse":
+        cx, cy, rx, ry = (shape.get(k, 0) for k in ("cx", "cy", "rx", "ry"))
+        return [[cx - rx, cy - ry], [cx + rx, cy - ry], [cx + rx, cy + ry], [cx - rx, cy + ry]]
+    return []
+
+
+def find_barber_via(root):
+    for d in (root, root / "Annotations" / "VIA", root / "BarBeR - Dataset" / "Annotations" / "VIA"):
+        if d.name == "VIA" and (d / "Artelab.json").is_file() and (d.parent.parent / "dataset" / "images").is_dir():
+            return d
+    return None
+
+
+def load_barber_sources(via):
+    """One (source name, annotation dict) per VIA file; see benchlib::barber::load_sources."""
+    images = via.parent.parent / "dataset" / "images"
+    owner = {}
+    sources = []
+    for path in sorted(via.glob("*.json")):
+        meta = json.loads(path.read_text())["_via_img_metadata"]
+        per_file = {}
+        for entry in meta.values():
+            barcodes = []
+            for r in entry.get("regions", []):
+                attrs = r.get("region_attributes", {})
+                string = attrs.get("String", "")
+                string = string if isinstance(string, str) else json.dumps(string)
+                fmt, text = map_region(str(attrs.get("Type", "")).strip(), string)
+                b = {"format": fmt, "text": text, "points": shape_points(r.get("shape_attributes", {}))}
+                if fmt != UNDECODABLE:
+                    payload = legacy_payload(str(attrs.get("Type", "")).strip(), text)
+                    if payload == "ambiguous":
+                        b["format"] = UNDECODABLE
+                    elif payload is not None:
+                        b["bytes_hex"] = payload.hex()
+                barcodes.append(b)
+            per_file.setdefault(entry["filename"], []).append((entry.get("size", 0), barcodes))
+        ann = {"format": "barcode-benchmark/via", "images": []}
+        for file in sorted(per_file):
+            group = per_file[file]
+            if len(group) > 1:
+                try:
+                    w, h = Image.open(images / file).size
+                    pixels = w * h
+                except Exception:
+                    pixels = None
+                if any(sz == pixels for sz, _ in group):
+                    group = [g for g in group if g[0] == pixels]
+            barcodes = [b for _, bs in group for b in bs]
+            if file in owner:
+                owner[file]["barcodes"].extend(barcodes)
+            else:
+                img = {"file": file, "barcodes": barcodes}
+                owner[file] = img
+                ann["images"].append(img)
+        sources.append((path.stem, ann))
+    return sources
+
+
+def to_raw_frame(polys, orientation, w, h):
+    """VIA polygons are in the EXIF-corrected frame, the engines see raw pixels (EXIF 6, 3 and 8 occur)."""
+    maps = {
+        6: lambda p: [p[1], h - p[0]],
+        3: lambda p: [w - p[0], h - p[1]],
+        8: lambda p: [w - p[1], p[0]],
+    }
+    f = maps.get(orientation)
+    return [[f(p) for p in poly] for poly in polys] if f else polys
+
+
+def in_subset(file, n):
+    """Keeps an image when an FNV-1a hash of its name falls in the 1/n share (same as the Rust bench)."""
+    if n <= 1:
+        return True
+    h = 0xCBF29CE484222325
+    for b in file.encode("utf-8"):
+        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return (h >> 16) % n == 0
+
+
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif"}
 
 
@@ -494,11 +706,17 @@ def dataset_name(root, base):
     return str(rel) if str(rel) != "." else root.resolve().name
 
 
-def run_dataset(base, ann, engine):
+def run_dataset(base, ann, engine, subset=1):
     expected_by_file = {}
+    ignore_by_file = {}
     for img in ann["images"]:
+        if not in_subset(img["file"], subset):
+            continue
         expected_by_file.setdefault(img["file"], []).extend(
-            (map_symbology(b["format"]), gt_data(b)) for b in img["barcodes"]
+            (map_symbology(b["format"]), gt_data(b)) for b in img["barcodes"] if b["format"] != UNDECODABLE
+        )
+        ignore_by_file.setdefault(img["file"], []).extend(
+            b.get("points") or [] for b in img["barcodes"] if b["format"] == UNDECODABLE
         )
     stats = Stats()
     paths = resolve_images(base, expected_by_file)
@@ -508,13 +726,18 @@ def run_dataset(base, ann, engine):
             continue
         expected = expected_by_file[file]
         stats.images += 1
+        if SHOW_FP:
+            print(f"image {paths[file]}", file=sys.stderr)
         try:
-            gray = np.asarray(Image.open(paths[file]).convert("L"))
+            pil = Image.open(paths[file])
+            orientation = pil.getexif().get(274, 1)
+            gray = np.asarray(pil.convert("L"))
         except Exception as e:
             print(f"{paths[file]}: {e}", file=sys.stderr)
             stats.errors += 1
-            score([], expected, stats)
+            score([], expected, stats, ignore_by_file[file])
             continue
+        ignore = to_raw_frame(ignore_by_file[file], orientation, gray.shape[1], gray.shape[0])
         t0 = time.perf_counter()
         try:
             found = engine.read(gray)
@@ -523,11 +746,11 @@ def run_dataset(base, ann, engine):
             stats.errors += 1
             found = []
         stats.latencies.append((time.perf_counter() - t0) * 1000.0)
-        score(found, expected, stats)
+        score(found, expected, stats, ignore)
     return stats
 
 
-USAGE = "usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|both] [--effort E] [--json out.json] [--no-overrides]"
+USAGE = "usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|both] [--effort E] [--json out.json] [--no-overrides] [--subset N]"
 
 
 def main(argv):
@@ -537,6 +760,7 @@ def main(argv):
     use_overrides = True
     which = "both"
     effort = "balanced"
+    subset = 1
     while args:
         a = args.pop(0)
         if a == "--json":
@@ -547,6 +771,8 @@ def main(argv):
             effort = args.pop(0)
         elif a == "--no-overrides":
             use_overrides = False
+        elif a == "--subset":
+            subset = int(args.pop(0))
         elif root is None:
             root = Path(a)
         else:
@@ -558,30 +784,37 @@ def main(argv):
         engines.append(BreaderEngine(effort))
     if which in ("zxingcpp", "both"):
         engines.append(ZxingEngine())
-    files = find_annotations(root)
-    if not files:
-        sys.exit(f"no annotation files found under {root}")
+    via = find_barber_via(root)
+    work = []
+    if via is not None:
+        images_dir = via.parent.parent / "dataset" / "images"
+        work = [(name, ann, images_dir, BARBER_OVERRIDES_KEY) for name, ann in load_barber_sources(via)]
+    else:
+        files = find_annotations(root)
+        if not files:
+            sys.exit(f"no annotation files found under {root}")
+        for f in files:
+            ann = json.loads(f.read_text())
+            if not str(ann.get("format", "")).startswith("barcode-benchmark/"):
+                print(f"skipping {f}: unknown annotation format", file=sys.stderr)
+                continue
+            base = dataset_base(f)
+            work.append((dataset_name(root, base), ann, base, base.resolve().name))
     totals = {e.name: Stats() for e in engines}
     per_dataset = {e.name: {} for e in engines}
     overrides = load_overrides()
-    for f in files:
-        ann = json.loads(f.read_text())
-        if not str(ann.get("format", "")).startswith("barcode-benchmark/"):
-            print(f"skipping {f}: unknown annotation format", file=sys.stderr)
-            continue
-        base = dataset_base(f)
-        ds = dataset_name(root, base)
+    for ds, ann, base, key in work:
         if use_overrides:
-            n = apply_overrides(ann, base.resolve().name, overrides)
+            n = apply_overrides(ann, key, overrides)
             if n:
                 print(f"{ds}: applied {n} GT override(s)", file=sys.stderr)
         print(f"{ds}: removed {dedup_annotations(ann)} duplicate GT entries", file=sys.stderr)
         for e in engines:
-            stats = run_dataset(base, ann, e)
+            stats = run_dataset(base, ann, e, subset)
             print_table(e.name, ds, stats)
             per_dataset[e.name][ds] = stats_json(stats)
             totals[e.name].merge(stats)
-    if len(files) > 1:
+    if len(work) > 1:
         for e in engines:
             print_table(e.name, "ALL DATASETS", totals[e.name])
     if out_json:

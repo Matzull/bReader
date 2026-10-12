@@ -6,13 +6,16 @@ use image::GrayImage;
 pub use crate::baselines::{RqrrEngine, RxingEngine};
 
 /// One decoded symbol: reported symbology and payload bytes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Decoded {
     pub symbology: Symbology,
     pub data: Vec<u8>,
     /// Other forms a dataset may label instead of `data`: charset-decoded UTF-8 text, or the
     /// Code 39 Full ASCII expansion.
     pub alts: Vec<Vec<u8>>,
+    /// Corners of the symbol in image pixels; empty when the engine reports none. Only used to
+    /// tell whether an unexpected read lies on an undecodable ground-truth region.
+    pub quad: Vec<[f64; 2]>,
 }
 
 impl Decoded {
@@ -21,6 +24,7 @@ impl Decoded {
             symbology,
             data,
             alts: Vec::new(),
+            quad: Vec::new(),
         }
     }
 }
@@ -83,6 +87,12 @@ impl Engine for BreaderEngine {
                     symbology: s.symbology,
                     data: s.data,
                     alts,
+                    quad: s
+                        .quad
+                        .corners
+                        .iter()
+                        .map(|p| [f64::from(p.x), f64::from(p.y)])
+                        .collect(),
                 }
             })
             .collect())

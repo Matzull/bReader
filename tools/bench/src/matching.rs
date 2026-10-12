@@ -145,7 +145,7 @@ fn strip_aztec_structured_append(s: &str) -> &str {
     }
 }
 
-/// Canonical comparison key: whitespace trimmed, UPC-A and UPC-E (expanded to UPC-A) folded into
+/// Canonical comparison key: whitespace trimmed, CR LF and CR turned into LF, UPC-A and UPC-E (expanded to UPC-A) folded into
 /// EAN-13 with a leading 0,
 /// the dataset's `{GS}` notation turned into ASCII 29 and a leading GS1 FNC1 separator dropped.
 /// Valid UTF-8 is compared as trimmed text, anything else as raw bytes.
@@ -157,7 +157,11 @@ pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
             } else {
                 s
             };
-            let s = s.trim().replace("{GS}", "\u{1d}");
+            let s = s
+                .trim()
+                .replace("{GS}", "\u{1d}")
+                .replace("\r\n", "\n")
+                .replace('\r', "\n");
             s.strip_prefix('\u{1d}').unwrap_or(&s).as_bytes().to_vec()
         }
         Err(_) => data.trim_ascii().to_vec(),
@@ -189,6 +193,29 @@ pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
     (sym, trimmed)
 }
 
+/// Whether a read lies on a ground-truth polygon: one of its corners or its centre is inside
+/// the polygon, the polygon's centre is inside the read, or the bounding boxes share at least a
+/// quarter of the smaller one.
+pub fn overlaps_region(quad: &[[f64; 2]], region: &[[f64; 2]]) -> bool {
+    use crate::groundtruth::{bbox, centroid, inside};
+    if quad.is_empty() || region.is_empty() {
+        return false;
+    }
+    if quad.iter().any(|&p| inside(region, p))
+        || centroid(quad).is_some_and(|c| inside(region, c))
+        || centroid(region).is_some_and(|c| inside(quad, c))
+    {
+        return true;
+    }
+    let (Some(a), Some(b)) = (bbox(quad), bbox(region)) else {
+        return false;
+    };
+    let w = (a[2].min(b[2]) - a[0].max(b[0])).max(0.0);
+    let h = (a[3].min(b[3]) - a[1].max(b[1])).max(0.0);
+    let smaller = ((a[2] - a[0]) * (a[3] - a[1])).min((b[2] - b[0]) * (b[3] - b[1]));
+    smaller > 0.0 && w * h >= 0.25 * smaller
+}
+
 /// Datasets label GS1 DataBar symbols as raw element strings (`0104412345678909`), other
 /// readers print the human-readable form (`(01)04412345678909`) and some keep the FNC1
 /// separators as GS. All spellings reduce to the digits and characters of the element string.
@@ -211,6 +238,17 @@ fn strip_codabar_guards(data: &[u8]) -> &[u8] {
 }
 
 pub fn score(found: &[Decoded], expected: &[Expected], stats: &mut Stats) {
+    score_masked(found, expected, &[], stats);
+}
+
+/// [`score`] with `ignore` regions (polygons of symbols whose value is unknown): an unexpected
+/// read that overlaps one of them is not counted as a false positive.
+pub fn score_masked(
+    found: &[Decoded],
+    expected: &[Expected],
+    ignore: &[Vec<[f64; 2]>],
+    stats: &mut Stats,
+) {
     let found_keys: Vec<Key> = found
         .iter()
         .map(|d| canonical(d.symbology, &d.data))
@@ -247,6 +285,16 @@ pub fn score(found: &[Decoded], expected: &[Expected], stats: &mut Stats) {
 
     for (i, key) in found_keys.iter().enumerate() {
         if used[i] || exp_keys.iter().flatten().any(|e| is_match(i, e)) {
+            continue;
+        }
+        if ignore.iter().any(|r| overlaps_region(&found[i].quad, r)) {
+            if std::env::var_os("BENCH_SHOW_FP").is_some() {
+                eprintln!(
+                    "masked read (undecodable region): {} {:?}",
+                    found[i].symbology.name(),
+                    String::from_utf8_lossy(&key.1)
+                );
+            }
             continue;
         }
         if std::env::var_os("BENCH_SHOW_FP").is_some() {
@@ -426,6 +474,7 @@ mod tests {
     fn charset_decoded_text_matches_too() {
         let sjis = vec![0x83, 0x65];
         let found = vec![Decoded {
+            quad: Vec::new(),
             symbology: Symbology::Qr,
             data: sjis.clone(),
             alts: vec!["テ".as_bytes().to_vec()],
@@ -480,5 +529,109 @@ mod tests {
         let gt = canonical(Symbology::Code128, b"{GS}7829{GS}2798");
         let read = canonical(Symbology::Code128, b"7829\x1d2798");
         assert_eq!(gt, read);
+    }
+
+    fn read_at(sym: Symbology, text: &str, quad: [[f64; 2]; 4]) -> Decoded {
+        let mut d = Decoded::new(sym, text.as_bytes().to_vec());
+        d.quad = quad.to_vec();
+        d
+    }
+
+    const SQUARE: [[f64; 2]; 4] = [
+        [100.0, 100.0],
+        [200.0, 100.0],
+        [200.0, 200.0],
+        [100.0, 200.0],
+    ];
+
+    #[test]
+    fn unexpected_read_on_an_undecodable_region_is_not_a_false_positive() {
+        let on = read_at(
+            Symbology::Ean13,
+            "0000000000000",
+            [
+                [110.0, 110.0],
+                [190.0, 110.0],
+                [190.0, 190.0],
+                [110.0, 190.0],
+            ],
+        );
+        let off = read_at(
+            Symbology::Ean13,
+            "0000000000000",
+            [
+                [500.0, 500.0],
+                [600.0, 500.0],
+                [600.0, 600.0],
+                [500.0, 600.0],
+            ],
+        );
+        let ignore = vec![SQUARE.to_vec()];
+        let mut st = Stats::default();
+        score_masked(std::slice::from_ref(&on), &[], &ignore, &mut st);
+        assert_eq!(st.totals().false_positives, 0);
+        // The same read elsewhere, or a read without a position, still counts.
+        let mut st = Stats::default();
+        score_masked(&[off], &[], &ignore, &mut st);
+        assert_eq!(st.totals().false_positives, 1);
+        let mut st = Stats::default();
+        let mut nopos = on;
+        nopos.quad.clear();
+        score_masked(&[nopos], &[], &ignore, &mut st);
+        assert_eq!(st.totals().false_positives, 1);
+    }
+
+    #[test]
+    fn a_wrong_read_of_an_expected_symbol_is_still_a_false_positive() {
+        // The expected symbol is not the undecodable one: its own wrong read stays an FP
+        // even when an undecodable region lies elsewhere in the image.
+        let wrong = read_at(
+            Symbology::Code128,
+            "WRONG",
+            [
+                [500.0, 500.0],
+                [600.0, 500.0],
+                [600.0, 600.0],
+                [500.0, 600.0],
+            ],
+        );
+        let mut st = Stats::default();
+        score_masked(
+            &[wrong],
+            &[exp(Symbology::Code128, "RIGHT")],
+            &[SQUARE.to_vec()],
+            &mut st,
+        );
+        let s = st.totals();
+        assert_eq!((s.expected, s.read, s.false_positives), (1, 0, 1));
+    }
+
+    #[test]
+    fn region_overlap_rules() {
+        // Segment (two-point 1D result) through the region, centre inside.
+        assert!(overlaps_region(&[[90.0, 150.0], [210.0, 150.0]], &SQUARE));
+        // Larger read enclosing the region.
+        assert!(overlaps_region(
+            &[[0.0, 0.0], [400.0, 0.0], [400.0, 400.0], [0.0, 400.0]],
+            &SQUARE
+        ));
+        // Boxes that do not touch do not overlap.
+        assert!(!overlaps_region(
+            &[
+                [205.0, 205.0],
+                [300.0, 205.0],
+                [300.0, 300.0],
+                [205.0, 300.0]
+            ],
+            &SQUARE
+        ));
+        assert!(!overlaps_region(&[], &SQUARE));
+    }
+
+    #[test]
+    fn line_endings_are_compared_as_newlines() {
+        let gt = canonical(Symbology::Qr, b"a\nb\nc");
+        assert_eq!(gt, canonical(Symbology::Qr, b"a\r\nb\rc"));
+        assert_ne!(gt, canonical(Symbology::Qr, b"a b c"));
     }
 }
