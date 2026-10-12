@@ -8,7 +8,7 @@ What protects the project from regressions and false positives, and how to run a
 |---|---|---|
 | Unit and integration tests | `crates/*/src` (`#[cfg(test)]`), `crates/breader/tests` | `cargo test --workspace` and `cargo test --workspace --features breader/rayon` |
 | Python tests | `crates/breader-py/tests` (against the installed wheel) | `pytest` after `maturin develop --release`; see [breader-py](../crates/breader-py/README.md) |
-| Regression gate | `tools/bench`, `tools/video-bench`, baselines in `tools/bench/baselines/` | `tools/check-regression.sh [--dynamsoft] [--zxing-samples] [--all]` |
+| Regression gate | `tools/bench`, `tools/video-bench`, baselines in `tools/bench/baselines/` | `tools/check-regression.sh [--dynamsoft] [--zxing-samples] [--barber] [--barber-full] [--all]` |
 | Fuzzing | `fuzz/` (nightly toolchain, not a workspace member) | see [fuzz/README.md](../fuzz/README.md) |
 | Micro-benchmarks | `criterion` in `breader-imgproc` and `breader-ecc` (`benches/`), `tools/bench` `stages` binary | `cargo bench -p breader-imgproc` |
 
@@ -24,6 +24,8 @@ A gate compares a run with a versioned baseline and fails CI on any regression. 
 | Dynamsoft challenging / skewed Data Matrix | `data/dynamsoft/...` | `dynamsoft-challenging-*`, `dynamsoft-skewed-*` | weekly or manual (`datasets.yml`), `--dynamsoft` locally |
 | Dynamsoft videos | `data/dynamsoft/video-based-testing` | `dynamsoft-video.json` | same |
 | zxing-cpp samples | `data/zxing-samples/test/samples` | `zxing-samples-*` | `datasets.yml` `zxing-samples` job, `--zxing-samples` locally |
+| BarBeR, 1/8 subset | `data/barber` (manual download, [datasets](datasets.md#barber)) | `barber-subset-*` | locally only, `--barber` |
+| BarBeR, full set | same, 8748 images | `barber-*` | locally only, `--barber-full` and `--all` |
 
 ### How it works
 
@@ -34,6 +36,22 @@ A gate compares a run with a versioned baseline and fails CI on any regression. 
 - the expected count differs (the dataset or its labels changed), or a baseline entry is missing from the run.
 
 Higher read counts and entries not yet in the baseline are only notices. Latency is reported, never gated. `--check` and `--write-baseline` require `--engine breader`, the default escalation and the GT overrides. The implementation is `tools/bench/src/gate.rs`.
+
+### The BarBeR gate
+
+BarBeR has no redistributable license, so it is never run in CI. A full run takes about 5 to 16 minutes per effort (8748 photos, some of 20 megapixels), too long for every local check, so there are two gates over the same ground truth ([datasets](datasets.md#barber)):
+
+- `--barber`: a deterministic 1/8 subset (`bench data/barber --subset 8`: the images whose FNV-1a hash of the file name is divisible by 8, about 1100 images, all twelve sources represented), baselines `barber-subset-<effort>.json`, about 4 minutes for the three efforts.
+- `--barber-full` (and `--all`): the whole set, baselines `barber-<effort>.json`.
+
+Both skip with a message when `data/barber` is missing. The subset baselines are recorded with `--subset 8`, so the expected counts in them differ from the full ones; the two sets are checked against their own files. The group of a baseline is one BarBeR source dataset, the items are the symbologies, so a regression is localised to a source. Undecodable regions are not expected reads and mask false positives on their polygon, which is why this gate can hold the zero-false-positive rule on photos whose ground truth is partly unknown ([datasets](datasets.md#loader)). Rewrite both sets after a change that moves reads:
+
+```sh
+for e in fast balanced exhaustive; do
+  cargo run -r -p bench -- data/barber --effort $e --write-baseline tools/bench/baselines/barber-$e.json
+  cargo run -r -p bench -- data/barber --subset 8 --effort $e --write-baseline tools/bench/baselines/barber-subset-$e.json
+done
+```
 
 ### Rewriting baselines
 
@@ -66,7 +84,8 @@ Branches that each improve reads edit the same JSON files, so a textual merge is
 ```sh
 tools/check-regression.sh                  # synthetic sets
 tools/fetch-datasets.sh                    # once
-tools/check-regression.sh --all            # also Dynamsoft (needs ffmpeg) and zxing samples
+tools/check-regression.sh --all            # also Dynamsoft (needs ffmpeg), zxing samples and the full BarBeR set
+tools/check-regression.sh --barber         # only the quick 1/8 BarBeR subset on top of the synthetic sets
 ```
 
 Measure latency only on an idle machine and compare builds in interleaved runs; concurrent jobs distort timings by up to 2x.

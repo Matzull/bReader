@@ -373,6 +373,201 @@
         },
         "reason": "The dataset labels only the PDF417; the AIAG shipping label also carries Code 128 symbols. QTY(Q) barcode beside the printed quantity '8': Code 128 'Q8' (data identifier Q + 8). Verified on a crop against the printed digit; breader and zxing-cpp read the same checksum-valid value."
       }
+    ],
+    "barber": [
+      {
+        "file": "20140607_203354.jpg",
+        "from": {
+          "format": "UPC_A",
+          "text": "880973220054"
+        },
+        "to": {
+          "format": "EAN_13",
+          "text": "8809073220054"
+        },
+        "reason": "Label typo: 12 digits with an invalid UPC check digit. The human-readable line under the symbol reads 8 809073 220054 (verified on the crop); the 13-digit EAN-13 8809073220054 is checksum-valid."
+      },
+      {
+        "file": "20140607_203927.jpg",
+        "from": {
+          "format": "EAN_13",
+          "text": "4971381329321"
+        },
+        "to": {
+          "format": "EAN_13",
+          "text": "4971381320321"
+        },
+        "reason": "Label typo: 4971381329321 has an invalid EAN-13 check digit. The human-readable digits (rotated, verified on the crop) read 4971381320321, which is checksum-valid."
+      },
+      {
+        "file": "[P]ISBN_18_0067.jpg",
+        "from": {
+          "format": "EAN_13",
+          "text": "9785961457824"
+        },
+        "to": {
+          "format": "EAN_13",
+          "text": "9785961457827"
+        },
+        "reason": "Label typo: 9785961457824 has an invalid EAN-13 check digit. The printed ISBN 978-5-9614-5782-7 and the digits under the symbol end in 7 (verified on the crop)."
+      },
+      {
+        "file": "[S]ISBN_02_0074.jpg",
+        "from": {
+          "format": "UPC_A",
+          "text": "705689632657"
+        },
+        "to": {
+          "format": "EAN_13",
+          "text": "9785699632657"
+        },
+        "reason": "Label is a truncated number (12 digits, invalid UPC check digit). The printed ISBN 978-5-699-63265-7 and the digits beside the symbol read 9785699632657 (verified on the crop)."
+      },
+      {
+        "file": "Special_0331.jpg",
+        "from": {
+          "format": "CODE_128",
+          "text": "R@70360R]T$#SA221C09Z0"
+        },
+        "to": {
+          "format": "CODE_128",
+          "text": "AU170360RZTCASA221C03Z0"
+        },
+        "reason": "Label is garbled (not the printed text). The human-readable line under the lower barcode reads AU170360RZTCASA221C03Z0 (verified on the crop)."
+      },
+      {
+        "file": "PostBarcode362_0.jpg",
+        "from": {
+          "format": "QR_CODE",
+          "text": "\\000001https://line.me/R/ti/p/%40isw5147v"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "https://line.me/R/ti/p/%40isw5147v"
+        },
+        "reason": "The label carries a literal backslash-escaped scanner prefix, \\000001, that is not part of the payload of a QR code encoding a LINE URL; the URL is the payload. The same two-image artifact is in PostBarcode831.jpg."
+      },
+      {
+        "file": "PostBarcode831.jpg",
+        "from": {
+          "format": "QR_CODE",
+          "text": "\\000001https://line.me/R/ti/p/IXKZosqlmV"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "https://line.me/R/ti/p/IXKZosqlmV"
+        },
+        "reason": "The label carries a literal backslash-escaped scanner prefix, \\000001, that is not part of the payload (see PostBarcode362_0.jpg)."
+      },
+      {
+        "file": "IMG_20120226_165417.jpg",
+        "from": {
+          "format": "QR_CODE",
+          "text": "http//jdi.na.vutbr.cz/uvod"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://jdi.na.vutbr.cz/uvod"
+        },
+        "reason": "Label typo: the colon of the URL is missing ('http//'); the same poster is labelled with the typo in IMG_3029.jpg."
+      },
+      {
+        "file": "IMG_3029.JPG",
+        "from": {
+          "format": "QR_CODE",
+          "text": "http//jdi.na.vutbr.cz/uvod"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://jdi.na.vutbr.cz/uvod"
+        },
+        "reason": "Label typo: the colon of the URL is missing ('http//'), see IMG_20120226_165417.jpg."
+      },
+      {
+        "file": "QR-photo_26_0021.jpg",
+        "from": {
+          "format": "QR_CODE",
+          "text": "https://ru.wikipedia.org/wiki/Вейгела"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://arboretum.spider.ru/?plant=1-38"
+        },
+        "reason": "Label belongs to another plant: the sign in the image is Metasequoia (the caption reads Метасеквоя), not weigela. The symbol is a clean, Reed-Solomon-valid QR code whose URL is an arboretum plant page, as the other signs of this series; zxing-cpp reads the same text."
+      },
+      {
+        "file": "20140607_203543.jpg",
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://m.site.naver.com/05cpH"
+        },
+        "points": [
+          [
+            366,
+            1115
+          ],
+          [
+            622,
+            1115
+          ],
+          [
+            622,
+            1360
+          ],
+          [
+            366,
+            1360
+          ]
+        ],
+        "reason": "Unlabeled symbol: a clean, Reed-Solomon-valid QR code left of the labelled EAN-13 on the same packaging sticker (crop inspected); no annotation lies on it."
+      },
+      {
+        "file": "4305399070402-01_N95.jpg",
+        "to": {
+          "format": "EAN_13",
+          "text": "4305399070402"
+        },
+        "points": [],
+        "reason": "The image has no annotation at all, but it shows one clear EAN-13 and the file name of every image of this series is its code (4305399070402-01_N95.jpg); 4305399070402 is checksum-valid."
+      },
+      {
+        "file": "8886467105357.jpg",
+        "to": {
+          "format": "EAN_13",
+          "text": "8886467105357"
+        },
+        "points": [
+          [
+            1270,
+            1620
+          ],
+          [
+            2020,
+            1620
+          ],
+          [
+            2020,
+            2960
+          ],
+          [
+            1270,
+            2960
+          ]
+        ],
+        "reason": "Unlabeled symbol: the only annotation over the clear EAN-13 is an undecodable (-1) triangle whose vertices lie across the whole image and outside it (x up to 3103 in a 3024 px wide image), so the polygon does not mark this symbol. The digits printed under the symbol read 8 886467 105357 (verified on the crop), the same as the file name; checksum-valid."
+      },
+      {
+        "file": "Special_0329.jpg",
+        "from": {
+          "format": "EAN_2",
+          "text": "Q1"
+        },
+        "to": {
+          "format": "CODE_128",
+          "text": "1"
+        },
+        "reason": "The QUANTITY barcode (caption 'Q 1') is labelled as a 2-digit add-on with the caption text. On a 6x enlarged crop it has 13 bars: start, one data character, check, stop (3 + 3 + 3 + 4), i.e. a Code 128 symbol holding one character, not an EAN-2 and not 'Q1' (which would have 16 bars). The caption's Q is the data identifier, which this label does not encode. breader and zxing-cpp both read '1'."
+      }
     ]
   }
 }

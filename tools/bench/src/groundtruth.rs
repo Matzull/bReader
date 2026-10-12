@@ -265,7 +265,7 @@ pub fn apply_overrides(ann: &mut Annotations, dataset_dir: &str, overrides: &Ove
     applied
 }
 
-fn centroid(points: &[[f64; 2]]) -> Option<[f64; 2]> {
+pub(crate) fn centroid(points: &[[f64; 2]]) -> Option<[f64; 2]> {
     if points.is_empty() {
         return None;
     }
@@ -277,7 +277,7 @@ fn centroid(points: &[[f64; 2]]) -> Option<[f64; 2]> {
 }
 
 /// Even-odd point-in-polygon test.
-fn inside(poly: &[[f64; 2]], p: [f64; 2]) -> bool {
+pub(crate) fn inside(poly: &[[f64; 2]], p: [f64; 2]) -> bool {
     if poly.len() < 3 {
         return false;
     }
@@ -295,7 +295,7 @@ fn inside(poly: &[[f64; 2]], p: [f64; 2]) -> bool {
     hit
 }
 
-fn bbox(points: &[[f64; 2]]) -> Option<[f64; 4]> {
+pub(crate) fn bbox(points: &[[f64; 2]]) -> Option<[f64; 4]> {
     let first = points.first()?;
     Some(
         points

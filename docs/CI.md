@@ -44,7 +44,8 @@ tools/check-regression.sh              # synthetic sets, generated into data/ wh
 tools/fetch-datasets.sh                # once, needs git
 tools/check-regression.sh --dynamsoft  # also challenging-images, skewed-datamatrix, UPS-Synthetic-Labels, pdf417-small-module-size and videos (needs ffmpeg)
 tools/check-regression.sh --zxing-samples  # also the zxing-cpp test/samples images
-tools/check-regression.sh --all        # both
+tools/check-regression.sh --barber     # also a 1/8 subset of BarBeR (data/barber, manual download, internal only; never in CI)
+tools/check-regression.sh --all        # all of them, with the full BarBeR set
 ```
 
 Or one at a time:

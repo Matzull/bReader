@@ -52,8 +52,15 @@ impl Engine for RxingEngine {
         Ok(results
             .iter()
             .filter_map(|r| {
-                map_rxing(r.getBarcodeFormat())
-                    .map(|s| Decoded::new(s, r.getText().as_bytes().to_vec()))
+                map_rxing(r.getBarcodeFormat()).map(|s| {
+                    let mut d = Decoded::new(s, r.getText().as_bytes().to_vec());
+                    d.quad = r
+                        .getPoints()
+                        .iter()
+                        .map(|p| [f64::from(p.x), f64::from(p.y)])
+                        .collect();
+                    d
+                })
             })
             .collect())
     }
