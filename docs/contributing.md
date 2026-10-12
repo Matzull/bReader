@@ -6,7 +6,7 @@ How to work in this repository. External contributions also need a signed CLA (s
 
 - ZXing, zbar and other readers may be studied for ideas and approaches; no code, tables or structure may be copied or transliterated. Normative sources are the specifications (list in [REQUIREMENTS](REQUIREMENTS.md#5-clean-room-policy)).
 - Tables derivable from a specification (character sets, BCH codes, generator polynomials, capacities) are generated or transcribed from the specification, never from another implementation.
-- Third-party readers are black boxes for comparison (zxing-cpp, rxing, rqrr in the bench); do not read their decoder sources while working on the matching family. Encoder crates are allowed as dev-dependencies to produce test symbols.
+- Third-party readers are black boxes for comparison (zxing-cpp, zbar, rxing, rqrr in the bench; zbar only through its public API via pyzbar); do not read their decoder sources while working on the matching family. Encoder crates are allowed as dev-dependencies to produce test symbols.
 - Test datasets are test data only: zxing-cpp samples are images plus expected values, never code ([datasets](datasets.md)).
 - Dependencies stay minimal and optional ones sit behind features (NFR-8). `unsafe` is denied workspace-wide (NFR-9).
 

@@ -59,7 +59,7 @@ Findings, checked against the data:
 
 ### Loader
 
-`tools/bench/src/barber.rs` reads the VIA files directly (nothing is written to `data/`): `bench data/barber` detects `Annotations/VIA`, makes one dataset per project (the per-source tables of [BASELINES](BASELINES.md#barber-2026-10-11)) and converts the regions to the bench annotation format in memory, then applies the common cleanup (overrides keyed `barber` in `gt-overrides.json`, de-duplication). `tools/bench/py_bench.py` has the same loader (`map_region`, `legacy_payload`, `load_barber_sources`), so zxing-cpp is measured identically.
+`tools/bench/src/barber.rs` reads the VIA files directly (nothing is written to `data/`): `bench data/barber` detects `Annotations/VIA`, makes one dataset per project (the per-source tables of [BASELINES](BASELINES.md#barber-2026-10-11)) and converts the regions to the bench annotation format in memory, then applies the common cleanup (overrides keyed `barber` in `gt-overrides.json`, de-duplication). `tools/bench/py_bench.py` has the same loader (`map_region`, `legacy_payload`, `load_barber_sources`), so zxing-cpp (and zbar, `--engine zbar`) are measured identically.
 
 Rules:
 
@@ -86,7 +86,7 @@ Every dataset directory (or sample directory) holds an `annotations.json`:
 }
 ```
 
-`format` spellings vary by source (`EAN13`/`EAN_13`, `QRCode`/`QR_CODE`) and are normalized in `tools/bench/src/groundtruth.rs`; a format with no breader counterpart is counted as unsupported. Matching is by symbology and data (`tools/bench/src/matching.rs`); positions are informational. GS1 DataBar labels are raw element strings (`0104412345678909`), other readers print `(01)04412345678909` or keep FNC1 as GS (and rxing omits the `01` of Omnidirectional); the matching drops `(`, `)` and GS on both sides (`py_bench.py` the same). `DATABAR`, `DATABAR_LIMITED` and `DATABAR_EXPANDED` labels are supported; the stacked formats stay unsupported (`rss14-2`, `rssexpandedstacked-*`). Codabar labels (zxing-cpp samples `codabar-1`, `codabar-2`) and the other engines' reads spell the start and stop characters (`A1234B`); the library returns the data between them, so the matching drops a leading and a trailing A-D from both sides of a Codabar comparison (`py_bench.py` does the same). No Dynamsoft label is Codabar.
+`format` spellings vary by source (`EAN13`/`EAN_13`, `QRCode`/`QR_CODE`) and are normalized in `tools/bench/src/groundtruth.rs`; a format with no breader counterpart is counted as unsupported. Matching is by symbology and data (`tools/bench/src/matching.rs`); positions are informational. GS1 DataBar labels are raw element strings (`0104412345678909`), other readers print `(01)04412345678909` or keep FNC1 as GS (and rxing omits the `01` of Omnidirectional); the matching drops `(`, `)` and GS on both sides (`py_bench.py` the same, for zxing-cpp and zbar). `DATABAR`, `DATABAR_LIMITED` and `DATABAR_EXPANDED` labels are supported; the stacked formats stay unsupported (`rss14-2`, `rssexpandedstacked-*`). Codabar labels (zxing-cpp samples `codabar-1`, `codabar-2`) and the other engines' reads spell the start and stop characters (`A1234B`); the library returns the data between them, so the matching drops a leading and a trailing A-D from both sides of a Codabar comparison (`py_bench.py` does the same). No Dynamsoft label is Codabar.
 
 Cleanup on load, applied identically by every engine:
 
