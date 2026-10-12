@@ -71,7 +71,7 @@
       },
       "QR Code": {
         "expected": 28,
-        "read": 19,
+        "read": 20,
         "false_positives": 0
       },
       "UPC-A": {
@@ -83,7 +83,7 @@
     "Dubska": {
       "QR Code": {
         "expected": 802,
-        "read": 450,
+        "read": 561,
         "false_positives": 0
       }
     },
@@ -245,7 +245,7 @@
     "Szentandrasi-Dubska QR": {
       "QR Code": {
         "expected": 227,
-        "read": 182,
+        "read": 187,
         "false_positives": 0
       }
     },
