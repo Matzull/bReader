@@ -411,3 +411,70 @@ First measurement of the DataBar decoders ([design](symbologies/linear.md#gs1-da
 - **Misses.** Stacked symbols (the 7 of `rss14-2`, which rxing and zxing-cpp read; `rssexpandedstacked-*` are unsupported labels). `rss14-1` images 8, 11 and 13 to 15 are blurred photographs: 1 to 2 px modules whose narrow bars merge; Balanced reads 10 of 13, zxing-cpp 11. Images that touch the symbol with the border (`rss14-1/4`, `/5`, `rssexpanded-1/*`) are read through the cut-guard rule. Synthetic misses are rotated, perspective and blurred images at Fast.
 - **Latency** (`challenging-images`, p50 of 5 interleaved runs, two binaries with and without the decoder doing any work, indicative on a shared machine): Fast 5.82 / 5.80 / 6.01 / 6.18 / 5.91 ms with against 5.83 / 5.98 / 5.88 / 5.92 / 5.68 without; Balanced 20.71 / 20.90 / 23.25 / 20.88 / 19.57 with against 19.77 / 20.33 / 22.78 / 20.88 / 20.09 without. Mean cost +0.05 ms at Fast (limit 0.3 ms) and +0.2 ms at Balanced, so the decoders run at every effort. An earlier version without the screens (finder A for Expanded, narrow elements for Omnidirectional) cost +10 ms p95 at Balanced.
 - **Baselines.** `zxing-samples-{fast,balanced,exhaustive}.json` rewritten, additions only (the six DataBar sets); the synthetic baselines are regenerated after the merge.
+
+## Phase D latency (2026-10-12)
+
+What the Phase D readers (PDF417, Aztec, Codabar, Micro QR, rMQR, GS1 DataBar) and the UPC-E guard fix cost, against the [v1 targets](#v1-targets-confirmed-2026-10-07). Machine: AMD Ryzen 5 5500U (6 cores / 12 threads), idle (`uptime` and `ps` checked before each block: no cargo, rustc or bench process), release builds, the library single-threaded, decode call only.
+
+Method:
+
+- **post-D** is main at `bc63f72`. **pre-D** is the same tree with `breader`, `breader-qr`, `breader-linear` and `breader-datamatrix` taken from `10c37d7` (the last commit before the PDF417 work; it keeps the QR / Data Matrix sampling retries and the edge relocation, so only Phase D is measured). Four struct literals and one `match` arm were patched in the pre-D copy so that it builds against the newer `breader-core` and the current bench; this was done in a scratch worktree, removed afterwards. Each binary has its own target dir.
+- Interleaved runs, old then new, 5 rounds, for each dataset and effort: `bench <set> --effort E` (`data/dynamsoft/challenging-images`, `data/barber --subset 8` as in `tools/check-regression.sh --barber`, `data/synth` seed 1). The tables give the median over the 5 runs of the whole-set p50 / p95. Run-to-run spread of the p50 is 0.05 ms or less.
+- zxing-cpp 3.1.1, default options, `tools/bench/py_bench.py` (challenging-images 3 runs, BarBeR subset 3 runs).
+- Fast at 1080p: `video-bench data/dynamsoft/video-based-testing --engines fast,balanced --filter 1080p`, 3 interleaved rounds, ten 1080p videos, per-frame latency (the method of the target). Median over rounds of the per-video p50.
+- Profile: a scratch program (outside the repository) scans challenging-images at Fast / Balanced with one symbology set per run, and with "all minus X". No `perf` here (`perf_event_paranoid` is 4).
+
+Latency, p50 / p95 in ms:
+
+| Dataset | Effort | pre-D | post-D | change of p50 | zxing-cpp |
+|---|---|---|---|---|---|
+| challenging-images | Fast | 4.68 / 32.4 | 5.39 / 36.3 | +15 % | |
+| challenging-images | Balanced | 16.93 / 110.5 | 19.55 / 125.9 | +15 % | 22.7 / 326 |
+| BarBeR 1/8 subset | Fast | 5.49 / 21.7 | 6.00 / 24.2 | +9 % | |
+| BarBeR 1/8 subset | Balanced | 19.79 / 86.5 | 21.80 / 100.4 | +10 % | 32.9 / 198 |
+| synth seed 1 | Fast | 1.48 / 5.9 | 1.75 / 8.2 | +18 % | |
+| synth seed 1 | Balanced | 5.44 / 27.3 | 6.08 / 37.0 | +12 % | |
+
+On these sets post-D reads more (it has the new classes): challenging-images Fast 327 -> 330 and Balanced 405 -> 408 of 448; BarBeR subset Fast 671 -> 674 and Balanced 782 -> 785 of 1093; synth Fast 244 -> 426 and Balanced 283 -> 482 of 487. False positives of breader: 0 in every run.
+
+Fast at 1080p (video-bench, per-frame p50 ms; the median over the ten videos is 6.8 pre-D, 7.3 post-D):
+
+| Video | pre-D Fast | post-D Fast | pre-D Balanced | post-D Balanced |
+|---|---|---|---|---|
+| batch_EAN13 | 5.0 | 5.3 | 13.0 | 13.9 |
+| batch_code39 | 11.0 | 15.9 | 51.6 | 75.4 |
+| batch_dark_environment_1d | 5.3 | 5.4 | 13.6 | 13.9 |
+| batch_datamatrix | 9.7 | 10.9 | 53.7 | 60.7 |
+| batch_inverted_datamatrix | 8.3 | 9.1 | 43.4 | 47.4 |
+| batch_rotated_small_pdf417 | 8.4 | 11.3 | 32.0 | 48.7 |
+| damaged_qrcode | 8.8 | 9.8 | 19.1 | 21.4 |
+| reflective_surface_qrcode | 4.3 | 5.4 | 13.7 | 17.3 |
+| rotated_vertical_ITF | 5.2 | 5.5 | 13.6 | 14.2 |
+| wide_to_close_datamatrix | 4.3 | 4.3 | 16.1 | 16.3 |
+
+Cost by reader (challenging-images, mean ms per image over 65 images of 3 MP, single run of 7 repetitions, minimum; "all minus X" against all post-D readers, so the shared preprocessing is not charged to X):
+
+| Reader | Fast | Balanced |
+|---|---|---|
+| Aztec | +0.70 | +2.4 |
+| GS1 DataBar (three classes) | +0.22 | +2.1 |
+| Codabar | +0.15 | +1.6 |
+| PDF417 | +0.14 | +1.5 |
+| rMQR | +0.14 | +0.6 |
+| Micro QR | +0.01 | +0.05 |
+| all six together | +1.55 (9.63 -> 11.18) | +8.8 (35.8 -> 44.5) |
+
+The Fast numbers of the scratch program are the stages-style means (9.63 / 11.18), not the p50 of the table above. The six readers cost +16 % of the mean at Fast and +25 % at Balanced on 3 MP photos; a 1080p video frame pays about +1 ms at Fast on most videos and +3 to +5 ms on the three that already do work (code39, rotated pdf417, datamatrix).
+
+Targets:
+
+| Target | Result |
+|---|---|
+| Balanced p50 <= zxing-cpp | Met. challenging-images 19.55 against 22.7 ms, BarBeR subset 21.80 against 32.9 ms. The margin on challenging-images fell from about 5.8 ms to 3.1 ms. |
+| Fast <= 10 ms at 1080p | Not clean. 7 of 10 videos stay under 10 ms (median video 7.3 ms), but `batch_code39` (15.9), `batch_rotated_small_pdf417` (11.3) and `batch_datamatrix` (10.9) exceed it; before Phase D only `batch_code39` (11.0) did. The 3 MP stills are at 5.4 ms (challenging-images Fast p50). |
+| 0 false positives | Met for breader (0 on challenging-images, BarBeR subset, synth at Fast and Balanced). zxing-cpp has 17 on the BarBeR subset and 1 on challenging-images. |
+| Read rate >= zxing-cpp per class | Not met on real photos, unchanged by Phase D: challenging-images ITF 0 of 4 against 4 (Balanced; QR 229 against 220, UPC-A 71 against 70, Code 128 41 against 28, Data Matrix 45 against 44, PDF417 3 against 3); BarBeR subset QR 113 against 130, Code 39 11 against 18, ITF 9 against 13 (EAN-13 524 against 496, Code 128 67 against 51; total 785 against 763). Synth classes were not compared here. |
+
+The Fast regression is above 10 % on challenging-images (+15 %) and synth (+18 %), BarBeR is +9 %. Aztec is the largest single cost at Fast; the Fast pass still runs all six readers (Codabar, DataBar, PDF417, rMQR cost 0.14 to 0.22 ms each). Nothing was changed in the reader.
+
+Note: the Python package in the shared `pyvenv` is an older build of `breader-py`; its numbers (2 false positives on challenging-images) are not those of the Rust bench and were not used.

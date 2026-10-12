@@ -53,16 +53,16 @@ A scan is a list of passes. A pass is an image variant (original or a preprocess
 | `Balanced` | original and first preprocessor, first two binarizers, both polarities | Default |
 | `Exhaustive` | every preprocessor and binarizer, both polarities | Hard stills |
 
-Measured with the default pipeline on an AMD Ryzen 5 5500U (release build, single thread, one image at a time, decode call only), see [BASELINES.md](BASELINES.md):
+Measured with the default pipeline on an AMD Ryzen 5 5500U (release build, single thread, one image at a time, decode call only), see [BASELINES.md](BASELINES.md). Fast and Balanced rows are re-measured with all Phase D readers on (2026-10-12, [Phase D latency](BASELINES.md#phase-d-latency-2026-10-12)); Exhaustive was not re-measured:
 
 | Dataset | Effort | Read rate | False positives | Latency p50 / p95 (ms) |
 |---|---|---|---|---|
-| challenging-images (392 symbols) | Fast | 71.2 % | 0 | 2.1 / 25.4 |
-| challenging-images | Balanced | 88.8 % | 0 | 9.4 / 90.9 |
-| challenging-images | Exhaustive | 87.8 % | 0 | 22.2 / 246.0 |
-| synth (228 symbols) | Fast | 84.2 % | 0 | 0.9 / 6.6 |
-| synth | Balanced | 97.8 % | 0 | 3.9 / 25.1 |
-| synth | Exhaustive | 98.2 % | 0 | 8.1 / 59.9 |
+| challenging-images (448 symbols) | Fast | 73.7 % | 0 | 5.4 / 36.3 |
+| challenging-images | Balanced | 91.1 % | 0 | 19.6 / 125.9 |
+| challenging-images | Exhaustive | 87.8 % (older run) | 0 | 22.2 / 246.0 (older run) |
+| synth (487 symbols) | Fast | 87.5 % | 0 | 1.75 / 8.2 |
+| synth | Balanced | 99.0 % | 0 | 6.1 / 37.0 |
+| synth | Exhaustive | 98.2 % (older run) | 0 | 8.1 / 59.9 (older run) |
 
 `Exhaustive` is not always better than `Balanced` on real photos: the extra passes cost time and sometimes read different symbols, so measure on your own images.
 
