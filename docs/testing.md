@@ -36,6 +36,8 @@ A gate compares a run with a versioned baseline and fails CI on any regression. 
 - any false positive appears (even when reads went up),
 - the expected count differs (the dataset or its labels changed), or a baseline entry is missing from the run.
 
+Comparison engines are measured outside the gate: rxing and rqrr in `bench --features baselines`, zxing-cpp and zbar in `tools/bench/py_bench.py` (`--engine zxingcpp|zbar|all`, `--subset N` as in the Rust bench). zbar needs the system library (`apt install libzbar0`) and `pip install pyzbar`; its normalisations are listed in [BASELINES](BASELINES.md#zbar-2026-10-13). Run them one at a time, like the other heavy jobs.
+
 Higher read counts and entries not yet in the baseline are only notices. Latency is reported, never gated. `--check` and `--write-baseline` require `--engine breader`, the default escalation and the GT overrides. The implementation is `tools/bench/src/gate.rs`.
 
 ### The BarBeR gate

@@ -57,3 +57,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## zbar (comparison engine, not included)
+
+zbar (LGPL-2.1) is used only at bench time, as an external black-box library through pyzbar (`tools/bench/py_bench.py --engine zbar`). It is not linked into breader, not vendored and not part of any release artifact; no zbar code, table or structure is used in breader, and its sources were not read.

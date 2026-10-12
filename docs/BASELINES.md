@@ -13,7 +13,7 @@ crates/breader-py/.venv/bin/python tools/bench/py_bench.py data/dynamsoft/challe
 
 Datasets are described in [datasets.md](datasets.md); the gates that use them in [testing.md](testing.md#gates).
 
-Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options).
+Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
 ## Dynamsoft `challenging-images`
 
@@ -478,3 +478,33 @@ Targets:
 The Fast regression is above 10 % on challenging-images (+15 %) and synth (+18 %), BarBeR is +9 %. Aztec is the largest single cost at Fast; the Fast pass still runs all six readers (Codabar, DataBar, PDF417, rMQR cost 0.14 to 0.22 ms each). Nothing was changed in the reader.
 
 Note: the Python package in the shared `pyvenv` is an older build of `breader-py`; its numbers (2 false positives on challenging-images) are not those of the Rust bench and were not used.
+
+## zbar (2026-10-13)
+
+zbar is a comparison engine in `tools/bench/py_bench.py` (`--engine zbar`, or `--engine all` for breader, zxing-cpp and zbar). It is used as a black box through its public C API via pyzbar 0.1.9 (`pip install pyzbar`; needs the system library, `apt install libzbar0`; libzbar 0.23). Default settings; `--zbar-all` passes every symbology explicitly, which changed nothing on challenging-images (160 reads, 5 false positives both ways). zbar's own sources were not read. It reads Code 93, EAN-2/5, SQ code and composite codes too; those have no breader counterpart, so labels in them are unsupported and zbar's reads of them are dropped. zbar has no Data Matrix, Aztec, Micro QR, rMQR or DataBar Limited reader, so those labels count as misses for it, as for any engine.
+
+Quirks normalised, so that the comparison is on values and not on spelling (all in `ZbarEngine` and the shared `canonical`):
+
+- UPC-A comes back as UPCA or as EAN-13 with a leading 0, UPC-E as UPCE: folded into EAN-13 on both sides, as for the other engines. ISBN-13 is an EAN-13.
+- ITF is reported at any length (zbar has its own minimum of 6 digits, no list like breader's [D-008](decisions.md#d-008)); no length filter is applied, so its false positives include fragments of real ITF symbols.
+- Payloads are bytes: a non-UTF-8 payload is also offered as Shift JIS and Latin-1 text, because labels hold UTF-8.
+- Codabar comes with its start/stop characters (A to D): dropped from both sides, as for the other engines.
+- DataBar has no AIs: a bare 14-digit DataBar result gets the label's `01` prefix; parentheses of expanded output are dropped on both sides.
+
+Subsets only (not the full BarBeR set), the same day and machine as the zxing-cpp column (the machine was shared with other gates, so latency is indicative; the zxing-cpp numbers agree with Phase D above within 4 %). Reads / expected, false positives, latency p50 / p95 ms. breader Balanced is the committed baseline (`tools/bench/baselines/*-balanced.json`; latency from Phase D where one exists):
+
+| Set | breader Balanced | zxing-cpp | zbar |
+|---|---|---|---|
+| challenging-images | 408 / 448, 0 FP, 19.6 / 126 | 388 / 448, 1 FP, 23.5 / 335 | 160 / 448, 5 FP, 47.4 / 595 |
+| zxing-samples | 676 / 794, 0 FP, not measured | 716 / 794, 69 FP, 1.5 / 8.3 | 450 / 794, 74 FP, 2.0 / 12.1 |
+| BarBeR 1/8 subset | 800 / 1093, 0 FP, 21.8 / 100 | 765 / 1093, 15 FP, 35.2 / 205 | 713 / 1093, 29 FP, 69.4 / 423 |
+| synth seed 1 | 482 / 487, 0 FP, 6.1 / 37 | 381 / 487, 11 FP, 13.3 / 41 | 201 / 487, 43 FP, 16.4 / 88 |
+
+zbar is far behind on the Dynamsoft photos (QR 41 of 234, Code 128 30 of 60; UPC-A 68 of 74 and EAN-13 16 of 18 are close to the others) and on the synthetic sets (it has no Aztec, Data Matrix or Micro QR). On the BarBeR subset it is closer (65 % against 70 % for zxing-cpp and 73 % for breader) and does well on linear codes and the large-QR sources; its latency is the highest of the three on every set but zxing-samples.
+
+False positives of zbar:
+
+- challenging-images: 5 ITF, all pieces of the four real ITF symbols (`28056306` and `03280563` for `0328056306`, `698860`, `188010`, ...): partial reads that the length rule of breader would reject.
+- BarBeR subset: 25 EAN-13 (wrong digits of real symbols, e.g. `8083882032262` against `8083822038262`), 3 ITF, 1 Code 128.
+- zxing-samples: 50 DataBar Expanded (the stacked `rssexpandedstacked-*` labels are unsupported, so any read counts as a false positive, as for zxing-cpp's 64), 9 QR (Japanese samples such as `d-qr.net` whose bytes differ from the label), 11 EAN-13, 3 Code 39 (e.g. `12+A+B`), 1 Code 128.
+- synth: 38 ITF (fragments of ITF symbols on the rotated, perspective, noisy and low-resolution classes), 4 QR, 1 DataBar Expanded.

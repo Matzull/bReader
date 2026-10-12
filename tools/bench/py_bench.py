@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Python-side bench for breader (PyO3 bindings) and zxing-cpp.
+"""Python-side bench for breader (PyO3 bindings), zxing-cpp and zbar (black box, through pyzbar).
 
 Same matching, normalization, timing and report format as the Rust bench. Images are preloaded
 as grayscale numpy arrays; the timed section is the engine call only.
 
-usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|both] [--effort fast|balanced|exhaustive]
-                   [--json out.json] [--no-overrides]
+usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|zbar|both|all] [--effort fast|balanced|exhaustive]
+                   [--json out.json] [--no-overrides] [--subset N] [--zbar-all]
+
+`both` is breader plus zxing-cpp; `all` adds zbar. zbar needs the system libzbar and pyzbar; it runs
+with the library defaults unless --zbar-all names every symbology explicitly (see ZbarEngine).
 """
 import json
 import os
@@ -21,6 +24,10 @@ try:
     import zxingcpp
 except ImportError:
     zxingcpp = None
+try:
+    from pyzbar import pyzbar as pyzbar_mod
+except Exception:  # ImportError, or OSError when libzbar is missing
+    pyzbar_mod = None
 try:
     import breader
 except ImportError:
@@ -125,6 +132,65 @@ class ZxingEngine:
                 pos = r.position
                 quad = [(p.x, p.y) for p in (pos.top_left, pos.top_right, pos.bottom_right, pos.bottom_left)]
                 out.append((self.formats[r.format], data, [text] if text != data else [], quad))
+        return out
+
+
+class ZbarEngine:
+    """zbar through pyzbar, used only as a black box (public API, outputs only).
+
+    Normalisations applied so that the comparison is fair (each is also listed in docs/BASELINES.md):
+    - symbology names are mapped to breader's; ISBN-13 is an EAN-13; Code 93, EAN2, EAN5, ISBN-10, COMPOSITE
+      and SQCODE have no breader counterpart and their reads are dropped (like unmapped zxing formats);
+    - UPC-A / UPC-E arrive as UPCA, UPCE or EAN13 with a leading 0; `canonical` folds all of them to
+      EAN-13 on both sides;
+    - Interleaved 2 of 5 is reported at any length (zbar's own minimum is 6); no length filter is
+      applied, so zbar can read lengths that breader's ITF rejects (D-008);
+    - payloads are bytes; invalid UTF-8 is also offered as Shift JIS and Latin-1 text (labels hold UTF-8);
+    - Codabar start/stop characters (A-D) are dropped on both sides by `canonical`;
+    - DataBar digits come without application identifiers: a bare 14-digit GTIN gets the `01` prefix of
+      the labels; parentheses of expanded output are dropped by `canonical`.
+    Default settings are the library's; `all_enabled` passes every mapped symbology explicitly instead.
+    """
+    name = "zbar (pyzbar)"
+
+    def __init__(self, all_enabled=False):
+        if pyzbar_mod is None:
+            sys.exit("pyzbar or libzbar is not available (pip install pyzbar; apt install libzbar0)")
+        self.formats = {
+            "EAN13": "EAN-13", "ISBN13": "EAN-13", "EAN8": "EAN-8", "UPCA": "UPC-A", "UPCE": "UPC-E",
+            "CODE128": "Code 128", "CODE39": "Code 39", "I25": "ITF",
+            "CODABAR": "Codabar", "DATABAR": "GS1 DataBar", "DATABAR_EXP": "GS1 DataBar Expanded",
+            "QRCODE": "QR Code", "PDF417": "PDF417",
+        }
+        self.symbols = None
+        if all_enabled:
+            self.name = "zbar (pyzbar, all enabled)"
+            S = pyzbar_mod.ZBarSymbol
+            self.symbols = [getattr(S, n) for n in ("EAN13", "ISBN13", "EAN8", "UPCA", "UPCE", "CODE128", "CODE39",
+                                                    "CODE93", "I25", "CODABAR", "DATABAR", "DATABAR_EXP", "QRCODE",
+                                                    "PDF417", "SQCODE", "ISBN10", "EAN2", "EAN5", "COMPOSITE")]
+
+    def read(self, gray):
+        h, w = gray.shape
+        out = []
+        for r in pyzbar_mod.decode((np.ascontiguousarray(gray).tobytes(), w, h), symbols=self.symbols):
+            fmt = self.formats.get(r.type)
+            if fmt is None:
+                continue
+            data = bytes(r.data)
+            alts = []
+            try:
+                data.decode("utf-8")
+            except UnicodeDecodeError:
+                for enc in ("shift_jis", "latin-1"):
+                    try:
+                        alts.append(data.decode(enc).encode("utf-8"))
+                    except UnicodeDecodeError:
+                        pass
+            if fmt == "GS1 DataBar" and len(data) == 14 and data.isdigit():
+                data = b"01" + data
+            pts = [(p.x, p.y) for p in r.polygon] or [(r.rect.left, r.rect.top)]
+            out.append((fmt, data, alts, pts))
         return out
 
 
@@ -761,6 +827,7 @@ def main(argv):
     which = "both"
     effort = "balanced"
     subset = 1
+    zbar_all = False
     while args:
         a = args.pop(0)
         if a == "--json":
@@ -771,19 +838,23 @@ def main(argv):
             effort = args.pop(0)
         elif a == "--no-overrides":
             use_overrides = False
+        elif a == "--zbar-all":
+            zbar_all = True
         elif a == "--subset":
             subset = int(args.pop(0))
         elif root is None:
             root = Path(a)
         else:
             sys.exit(USAGE)
-    if root is None or which not in ("breader", "zxingcpp", "both"):
+    if root is None or which not in ("breader", "zxingcpp", "zbar", "both", "all"):
         sys.exit(USAGE)
     engines = []
-    if which in ("breader", "both"):
+    if which in ("breader", "both", "all"):
         engines.append(BreaderEngine(effort))
-    if which in ("zxingcpp", "both"):
+    if which in ("zxingcpp", "both", "all"):
         engines.append(ZxingEngine())
+    if which in ("zbar", "all"):
+        engines.append(ZbarEngine(zbar_all))
     via = find_barber_via(root)
     work = []
     if via is not None:
@@ -821,7 +892,7 @@ def main(argv):
         doc = {
             "dataset_root": str(root),
             "engines": [
-                {"engine": e.name, "effort": effort if e.name.startswith("breader") else "default",
+                {"engine": e.name, "effort": effort if e.name.startswith("breader") else ("all-enabled" if "all enabled" in e.name else "default"),
                  "datasets": per_dataset[e.name], "total": stats_json(totals[e.name])}
                 for e in engines
             ],
