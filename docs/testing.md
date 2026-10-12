@@ -7,6 +7,7 @@ What protects the project from regressions and false positives, and how to run a
 | Layer | Where | Run |
 |---|---|---|
 | Unit and integration tests | `crates/*/src` (`#[cfg(test)]`), `crates/breader/tests` | `cargo test --workspace` and `cargo test --workspace --features breader/rayon` |
+| Allocation test (NFR-4) | `crates/breader/tests/allocation.rs` (counting allocator; own test binary) | `cargo test --release -p breader --test allocation -- --nocapture`; results in [REQUIREMENTS](REQUIREMENTS.md) NFR-4 |
 | Python tests | `crates/breader-py/tests` (against the installed wheel) | `pytest` after `maturin develop --release`; see [breader-py](../crates/breader-py/README.md) |
 | Regression gate | `tools/bench`, `tools/video-bench`, baselines in `tools/bench/baselines/` | `tools/check-regression.sh [--dynamsoft] [--zxing-samples] [--barber] [--barber-full] [--all]` |
 | Fuzzing | `fuzz/` (nightly toolchain, not a workspace member) | see [fuzz/README.md](../fuzz/README.md) |

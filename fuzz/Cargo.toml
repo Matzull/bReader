@@ -39,6 +39,20 @@ doc = false
 bench = false
 
 [[bin]]
+name = "microqr_grid"
+path = "fuzz_targets/microqr_grid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rmqr_grid"
+path = "fuzz_targets/rmqr_grid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "linear_runs"
 path = "fuzz_targets/linear_runs.rs"
 test = false
@@ -118,6 +132,13 @@ bench = false
 [[bin]]
 name = "aztec_grid"
 path = "fuzz_targets/aztec_grid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "aztec_scan"
+path = "fuzz_targets/aztec_scan.rs"
 test = false
 doc = false
 bench = false

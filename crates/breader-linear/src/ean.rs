@@ -108,6 +108,8 @@ const EAN5_PARITY: [u8; 10] = masks(
 const QUIET_EAN13: f32 = 4.5;
 const QUIET_EAN8: f32 = 5.5;
 const QUIET_UPCE: f32 = 6.5;
+/// Smallest final bar of the UPC-E end guard relative to its module width.
+const UPCE_END_BAR: f32 = 0.8;
 const ADDON_QUIET: f32 = 3.5;
 /// Gap between symbol and supplement, in modules (specified: 7 to 12).
 const ADDON_GAP: (f32, f32) = (5.0, 14.0);
@@ -491,6 +493,8 @@ impl EanDecoder {
             checksum_verified: true,
             short_quiet: false,
             inverted: false,
+            start_stop: None,
+            segments: 0,
         }
     }
 
@@ -555,6 +559,12 @@ impl EanDecoder {
             return None;
         }
         let read = read_layout(runs, j, &UPCE, started)?;
+        // The last bar of a half-read EAN-13 is the first bar of a digit,
+        // clipped where a slanted scanline leaves the bars.
+        let last = j + UPCE.total - 1;
+        if read.cal.adjusted(runs, last) < UPCE_END_BAR * read.cal.end() {
+            return None;
+        }
         let parity = parity_mask(&read.left);
         let (ns, check) = (0..2u8).find_map(|ns| {
             let want = |c: usize| {
@@ -1117,6 +1127,22 @@ mod tests {
         modules.extend([false, true, true]);
         let p = Render::px(3.0).profile(&modules);
         assert!(decode(&p).is_empty());
+    }
+
+    #[test]
+    fn half_ean13_cut_by_a_slanted_line_is_not_upce() {
+        // The left half of 5909990748518 is a valid UPC-E 19099905.
+        let modules = ean13_modules("5909990748518");
+        let render = Render::px(4.0);
+        let whole = render.profile(&modules[..51]);
+        let hits = decode(&whole);
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits[0].symbology, Symbology::UpcE);
+
+        let mut cut = whole;
+        let last = cut.iter().rposition(|&v| v < 128).unwrap();
+        cut[last - 1..=last].fill(255);
+        assert!(decode(&cut).is_empty());
     }
 
     #[test]

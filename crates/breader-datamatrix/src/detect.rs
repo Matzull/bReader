@@ -1,9 +1,7 @@
 //! Candidate search: connected components on a pooled binary plane and
 //! quadrilateral fitting.
 
-use breader_core::{BitMatrix, Point};
-
-use crate::plane::Plane;
+use breader_core::{BitMatrix, Plane, Point};
 
 /// Smallest accepted component: cells and bounding box side.
 const MIN_CELLS: u32 = 16;

@@ -567,6 +567,18 @@
           "text": "1"
         },
         "reason": "The QUANTITY barcode (caption 'Q 1') is labelled as a 2-digit add-on with the caption text. On a 6x enlarged crop it has 13 bars: start, one data character, check, stop (3 + 3 + 3 + 4), i.e. a Code 128 symbol holding one character, not an EAN-2 and not 'Q1' (which would have 16 bars). The caption's Q is the data identifier, which this label does not encode. breader and zxing-cpp both read '1'."
+      },
+      {
+        "file": "Special_0177.jpg",
+        "from": {
+          "format": "AZTEC",
+          "text": "BL07676827455"
+        },
+        "to": {
+          "format": "UNDECODABLE",
+          "text": "BL07676827455"
+        },
+        "reason": "The Aztec of this Trenitalia ticket is labelled with the printed ticket number (BL 6827454 ... under the caption), which is not what a ticket Aztec encodes: the symbol is clean and Reed-Solomon-valid and carries a binary payload, read identically by breader and zxing-cpp (it starts with the bytes 14 C2 08 10 like the other Trenitalia Aztecs of the set). Its true value is unknown, so the region is masked (undecodable) instead of expected."
       }
     ]
   }

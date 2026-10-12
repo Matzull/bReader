@@ -84,7 +84,7 @@ pub struct Gs1Element {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum SymbolMeta {
-    /// QR Code details.
+    /// QR Code and Micro QR Code details.
     Qr(QrMeta),
     /// 1D symbology details.
     Linear(LinearMeta),
@@ -111,6 +111,9 @@ pub struct DataMatrixMeta {
     pub eci: Vec<u32>,
     /// Structured Append: (position, total, file id) when present; position and total are 1-based.
     pub structured_append: Option<(u8, u8, u16)>,
+    /// The symbol programs the reader (Reader Programming codeword first);
+    /// applications that do not expect it should ignore it.
+    pub reader_init: bool,
 }
 
 /// Details of a decoded Aztec Code symbol.
@@ -131,8 +134,11 @@ pub struct AztecMeta {
     pub erasures: u32,
     /// The symbol was read mirrored (transposed).
     pub mirrored: bool,
-    /// Value 0 to 255 of an Aztec Rune; the payload is its decimal text.
+    /// Value 0 to 255 of an Aztec Rune; the payload is its three-digit decimal text.
     pub rune: Option<u8>,
+    /// Reader initialisation symbol (a one-layer symbol that flags the reader
+    /// to be programmed by its data).
+    pub reader_init: bool,
     /// ECI designators in order of appearance.
     pub eci: Vec<u32>,
 }
@@ -154,6 +160,9 @@ pub struct Pdf417Meta {
     pub compact: bool,
     /// Macro PDF417 control block, when the symbol is part of a file.
     pub macro_pdf417: Option<MacroPdf417>,
+    /// The symbol programs the reader (codeword 921 first); applications that
+    /// do not expect it should ignore it.
+    pub reader_init: bool,
 }
 
 /// Macro PDF417 control block: the position of a symbol in a multi-symbol file.
@@ -192,16 +201,24 @@ pub enum EcLevel {
     Q,
     /// About 30 %.
     H,
+    /// Error detection only, no correction (Micro QR version M1).
+    DetectionOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// Details of a decoded QR Code.
+/// Details of a decoded QR Code, Micro QR Code or rMQR Code.
 pub struct QrMeta {
-    /// Symbol version, 1 to 40.
+    /// Symbol version, 1 to 40. For [`Symbology::MicroQr`](crate::Symbology::MicroQr)
+    /// 1 to 4 for M1 to M4; for [`Symbology::Rmqr`](crate::Symbology::Rmqr) 1 to 32,
+    /// the version indicator plus one (R7x43 is 1, R17x139 is 32).
     pub version: u8,
-    /// Error correction level.
+    /// Modules per row.
+    pub width: u16,
+    /// Modules per column (equal to `width` for QR and Micro QR).
+    pub height: u16,
+    /// Error correction level; [`EcLevel::DetectionOnly`] for Micro QR M1.
     pub ec_level: EcLevel,
-    /// Data mask pattern, 0 to 7.
+    /// Data mask pattern, 0 to 7 (0 to 3 for Micro QR; always 0 for rMQR, which has one fixed pattern).
     pub mask: u8,
     /// Codeword errors fixed by Reed-Solomon.
     pub errors_corrected: u32,
@@ -220,4 +237,10 @@ pub struct LinearMeta {
     pub checksum_verified: bool,
     /// Independent scanlines that produced this exact result.
     pub lines_agreeing: u16,
+    /// Codabar start and stop characters (`b'A'..=b'D'`), which `data`
+    /// leaves out. `None` for other symbologies.
+    pub codabar_start_stop: Option<(u8, u8)>,
+    /// GS1 DataBar Expanded: symbol characters in the row, check character
+    /// included (4 to 22). `None` for other symbologies.
+    pub databar_segments: Option<u8>,
 }

@@ -251,8 +251,8 @@
     },
     "ZVZ-real": {
       "Aztec": {
-        "expected": 15,
-        "read": 0,
+        "expected": 14,
+        "read": 11,
         "false_positives": 0
       },
       "Code 128": {

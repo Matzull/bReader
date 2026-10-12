@@ -33,6 +33,12 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::DataMatrix => "datamatrix",
         Symbology::Pdf417 => "pdf417",
         Symbology::Aztec => "aztec",
+        Symbology::Codabar => "codabar",
+        Symbology::MicroQr => "micro-qr",
+        Symbology::Rmqr => "rmqr",
+        Symbology::DataBar => "databar",
+        Symbology::DataBarLimited => "databar-limited",
+        Symbology::DataBarExpanded => "databar-expanded",
         _ => s.name(),
     }
 }
@@ -42,7 +48,7 @@ fn parse_symbology(name: &str) -> PyResult<Symbology> {
     Symbology::ALL
         .iter()
         .copied()
-        .find(|s| symbology_id(*s) == key || (key == "qrcode" && *s == Symbology::Qr))
+        .find(|s| symbology_id(*s).replace('-', "") == key || (key == "qrcode" && *s == Symbology::Qr))
         .ok_or_else(|| {
             let known: Vec<_> = Symbology::ALL.iter().map(|s| symbology_id(*s)).collect();
             value_err(format!(
@@ -183,7 +189,7 @@ impl From<CoreSymbol> for Symbol {
 
 #[pymethods]
 impl Symbol {
-    /// Short symbology id: "qr", "ean13", "ean8", "upca", "upce", "code128", "code39" or "itf".
+    /// Short symbology id: "qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec" or "codabar".
     #[getter]
     fn symbology(&self) -> &str {
         self.symbology
@@ -251,6 +257,8 @@ impl Symbol {
             SymbolMeta::Qr(m) => {
                 d.set_item("kind", "qr")?;
                 d.set_item("version", m.version)?;
+                d.set_item("width", m.width)?;
+                d.set_item("height", m.height)?;
                 d.set_item("ec_level", format!("{:?}", m.ec_level))?;
                 d.set_item("mask", m.mask)?;
                 d.set_item("errors_corrected", m.errors_corrected)?;
@@ -262,6 +270,12 @@ impl Symbol {
                 d.set_item("addon", m.addon.as_deref())?;
                 d.set_item("checksum_verified", m.checksum_verified)?;
                 d.set_item("lines_agreeing", m.lines_agreeing)?;
+                d.set_item(
+                    "codabar_start_stop",
+                    m.codabar_start_stop
+                        .map(|(a, b)| (char::from(a).to_string(), char::from(b).to_string())),
+                )?;
+                d.set_item("databar_segments", m.databar_segments)?;
             }
             SymbolMeta::DataMatrix(m) => {
                 d.set_item("kind", "datamatrix")?;
@@ -271,6 +285,7 @@ impl Symbol {
                 d.set_item("mirrored", m.mirrored)?;
                 d.set_item("eci", m.eci.clone())?;
                 d.set_item("structured_append", m.structured_append)?;
+                d.set_item("reader_init", m.reader_init)?;
             }
             SymbolMeta::Pdf417(m) => {
                 d.set_item("kind", "pdf417")?;
@@ -280,6 +295,7 @@ impl Symbol {
                 d.set_item("errors_corrected", m.errors_corrected)?;
                 d.set_item("erasures", m.erasures)?;
                 d.set_item("compact", m.compact)?;
+                d.set_item("reader_init", m.reader_init)?;
                 match &m.macro_pdf417 {
                     Some(mc) => {
                         let md = PyDict::new(py);
@@ -308,6 +324,7 @@ impl Symbol {
                 d.set_item("erasures", m.erasures)?;
                 d.set_item("mirrored", m.mirrored)?;
                 d.set_item("rune", m.rune)?;
+                d.set_item("reader_init", m.reader_init)?;
                 d.set_item("eci", m.eci.clone())?;
             }
             _ => d.set_item("kind", "unknown")?,

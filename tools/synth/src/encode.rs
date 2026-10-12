@@ -8,6 +8,7 @@ use qrcode::QrCode;
 use qrcode::types::{Color, EcLevel, Version};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
+use rxing::aztec::encoder::aztec_encoder;
 use rxing::pdf417::encoder::PDF417;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +22,13 @@ pub enum Sym {
     Itf,
     DataMatrix,
     Pdf417,
+    Aztec,
+    Codabar,
+    MicroQr,
+    Rmqr,
+    DataBar,
+    DataBarLimited,
+    DataBarExpanded,
 }
 
 impl Sym {
@@ -58,6 +66,13 @@ impl Sym {
             Sym::Itf => "ITF",
             Sym::DataMatrix => "DATAMATRIX",
             Sym::Pdf417 => "PDF417",
+            Sym::Aztec => "AZTEC",
+            Sym::Codabar => "CODABAR",
+            Sym::MicroQr => "MICRO_QR_CODE",
+            Sym::Rmqr => "RMQR_CODE",
+            Sym::DataBar => "DATABAR",
+            Sym::DataBarLimited => "DATABAR_LIMITED",
+            Sym::DataBarExpanded => "DATABAR_EXPANDED",
         }
     }
 }
@@ -236,7 +251,16 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             let t = to_text(&d);
             (t.clone(), TF::interleaved(&t).expect(fail).encode())
         }
-        Sym::Qr | Sym::DataMatrix | Sym::Pdf417 => unreachable!("not linear"),
+        Sym::Qr
+        | Sym::DataMatrix
+        | Sym::Pdf417
+        | Sym::Aztec
+        | Sym::Codabar
+        | Sym::MicroQr
+        | Sym::Rmqr
+        | Sym::DataBar
+        | Sym::DataBarLimited
+        | Sym::DataBarExpanded => unreachable!("not linear"),
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
@@ -368,10 +392,369 @@ pub fn encode_pdf417(rng: &mut ChaCha8Rng) -> Encoded {
     }
 }
 
+/// Layer choices of the Aztec images: negative for a compact symbol with that
+/// many layers, positive for a full-range one.
+pub const AZTEC_LAYERS: [i32; 14] = [-1, 2, -2, 3, -3, 5, -4, 4, 8, 6, 11, 7, 15, 10];
+
+fn aztec_payload(rng: &mut ChaCha8Rng, len: usize) -> String {
+    let text = match rng.random_range(0..4u8) {
+        0 => to_text(&digits(rng, len)),
+        1 => pick_string(rng, &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789"), len),
+        2 => pick_string(rng, &pool(BYTE_ASCII), len),
+        _ => {
+            let head = pick_string(rng, &pool("abcdefghijklmnopqrstuvwxyz"), 5);
+            format!("{head}{}", to_text(&digits(rng, len)))
+        }
+    };
+    text.trim().to_string()
+}
+
+/// Aztec Code with the layer count of `AZTEC_LAYERS[pick]`, filled to a
+/// random share of its capacity; `mirrored` transposes the modules (the encoder
+/// is rxing's, as in the unit tests).
+pub fn encode_aztec(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Encoded {
+    let layers = AZTEC_LAYERS[pick % AZTEC_LAYERS.len()];
+    let l = layers.unsigned_abs() as usize;
+    let bits = (if layers < 0 { 88 } else { 112 } + 16 * l) * l;
+    let mut len = (bits * 5 / 60).max(2) * rng.random_range(40..=100usize) / 100;
+    let ec = rng.random_range(23..=40u32);
+    loop {
+        let text = aztec_payload(rng, len.max(1));
+        if !text.is_empty()
+            && let Ok(code) = aztec_encoder::encode_bytes(text.as_bytes(), ec, layers)
+            && code.getLayers() == l as u32
+            && code.isCompact() == (layers < 0)
+        {
+            let n = code.getSize() as usize;
+            let m = code.getMatrix();
+            let mut modules = vec![false; n * n];
+            for y in 0..n {
+                for x in 0..n {
+                    let (r, c) = if mirrored { (x, y) } else { (y, x) };
+                    modules[r * n + c] = m.get(x as u32, y as u32);
+                }
+            }
+            let mut e = Encoded::matrix(text, Sym::Aztec.label(), modules, n);
+            e.qz_x = 2.0;
+            e.qz_y = 2.0;
+            return e;
+        }
+        len = (len * 4 / 5).max(1);
+    }
+}
+
+/// Codabar characters and their element widths (`w` wide), as in the
+/// specification table.
+const CODABAR: [(char, &str); 20] = [
+    ('0', "nnnnnww"),
+    ('1', "nnnnwwn"),
+    ('2', "nnnwnnw"),
+    ('3', "wwnnnnn"),
+    ('4', "nnwnnwn"),
+    ('5', "wnnnnwn"),
+    ('6', "nwnnnnw"),
+    ('7', "nwnnwnn"),
+    ('8', "nwwnnnn"),
+    ('9', "wnnwnnn"),
+    ('-', "nnnwwnn"),
+    ('$', "nnwwnnn"),
+    (':', "wnnnwnw"),
+    ('/', "wnwnnnw"),
+    ('.', "wnwnwnn"),
+    ('+', "nnwnwnw"),
+    ('A', "nnwwnwn"),
+    ('B', "nnnwnww"),
+    ('C', "nwnwnnw"),
+    ('D', "nnnwwwn"),
+];
+
+/// Codabar with start and stop characters (kept in the label, as the
+/// zxing-cpp samples spell it), wide elements of 2 or 3 modules.
+fn encode_codabar(rng: &mut ChaCha8Rng) -> Encoded {
+    let guards = pool("ABCD");
+    let len = rng.random_range(4..=12);
+    let body = pick_string(rng, &pool("0123456789-$:/.+"), len);
+    let text = format!(
+        "{}{body}{}",
+        guards[rng.random_range(0..4)],
+        guards[rng.random_range(0..4)]
+    );
+    let wide = rng.random_range(2..=3usize);
+    let mut bars: Vec<u8> = Vec::new();
+    for (i, ch) in text.chars().enumerate() {
+        if i > 0 {
+            bars.push(0);
+        }
+        let (_, p) = CODABAR.iter().find(|(c, _)| *c == ch).expect("table entry");
+        for (k, b) in p.bytes().enumerate() {
+            let w = if b == b'w' { wide } else { 1 };
+            bars.extend(std::iter::repeat_n(u8::from(k % 2 == 0), w));
+        }
+    }
+    let height = linear_height(rng, bars.len());
+    Encoded::linear(text, Sym::Codabar.label(), &bars, height)
+}
+
+/// Micro QR versions and levels of the images. M3-L is left out: the
+/// encoder's M3-L symbols are not valid (a real one is read by the decoder
+/// and by zxing-cpp, the encoder's are not).
+pub const MICRO_QR_VARIANTS: [(i16, EcLevel); 7] = [
+    (1, EcLevel::L),
+    (2, EcLevel::L),
+    (2, EcLevel::M),
+    (3, EcLevel::M),
+    (4, EcLevel::L),
+    (4, EcLevel::M),
+    (4, EcLevel::Q),
+];
+
+/// The encoder's padding underflows for M3 data that leaves 4 to 6 bits of
+/// the last full codeword free, so such payloads are skipped (in a release
+/// build the subtraction would wrap and the padding loop would not end).
+fn micro_code(data: &[u8], version: i16, level: EcLevel) -> Option<QrCode> {
+    let v = Version::Micro(version);
+    let mut bits = qrcode::bits::Bits::new(v);
+    bits.push_optimal_data(data).ok()?;
+    if version == 3 && (58..=60).contains(&bits.len()) {
+        return None;
+    }
+    QrCode::with_version(data, v, level).ok()
+}
+
+/// Micro QR Code of `MICRO_QR_VARIANTS[pick]`, filled to a random share of
+/// its capacity; `mirrored` transposes the modules.
+pub fn encode_microqr(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Encoded {
+    let (version, level) = MICRO_QR_VARIANTS[pick % MICRO_QR_VARIANTS.len()];
+    let mut len = match version {
+        1 => 5,
+        2 => 8,
+        3 => 12,
+        _ => 24,
+    } * rng.random_range(50..=100usize)
+        / 100;
+    loop {
+        let kind = if version == 1 {
+            0
+        } else {
+            rng.random_range(0..3u8)
+        };
+        let text = match kind {
+            0 => to_text(&digits(rng, len.max(1))),
+            1 => pick_string(
+                rng,
+                &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789"),
+                len.max(1),
+            ),
+            _ if version >= 3 => pick_string(rng, &pool(BYTE_ASCII), len.max(1)),
+            _ => to_text(&digits(rng, len.max(1))),
+        };
+        let text = text.trim().to_string();
+        if !text.is_empty()
+            && let Some(code) = micro_code(text.as_bytes(), version, level)
+        {
+            let n = code.width();
+            let colors = code.to_colors();
+            let mut modules = vec![false; n * n];
+            for y in 0..n {
+                for x in 0..n {
+                    let (r, c) = if mirrored { (x, y) } else { (y, x) };
+                    modules[r * n + c] = colors[y * n + x] == Color::Dark;
+                }
+            }
+            let mut e = Encoded::matrix(text, Sym::MicroQr.label(), modules, n);
+            e.qz_x = 2.0;
+            e.qz_y = 2.0;
+            return e;
+        }
+        len = (len * 4 / 5).max(1);
+    }
+}
+
+/// rMQR versions of the images: all 32 sizes at levels M and H.
+pub const RMQR_VARIANTS: usize = 64;
+
+fn rmqr_version(i: usize) -> qrcode_generator::rmqr::Version {
+    use qrcode_generator::rmqr::Version::*;
+    [
+        R7x43, R7x59, R7x77, R7x99, R7x139, R9x43, R9x59, R9x77, R9x99, R9x139, R11x27, R11x43,
+        R11x59, R11x77, R11x99, R11x139, R13x27, R13x43, R13x59, R13x77, R13x99, R13x139, R15x43,
+        R15x59, R15x77, R15x99, R15x139, R17x43, R17x59, R17x77, R17x99, R17x139,
+    ][i]
+}
+
+/// rMQR Code of `RMQR_VARIANTS[pick]` (version `pick / 2`, level M for even
+/// picks, H for odd ones), filled to a random share of its capacity;
+/// `mirrored` flips the symbol horizontally.
+pub fn encode_rmqr(rng: &mut ChaCha8Rng, pick: usize, mirrored: bool) -> Encoded {
+    use qrcode_generator::Segment;
+    use qrcode_generator::rmqr::{Encoder, ErrorCorrection};
+    let pick = pick % RMQR_VARIANTS;
+    let ec = if pick.is_multiple_of(2) {
+        ErrorCorrection::Medium
+    } else {
+        ErrorCorrection::High
+    };
+    let enc = Encoder::new(ec)
+        .boost_error_correction(false)
+        .version(rmqr_version(pick / 2));
+    let mut len = 400 * rng.random_range(50..=100usize) / 100;
+    loop {
+        let kind = rng.random_range(0..3u8);
+        let text = match kind {
+            0 => to_text(&digits(rng, len.max(1))),
+            1 => pick_string(
+                rng,
+                &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789"),
+                len.max(1),
+            ),
+            _ => pick_string(rng, &pool(BYTE_ASCII), len.max(1)),
+        };
+        let text = text.trim().to_string();
+        if !text.is_empty() {
+            let seg = match kind {
+                0 => Segment::numeric(&text),
+                1 => Segment::alphanumeric(&text),
+                _ => Ok(Segment::bytes(text.as_bytes())),
+            };
+            if let Ok(seg) = seg
+                && let Ok(sym) = enc.encode_segments(&[seg])
+            {
+                let (w, h) = (sym.width(), sym.height());
+                let mut modules = vec![false; w * h];
+                for y in 0..h {
+                    for x in 0..w {
+                        let c = if mirrored { w - 1 - x } else { x };
+                        modules[y * w + c] = sym.module(x, y).unwrap_or(false);
+                    }
+                }
+                return Encoded {
+                    text,
+                    format: Sym::Rmqr.label(),
+                    modules,
+                    cols: w,
+                    rows: h,
+                    cell_h: 1.0,
+                    qz_x: 2.0,
+                    qz_y: 2.0,
+                };
+            }
+        }
+        len = (len * 4 / 5).max(1);
+    }
+}
+
+/// GTIN-13 body (without check digit); Limited needs a first digit of 0 or 1.
+fn gtin_body(rng: &mut ChaCha8Rng, limited: bool) -> String {
+    let mut body = digits_string(rng, 13);
+    if limited {
+        body.replace_range(0..1, if rng.random_bool(0.5) { "0" } else { "1" });
+    }
+    body
+}
+
+fn digits_string(rng: &mut ChaCha8Rng, n: usize) -> String {
+    pick_string(rng, &pool("0123456789"), n)
+}
+
+fn body_check(body: &str) -> char {
+    let sum: u32 = body
+        .bytes()
+        .rev()
+        .enumerate()
+        .map(|(i, d)| u32::from(d - b'0') * if i % 2 == 0 { 3 } else { 1 })
+        .sum();
+    char::from(b'0' + ((10 - sum % 10) % 10) as u8)
+}
+
+/// GS1 element string of an Expanded symbol: the label is the string as
+/// read, FNC1 as GS (0x1D).
+fn expanded_payload(rng: &mut ChaCha8Rng) -> String {
+    let gtin = |rng: &mut ChaCha8Rng| {
+        let b = gtin_body(rng, false);
+        format!("{b}{}", body_check(&b))
+    };
+    let lot = |rng: &mut ChaCha8Rng| {
+        let len = rng.random_range(1..=14);
+        pick_string(rng, &pool("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), len)
+    };
+    let date = |rng: &mut ChaCha8Rng| {
+        format!(
+            "{:02}{:02}{:02}",
+            rng.random_range(20..=40),
+            rng.random_range(1..=12),
+            rng.random_range(1..=28)
+        )
+    };
+    match rng.random_range(0..6) {
+        0 => format!("10{}", lot(rng)),
+        1 => format!("01{}3103{}", gtin(rng), digits_string(rng, 6)),
+        2 => format!("01{}17{}10{}", gtin(rng), date(rng), lot(rng)),
+        3 => format!("01{}10{}\x1d21{}", gtin(rng), lot(rng), lot(rng)),
+        4 => format!("01{}11{}", gtin(rng), date(rng)),
+        _ => format!(
+            "01{}15{}\x1d37{}",
+            gtin(rng),
+            date(rng),
+            digits_string(rng, 3)
+        ),
+    }
+}
+
+/// GS1 DataBar Omnidirectional, Limited or Expanded in one row, from the
+/// independent `anyd` encoder.
+fn encode_databar(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::output::Encoding;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    let fail = "encoder rejected generated payload";
+    let (text, symbol) = match sym {
+        Sym::DataBar => {
+            let b = gtin_body(rng, false);
+            (
+                format!("01{b}{}", body_check(&b)),
+                enc.build_omni(b.as_bytes()),
+            )
+        }
+        Sym::DataBarLimited => {
+            let b = gtin_body(rng, true);
+            (
+                format!("01{b}{}", body_check(&b)),
+                enc.build_limited(b.as_bytes()),
+            )
+        }
+        _ => {
+            let t = expanded_payload(rng);
+            let symbol = enc.build_expanded(t.as_bytes());
+            (t, symbol)
+        }
+    };
+    let Encoding::Linear(p) = enc.encode(&symbol.expect(fail)).expect(fail) else {
+        unreachable!("DataBar is linear");
+    };
+    let bars: Vec<u8> = p.modules.iter().map(|&b| u8::from(b)).collect();
+    let height = linear_height(rng, bars.len());
+    Encoded::linear(text, sym.label(), &bars, height)
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
+        Sym::DataBar | Sym::DataBarLimited | Sym::DataBarExpanded => encode_databar(rng, sym),
+        Sym::Rmqr => {
+            let pick = rng.random_range(0..RMQR_VARIANTS);
+            encode_rmqr(rng, pick, false)
+        }
+        Sym::Codabar => encode_codabar(rng),
+        Sym::MicroQr => {
+            let pick = rng.random_range(0..MICRO_QR_VARIANTS.len());
+            encode_microqr(rng, pick, false)
+        }
         Sym::DataMatrix => encode_dm(rng, DmShape::Square),
         Sym::Pdf417 => encode_pdf417(rng),
+        Sym::Aztec => {
+            let pick = rng.random_range(0..AZTEC_LAYERS.len());
+            encode_aztec(rng, pick, false)
+        }
         Sym::Qr => encode_qr(rng),
         _ => encode_linear(rng, sym),
     }
@@ -402,10 +785,84 @@ mod tests {
     }
 
     #[test]
+    fn aztec_covers_the_layer_choices_and_mirrors() {
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        for (pick, &l) in AZTEC_LAYERS.iter().enumerate() {
+            let a = encode_aztec(&mut rng, pick, false);
+            let n = a.cols;
+            let base = if l < 0 { 11 } else { 14 } + 4 * l.unsigned_abs() as usize;
+            assert!(n >= base && n <= base + 1 + 2 * (base / 2 / 15), "{l}: {n}");
+            assert_eq!(a.modules.len(), n * n);
+        }
+        // Same payload and seed, transposed.
+        let a = encode_aztec(&mut ChaCha8Rng::seed_from_u64(9), 5, false);
+        let b = encode_aztec(&mut ChaCha8Rng::seed_from_u64(9), 5, true);
+        assert_eq!(a.text, b.text);
+        let n = a.cols;
+        assert!((0..n).all(|y| (0..n).all(|x| a.modules[y * n + x] == b.modules[x * n + y])));
+    }
+
+    #[test]
+    fn codabar_has_guards_and_the_expected_width() {
+        let mut rng = ChaCha8Rng::seed_from_u64(4);
+        for _ in 0..50 {
+            let e = encode(&mut rng, Sym::Codabar);
+            assert_eq!(e.format, "CODABAR");
+            let t = e.text.as_bytes();
+            assert!(matches!(t[0], b'A'..=b'D') && matches!(t[t.len() - 1], b'A'..=b'D'));
+            assert!(e.modules[0] && e.modules[e.cols - 1]);
+        }
+    }
+
+    #[test]
+    fn microqr_covers_the_variants_and_mirrors() {
+        let mut rng = ChaCha8Rng::seed_from_u64(4);
+        for (pick, &(v, _)) in MICRO_QR_VARIANTS.iter().enumerate() {
+            let m = encode_microqr(&mut rng, pick, false);
+            assert_eq!(m.cols, 9 + 2 * v as usize);
+            assert!(!m.text.is_empty());
+        }
+        let a = encode_microqr(&mut ChaCha8Rng::seed_from_u64(9), 5, false);
+        let b = encode_microqr(&mut ChaCha8Rng::seed_from_u64(9), 5, true);
+        assert_eq!(a.text, b.text);
+        let n = a.cols;
+        assert!((0..n).all(|y| (0..n).all(|x| a.modules[y * n + x] == b.modules[x * n + y])));
+    }
+
+    #[test]
+    fn rmqr_covers_the_variants_and_mirrors() {
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        for pick in 0..RMQR_VARIANTS {
+            let m = encode_rmqr(&mut rng, pick, false);
+            assert_eq!(m.modules.len(), m.cols * m.rows);
+            assert!([7, 9, 11, 13, 15, 17].contains(&m.rows));
+            assert!([27, 43, 59, 77, 99, 139].contains(&m.cols));
+            assert!(!m.text.is_empty());
+        }
+        let a = encode_rmqr(&mut ChaCha8Rng::seed_from_u64(9), 40, false);
+        let b = encode_rmqr(&mut ChaCha8Rng::seed_from_u64(9), 40, true);
+        assert_eq!(a.text, b.text);
+        let (w, h) = (a.cols, a.rows);
+        assert!(
+            (0..h).all(|y| (0..w).all(|x| a.modules[y * w + x] == b.modules[y * w + w - 1 - x]))
+        );
+    }
+
+    #[test]
     fn all_symbologies_encode_many_times() {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         for _ in 0..200 {
-            for s in Sym::ALL.into_iter().chain([Sym::DataMatrix, Sym::Pdf417]) {
+            for s in Sym::ALL.into_iter().chain([
+                Sym::DataMatrix,
+                Sym::Pdf417,
+                Sym::Aztec,
+                Sym::Codabar,
+                Sym::MicroQr,
+                Sym::Rmqr,
+                Sym::DataBar,
+                Sym::DataBarLimited,
+                Sym::DataBarExpanded,
+            ]) {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);
                 assert!(!e.text.is_empty());

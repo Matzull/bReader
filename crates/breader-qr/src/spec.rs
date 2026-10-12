@@ -81,14 +81,14 @@ const LAYOUTS: [[BlockLayout; 4]; 40] = [
 
 pub(crate) fn block_layout(version: u8, level: EcLevel) -> Option<BlockLayout> {
     let row = LAYOUTS.get(usize::from(version).checked_sub(1)?)?;
-    Some(
-        row[match level {
-            EcLevel::L => 0,
-            EcLevel::M => 1,
-            EcLevel::Q => 2,
-            EcLevel::H => 3,
-        }],
-    )
+    let col = match level {
+        EcLevel::L => 0,
+        EcLevel::M => 1,
+        EcLevel::Q => 2,
+        EcLevel::H => 3,
+        EcLevel::DetectionOnly => return None,
+    };
+    Some(row[col])
 }
 
 /// Misdecode protection codewords reserved by ISO/IEC 18004 for small

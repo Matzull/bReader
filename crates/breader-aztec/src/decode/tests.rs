@@ -413,7 +413,7 @@ fn runes() {
         let g = render_rune(value);
         let d = decode_grid(&g, false).expect("rune");
         assert_eq!(d.rune, Some(value));
-        assert_eq!(d.data, value.to_string().into_bytes());
+        assert_eq!(d.data, format!("{value:03}").into_bytes());
         assert_eq!(d.aim_id, *b"]zC");
         assert_eq!(d.layers, 0);
         assert!(d.compact);

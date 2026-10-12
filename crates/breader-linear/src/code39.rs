@@ -287,6 +287,8 @@ impl LinearDecoder for Code39Decoder {
                         checksum_verified: checked,
                         short_quiet: read.short_quiet,
                         inverted: false,
+                        start_stop: None,
+                        segments: 0,
                     });
                 }
             }

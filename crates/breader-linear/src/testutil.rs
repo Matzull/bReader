@@ -455,6 +455,46 @@ pub fn code39_modules(body: &str, wide: usize, gap: usize) -> Vec<bool> {
     runs_to_modules(&widths)
 }
 
+/// Codabar patterns as in the specification, `w` for wide elements.
+pub const CODABAR_TABLE: [(char, &str); 20] = [
+    ('0', "nnnnnww"),
+    ('1', "nnnnwwn"),
+    ('2', "nnnwnnw"),
+    ('3', "wwnnnnn"),
+    ('4', "nnwnnwn"),
+    ('5', "wnnnnwn"),
+    ('6', "nwnnnnw"),
+    ('7', "nwnnwnn"),
+    ('8', "nwwnnnn"),
+    ('9', "wnnwnnn"),
+    ('-', "nnnwwnn"),
+    ('$', "nnwwnnn"),
+    (':', "wnnnwnw"),
+    ('/', "wnwnnnw"),
+    ('.', "wnwnwnn"),
+    ('+', "nnwnwnw"),
+    ('A', "nnwwnwn"),
+    ('B', "nnnwnww"),
+    ('C', "nwnwnnw"),
+    ('D', "nnnwwwn"),
+];
+
+/// Codabar symbol of `body` between the `start` and `stop` characters. Wide
+/// elements are `wide` modules, narrow ones one module, characters are `gap`
+/// modules apart.
+pub fn codabar_modules(start: char, body: &str, stop: char, wide: usize, gap: usize) -> Vec<bool> {
+    let mut widths = Vec::new();
+    let text = format!("{start}{body}{stop}");
+    for (i, ch) in text.chars().enumerate() {
+        if i > 0 {
+            widths.push(gap);
+        }
+        let (_, p) = CODABAR_TABLE.iter().find(|(c, _)| *c == ch).unwrap();
+        widths.extend(p.bytes().map(|b| if b == b'w' { wide } else { 1 }));
+    }
+    runs_to_modules(&widths)
+}
+
 const ITF_DIGITS: [&str; 10] = [
     "nnwwn", "wnnnw", "nwnnw", "wwnnn", "nnwnw", "wnwnn", "nwwnn", "nnnww", "wnnwn", "nwnwn",
 ];
@@ -547,4 +587,47 @@ pub fn line_options(f: impl FnOnce(&mut breader_core::ScanOptions)) -> crate::de
     let mut o = breader_core::ScanOptions::default();
     f(&mut o);
     crate::decoder::LineOptions::from(&o)
+}
+
+fn databar_modules(encoding: anyd::output::Encoding) -> Vec<bool> {
+    match encoding {
+        anyd::output::Encoding::Linear(p) => p.modules,
+        _ => panic!("linear pattern expected"),
+    }
+}
+
+/// GS1 DataBar Omnidirectional of a 13-digit GTIN body, from the
+/// independent encoder: 96 modules, the first one the guard's space.
+pub fn databar_omni_modules(body: &str) -> Vec<bool> {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    databar_modules(
+        enc.encode(&enc.build_omni(body.as_bytes()).unwrap())
+            .unwrap(),
+    )
+}
+
+/// GS1 DataBar Expanded of a GS1 element string (FNC1 as byte 0x1D) in
+/// one row.
+pub fn databar_expanded_modules(elements: &str) -> Vec<bool> {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    databar_modules(
+        enc.encode(&enc.build_expanded(elements.as_bytes()).unwrap())
+            .unwrap(),
+    )
+}
+
+/// GS1 DataBar Limited of a 13-digit GTIN body (first digit 0 or 1):
+/// 74 modules and five of quiet zone.
+pub fn databar_limited_modules(body: &str) -> Vec<bool> {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    databar_modules(
+        enc.encode(&enc.build_limited(body.as_bytes()).unwrap())
+            .unwrap(),
+    )
 }

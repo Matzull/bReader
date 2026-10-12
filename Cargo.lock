@@ -64,6 +64,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
+name = "anyd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7969de7e22cd8467e88ee8451ac26768c82a955a227079a3039954f04a99072"
+
+[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -203,6 +209,8 @@ version = "0.1.0"
 dependencies = [
  "breader-core",
  "breader-ecc",
+ "datamatrix",
+ "qrcode",
  "rxing",
 ]
 
@@ -248,6 +256,8 @@ dependencies = [
 name = "breader-linear"
 version = "0.1.0"
 dependencies = [
+ "anyd",
+ "barcoders",
  "breader-core",
  "rayon",
 ]
@@ -270,6 +280,7 @@ dependencies = [
  "breader-ecc",
  "breader-imgproc",
  "qrcode",
+ "qrcode-generator",
  "rayon",
 ]
 
@@ -1433,6 +1444,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
+name = "qrcode-generator"
+version = "6.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "892685c7a313d378de4d0897f7c5be347f296933913219201b8320aca5a5fee1"
+dependencies = [
+ "encoding_rs",
+]
+
+[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1918,11 +1938,13 @@ dependencies = [
 name = "synth"
 version = "0.1.0"
 dependencies = [
+ "anyd",
  "barcoders",
  "datamatrix",
  "image",
  "imageproc 0.27.0",
  "qrcode",
+ "qrcode-generator",
  "rand 0.9.5",
  "rand_chacha 0.9.0",
  "rxing",

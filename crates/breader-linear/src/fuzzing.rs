@@ -4,8 +4,10 @@ use breader_core::{
     Code39Options, EanAddonPolicy, ItfOptions, ScanOptions, Symbology, SymbologySet,
 };
 
+use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
 use crate::code128::Code128Decoder;
+use crate::databar::DataBarDecoder;
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::ean::EanDecoder;
 use crate::edges::{EdgeDetector, EdgeParams, Edges};
@@ -52,7 +54,14 @@ fn options(seed: u16) -> LineOptions {
 }
 
 fn decode_all(runs: &mut Runs, reversed: &mut Runs, opts: &LineOptions, out: &mut Vec<FuzzHit>) {
-    let decoders = (EanDecoder, Code128Decoder, Code39Decoder, ItfDecoder);
+    let decoders = (
+        EanDecoder,
+        Code128Decoder,
+        Code39Decoder,
+        ItfDecoder,
+        CodabarDecoder,
+        DataBarDecoder,
+    );
     Runs::reverse_from(runs, reversed);
     let mut hits: Vec<LineHit> = Vec::new();
     decoders.decode(runs, opts, &mut hits);

@@ -100,6 +100,133 @@ impl Perspective {
     }
 }
 
+/// Projective map fitted by least squares to point pairs.
+#[derive(Debug, Clone, Copy)]
+pub struct Homography {
+    m: [[f64; 3]; 3],
+}
+
+impl Homography {
+    /// Fits `src -> dst` (module to image) with at least four pairs.
+    pub fn fit(pairs: &[(Point, Point)]) -> Option<Self> {
+        let n = pairs.len();
+        if n < 4 {
+            return None;
+        }
+        // Mean and mean distance to it of one side of the pairs, in two
+        // passes so that no buffer is needed.
+        let norm = |side: fn(&(Point, Point)) -> Point| -> (f64, f64, f64) {
+            let at = |p: &(Point, Point)| {
+                let q = side(p);
+                (f64::from(q.x), f64::from(q.y))
+            };
+            let (cx, cy) = (
+                pairs.iter().map(|p| at(p).0).sum::<f64>() / n as f64,
+                pairs.iter().map(|p| at(p).1).sum::<f64>() / n as f64,
+            );
+            let md = pairs
+                .iter()
+                .map(|p| (at(p).0 - cx).hypot(at(p).1 - cy))
+                .sum::<f64>()
+                / n as f64;
+            (cx, cy, if md > 1e-9 { md } else { 1.0 })
+        };
+        let (mcx, mcy, mmd) = norm(|p| p.0);
+        let (icx, icy, imd) = norm(|p| p.1);
+        let mut ata = [[0.0f64; 9]; 8];
+        for (s, d) in pairs {
+            let u = (f64::from(s.x) - mcx) / mmd;
+            let v = (f64::from(s.y) - mcy) / mmd;
+            let x = (f64::from(d.x) - icx) / imd;
+            let y = (f64::from(d.y) - icy) / imd;
+            let rows = [
+                ([u, v, 1.0, 0.0, 0.0, 0.0, -x * u, -x * v], x),
+                ([0.0, 0.0, 0.0, u, v, 1.0, -y * u, -y * v], y),
+            ];
+            for (r, rhs) in rows {
+                for i in 0..8 {
+                    for j in 0..8 {
+                        ata[i][j] += r[i] * r[j];
+                    }
+                    ata[i][8] += r[i] * rhs;
+                }
+            }
+        }
+        for col in 0..8 {
+            let piv = (col..8).max_by(|&a, &b| ata[a][col].abs().total_cmp(&ata[b][col].abs()))?;
+            if ata[piv][col].abs() < 1e-12 {
+                return None;
+            }
+            ata.swap(col, piv);
+            for r in 0..8 {
+                if r != col {
+                    let f = ata[r][col] / ata[col][col];
+                    let pivot_row = ata[col];
+                    for (dst, src) in ata[r][col..].iter_mut().zip(&pivot_row[col..]) {
+                        *dst -= f * src;
+                    }
+                }
+            }
+        }
+        let h: [f64; 8] = std::array::from_fn(|i| ata[i][8] / ata[i][i]);
+        let hn = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1.0]];
+        // H = Timg^-1 * Hn * Tmod
+        let tmod = [
+            [1.0 / mmd, 0.0, -mcx / mmd],
+            [0.0, 1.0 / mmd, -mcy / mmd],
+            [0.0, 0.0, 1.0],
+        ];
+        let timg_inv = [[imd, 0.0, icx], [0.0, imd, icy], [0.0, 0.0, 1.0]];
+        let mul = |a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]| {
+            let mut o = [[0.0; 3]; 3];
+            for i in 0..3 {
+                for j in 0..3 {
+                    o[i][j] = (0..3).map(|k| a[i][k] * b[k][j]).sum();
+                }
+            }
+            o
+        };
+        let m = mul(&timg_inv, &mul(&hn, &tmod));
+        m.iter()
+            .flatten()
+            .all(|v| v.is_finite())
+            .then_some(Self { m })
+    }
+
+    /// Inverse transform, or `None` when singular.
+    pub fn inverse(&self) -> Option<Self> {
+        let m = &self.m;
+        let c = |r0: usize, r1: usize, c0: usize, c1: usize| {
+            m[r0][c0] * m[r1][c1] - m[r0][c1] * m[r1][c0]
+        };
+        let adj = [
+            [c(1, 2, 1, 2), -c(0, 2, 1, 2), c(0, 1, 1, 2)],
+            [-c(1, 2, 0, 2), c(0, 2, 0, 2), -c(0, 1, 0, 2)],
+            [c(1, 2, 0, 1), -c(0, 2, 0, 1), c(0, 1, 0, 1)],
+        ];
+        let det = m[0][0] * adj[0][0] + m[0][1] * adj[1][0] + m[0][2] * adj[2][0];
+        if det.abs() < 1e-12 || !det.is_finite() {
+            return None;
+        }
+        Some(Self {
+            m: adj.map(|row| row.map(|v| v / det)),
+        })
+    }
+
+    /// Applies the transform; `None` for points mapped to infinity.
+    pub fn map(&self, p: Point) -> Option<Point> {
+        let (x, y) = (f64::from(p.x), f64::from(p.y));
+        let m = &self.m;
+        let w = m[2][0] * x + m[2][1] * y + m[2][2];
+        if w.abs() < 1e-12 {
+            return None;
+        }
+        let u = (m[0][0] * x + m[0][1] * y + m[0][2]) / w;
+        let v = (m[1][0] * x + m[1][1] * y + m[1][2]) / w;
+        (u.is_finite() && v.is_finite()).then(|| Point::new(u as f32, v as f32))
+    }
+}
+
 /// Corners in symbol order: top-left, top-right, bottom-right, bottom-left
 /// as read in the symbol's own orientation.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

@@ -3,14 +3,13 @@
 use std::cell::RefCell;
 
 use breader_core::{
-    BitMatrix, Content, DataMatrixMeta, Effort, FrameContext, Point, Quad, Reject, Symbol,
+    BitMatrix, Content, DataMatrixMeta, Effort, FrameContext, Plane, Point, Quad, Reject, Symbol,
     SymbolMeta, Symbology, SymbologyReader, SymbologySet,
 };
 
 use crate::check;
 use crate::decode::{DecodedDm, decode_grid};
 use crate::detect::{Candidate, Detector};
-use crate::plane::Plane;
 use crate::sample::{
     Hypothesis, Mapper, SampleScratch, analyze, clock_warp, precheck, refine, sample_grid,
     sample_grid_warped, snap_layout,
@@ -195,6 +194,7 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
             mirrored: dec.mirrored,
             eci: dec.eci.clone(),
             structured_append: dec.structured_append,
+            reader_init: dec.reader_programming,
         }),
         quality: 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32),
     })

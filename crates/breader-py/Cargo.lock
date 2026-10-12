@@ -24,6 +24,7 @@ checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 name = "breader"
 version = "0.1.0"
 dependencies = [
+ "breader-aztec",
  "breader-content",
  "breader-core",
  "breader-datamatrix",
@@ -32,6 +33,14 @@ dependencies = [
  "breader-pdf417",
  "breader-qr",
  "image",
+]
+
+[[package]]
+name = "breader-aztec"
+version = "0.1.0"
+dependencies = [
+ "breader-core",
+ "breader-ecc",
 ]
 
 [[package]]

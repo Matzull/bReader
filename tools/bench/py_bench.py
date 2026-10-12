@@ -26,7 +26,7 @@ try:
 except ImportError:
     breader = None
 
-SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec"]
+SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code", "rMQR Code", "GS1 DataBar", "GS1 DataBar Limited", "GS1 DataBar Expanded"]
 
 ALIASES = {
     "QRCODE": "QR Code",
@@ -40,10 +40,26 @@ ALIASES = {
     "CODE39EXTENDED": "Code 39",
     "ITF": "ITF",
     "INTERLEAVED2OF5": "ITF",
+    "CODABAR": "Codabar",
     "DATAMATRIX": "Data Matrix",
     "PDF417": "PDF417",
     "AZTEC": "Aztec",
     "AZTECCODE": "Aztec",
+    "MICROQRCODE": "Micro QR Code",
+    "MICROQR": "Micro QR Code",
+    "RMQRCODE": "rMQR Code",
+    "RMQR": "rMQR Code",
+    "DATABAR": "GS1 DataBar",
+    "GS1DATABAR": "GS1 DataBar",
+    "RSS14": "GS1 DataBar",
+    "DATABAROMNIDIRECTIONAL": "GS1 DataBar",
+    "DATABARTRUNCATED": "GS1 DataBar",
+    "DATABARLIMITED": "GS1 DataBar Limited",
+    "GS1DATABARLIMITED": "GS1 DataBar Limited",
+    "RSSLIMITED": "GS1 DataBar Limited",
+    "DATABAREXPANDED": "GS1 DataBar Expanded",
+    "GS1DATABAREXPANDED": "GS1 DataBar Expanded",
+    "RSSEXPANDED": "GS1 DataBar Expanded",
 }
 
 BR_FORMATS = {
@@ -55,9 +71,15 @@ BR_FORMATS = {
     "code128": "Code 128",
     "code39": "Code 39",
     "itf": "ITF",
+    "codabar": "Codabar",
     "datamatrix": "Data Matrix",
     "pdf417": "PDF417",
     "aztec": "Aztec",
+    "micro-qr": "Micro QR Code",
+    "rmqr": "rMQR Code",
+    "databar": "GS1 DataBar",
+    "databar-limited": "GS1 DataBar Limited",
+    "databar-expanded": "GS1 DataBar Expanded",
 }
 
 
@@ -80,9 +102,18 @@ class ZxingEngine:
             bf.Code39Std: "Code 39",
             bf.ITF: "ITF",
             bf.ITF14: "ITF",
+            bf.Codabar: "Codabar",
             bf.DataMatrix: "Data Matrix",
             bf.PDF417: "PDF417",
             bf.Aztec: "Aztec",
+            bf.MicroQRCode: "Micro QR Code",
+            bf.RMQRCode: "rMQR Code",
+            bf.DataBarOmni: "GS1 DataBar",
+            bf.DataBarStkOmni: "GS1 DataBar",
+            bf.DataBarStk: "GS1 DataBar",
+            bf.DataBarLtd: "GS1 DataBar Limited",
+            bf.DataBarExp: "GS1 DataBar Expanded",
+            bf.DataBarExpStk: "GS1 DataBar Expanded",
         }
 
     def read(self, gray):
@@ -172,12 +203,32 @@ def upce_to_upca(e):
     return e[:1] + mid + e[7:]
 
 
+def strip_aztec_structured_append(text):
+    """Drops a leading ` ID XY` header (same rule as tools/bench/src/matching.rs)."""
+    if not text.startswith(" "):
+        return text
+    _, sep, tail = text[1:].partition(" ")
+    ident = text[1:].split(" ", 1)[0]
+    if sep and ident and len(tail) >= 2 and "A" <= tail[0] <= "Z" and "A" <= tail[1] <= "Z" and tail[0] <= tail[1]:
+        return tail[2:]
+    return text
+
+
 def canonical(sym, data):
     try:
-        text = data.decode("utf-8").strip().replace("{GS}", "\x1d").replace("\r\n", "\n").replace("\r", "\n")
+        text = data.decode("utf-8")
+        if sym == "Aztec":
+            text = strip_aztec_structured_append(text)
+        text = text.strip().replace("{GS}", "\x1d").replace("\r\n", "\n").replace("\r", "\n")
         data = text.removeprefix("\x1d").encode("utf-8")
     except UnicodeDecodeError:
         data = data.strip()
+    if sym == "Codabar":
+        if len(data) >= 2 and data[:1].upper() in (b"A", b"B", b"C", b"D") and data[-1:].upper() in (b"A", b"B", b"C", b"D"):
+            data = data[1:-1]
+        return (sym, data)
+    if sym.startswith("GS1 DataBar"):
+        return (sym, bytes(b for b in data if b not in b"()\x1d"))
     if sym in ("UPC-A", "UPC-E") and data.isdigit():
         upca = None
         if sym == "UPC-E" and len(data) == 8:

@@ -3,6 +3,16 @@
   "effort": "fast",
   "groups": {
     "blur": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -26,6 +36,21 @@
       "EAN-8": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
         "false_positives": 0
       },
       "ITF": {
@@ -33,6 +58,11 @@
         "read": 1,
         "false_positives": 0
       },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "PDF417": {
         "expected": 3,
         "read": 3,
@@ -47,9 +77,24 @@
         "expected": 2,
         "read": 2,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
       }
     },
     "clean": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -75,9 +120,29 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "PDF417": {
@@ -93,6 +158,11 @@
       "UPC-A": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       }
     },
@@ -104,6 +174,16 @@
       }
     },
     "illumination": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -129,9 +209,29 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "PDF417": {
@@ -148,9 +248,24 @@
         "expected": 2,
         "read": 2,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
       }
     },
     "inverted": {
+      "Aztec": {
+        "expected": 3,
+        "read": 0,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -176,9 +291,29 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "PDF417": {
@@ -195,9 +330,24 @@
         "expected": 2,
         "read": 2,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
       }
     },
     "low-res": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -223,9 +373,29 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 1,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 2,
         "false_positives": 0
       },
       "PDF417": {
@@ -242,9 +412,24 @@
         "expected": 2,
         "read": 2,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
       }
     },
     "multi": {
+      "Aztec": {
+        "expected": 12,
+        "read": 12,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 9,
+        "read": 8,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 11,
         "read": 8,
@@ -270,9 +455,29 @@
         "read": 9,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 2,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 3,
+        "read": 0,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 2,
+        "read": 2,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 8,
         "read": 6,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 12,
+        "read": 11,
         "false_positives": 0
       },
       "PDF417": {
@@ -289,10 +494,25 @@
         "expected": 12,
         "read": 6,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 8,
+        "read": 8,
+        "false_positives": 0
       }
     },
     "negative": {},
     "noise": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 2,
@@ -318,8 +538,28 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
+        "read": 2,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
         "read": 2,
         "false_positives": 0
       },
@@ -335,11 +575,26 @@
       },
       "UPC-A": {
         "expected": 2,
+        "read": 2,
+        "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 3,
         "read": 2,
         "false_positives": 0
       }
     },
     "perspective": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 0,
@@ -365,9 +620,29 @@
         "read": 1,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 0,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "PDF417": {
@@ -383,10 +658,25 @@
       "UPC-A": {
         "expected": 2,
         "read": 1,
+        "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       }
     },
     "rotated": {
+      "Aztec": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "Codabar": {
+        "expected": 3,
+        "read": 2,
+        "false_positives": 0
+      },
       "Code 128": {
         "expected": 2,
         "read": 1,
@@ -412,9 +702,29 @@
         "read": 0,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 0,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 0,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 0,
+        "false_positives": 0
+      },
+      "Micro QR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "PDF417": {
@@ -430,6 +740,11 @@
       "UPC-A": {
         "expected": 2,
         "read": 1,
+        "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       }
     }

@@ -122,6 +122,29 @@ fn undo_latin1_utf8(s: &str) -> String {
     String::from_utf8(bytes).unwrap_or_else(|_| s.to_string())
 }
 
+/// Drops the structured append header of an Aztec message: a space, the message ID (no
+/// spaces), a space and two capital letters, the index and the count. Datasets label the
+/// payload without it.
+fn strip_aztec_structured_append(s: &str) -> &str {
+    let Some(rest) = s.strip_prefix(' ') else {
+        return s;
+    };
+    let Some((id, tail)) = rest.split_once(' ') else {
+        return s;
+    };
+    let b = tail.as_bytes();
+    if !id.is_empty()
+        && b.len() >= 2
+        && b[0].is_ascii_uppercase()
+        && b[1].is_ascii_uppercase()
+        && b[0] <= b[1]
+    {
+        &tail[2..]
+    } else {
+        s
+    }
+}
+
 /// Canonical comparison key: whitespace trimmed, CR LF and CR turned into LF, UPC-A and UPC-E (expanded to UPC-A) folded into
 /// EAN-13 with a leading 0,
 /// the dataset's `{GS}` notation turned into ASCII 29 and a leading GS1 FNC1 separator dropped.
@@ -129,6 +152,11 @@ fn undo_latin1_utf8(s: &str) -> String {
 pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
     let trimmed: Vec<u8> = match std::str::from_utf8(data) {
         Ok(s) => {
+            let s = if sym == Symbology::Aztec {
+                strip_aztec_structured_append(s)
+            } else {
+                s
+            };
             let s = s
                 .trim()
                 .replace("{GS}", "\u{1d}")
@@ -138,6 +166,15 @@ pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
         }
         Err(_) => data.trim_ascii().to_vec(),
     };
+    if sym == Symbology::Codabar {
+        return (sym, strip_codabar_guards(&trimmed).to_vec());
+    }
+    if matches!(
+        sym,
+        Symbology::DataBar | Symbology::DataBarLimited | Symbology::DataBarExpanded
+    ) {
+        return (sym, plain_element_string(&trimmed));
+    }
     if matches!(sym, Symbology::UpcA | Symbology::UpcE) && trimmed.iter().all(u8::is_ascii_digit) {
         let upca = match (sym, trimmed.len()) {
             (Symbology::UpcE, 8) => upce_to_upca(&trimmed),
@@ -177,6 +214,27 @@ pub fn overlaps_region(quad: &[[f64; 2]], region: &[[f64; 2]]) -> bool {
     let h = (a[3].min(b[3]) - a[1].max(b[1])).max(0.0);
     let smaller = ((a[2] - a[0]) * (a[3] - a[1])).min((b[2] - b[0]) * (b[3] - b[1]));
     smaller > 0.0 && w * h >= 0.25 * smaller
+}
+
+/// Datasets label GS1 DataBar symbols as raw element strings (`0104412345678909`), other
+/// readers print the human-readable form (`(01)04412345678909`) and some keep the FNC1
+/// separators as GS. All spellings reduce to the digits and characters of the element string.
+fn plain_element_string(data: &[u8]) -> Vec<u8> {
+    data.iter()
+        .copied()
+        .filter(|&b| !matches!(b, b'(' | b')' | 0x1d))
+        .collect()
+}
+
+/// Datasets and other readers spell a Codabar symbol with its start and stop characters
+/// (`A1234B`); the library returns the data between them. Both spellings reduce to the data. A
+/// library read never starts or ends with A-D (such data is rejected), so this is idempotent.
+fn strip_codabar_guards(data: &[u8]) -> &[u8] {
+    let guard = |b: u8| matches!(b.to_ascii_uppercase(), b'A'..=b'D');
+    match data {
+        [first, inner @ .., last] if guard(*first) && guard(*last) => inner,
+        _ => data,
+    }
 }
 
 pub fn score(found: &[Decoded], expected: &[Expected], stats: &mut Stats) {
@@ -355,6 +413,27 @@ mod tests {
     }
 
     #[test]
+    fn codabar_start_and_stop_characters_are_not_part_of_the_comparison() {
+        let mut st = Stats::default();
+        let found = vec![Decoded::new(Symbology::Codabar, b"1234567890".to_vec())];
+        score(&found, &[exp(Symbology::Codabar, "A1234567890B")], &mut st);
+        assert_eq!(st.totals().read, 1);
+        assert_eq!(st.totals().false_positives, 0);
+
+        let mut st = Stats::default();
+        let found = vec![Decoded::new(Symbology::Codabar, b"C1234$D".to_vec())];
+        score(&found, &[exp(Symbology::Codabar, "1234$")], &mut st);
+        assert_eq!(st.totals().read, 1);
+
+        // A different payload still counts as wrong.
+        let mut st = Stats::default();
+        let found = vec![Decoded::new(Symbology::Codabar, b"1234".to_vec())];
+        score(&found, &[exp(Symbology::Codabar, "A1235A")], &mut st);
+        assert_eq!(st.totals().read, 0);
+        assert_eq!(st.totals().false_positives, 1);
+    }
+
+    #[test]
     fn whitespace_is_trimmed_and_bytes_fall_back() {
         let mut st = Stats::default();
         let found = vec![Decoded::new(Symbology::Code39, b" AB12\n".to_vec())];
@@ -425,6 +504,24 @@ mod tests {
         score(&[], &[e], &mut st);
         assert_eq!(st.unsupported, 1);
         assert_eq!(st.totals().expected, 0);
+    }
+
+    #[test]
+    fn aztec_structured_append_header_is_not_payload() {
+        let read = canonical(Symbology::Aztec, b" Z1.txt DG3456");
+        assert_eq!(read, canonical(Symbology::Aztec, b"3456"));
+        // Not a header: no letters, letters out of order, no ID, other symbology.
+        for s in [" Z1.txt 12x", " Z1.txt GD3456", "  DG3456", " DG3456"] {
+            assert_eq!(
+                canonical(Symbology::Aztec, s.as_bytes()).1,
+                s.trim().as_bytes(),
+                "{s}"
+            );
+        }
+        assert_eq!(
+            canonical(Symbology::Qr, b" Z1.txt DG3456").1,
+            b"Z1.txt DG3456"
+        );
     }
 
     #[test]

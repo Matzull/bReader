@@ -251,8 +251,8 @@
     },
     "ZVZ-real": {
       "Aztec": {
-        "expected": 15,
-        "read": 0,
+        "expected": 14,
+        "read": 14,
         "false_positives": 0
       },
       "Code 128": {
@@ -298,11 +298,6 @@
       "UPC-A": {
         "expected": 12,
         "read": 11,
-        "false_positives": 0
-      },
-      "UPC-E": {
-        "expected": 0,
-        "read": 0,
         "false_positives": 0
       }
     }

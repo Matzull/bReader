@@ -44,7 +44,7 @@ The structure mirrors `breader-qr`. The modules are `spec` (size table, region l
    - Small blocks may correct fewer codewords than the spec allows: (ec − r) / 2, where r = 2 when ec ≤ 7, r = 1 when ec ≤ 12, and r = 0 otherwise. This is our own zero-FP policy, analogous to QR's misdecode protection, not an ISO 16022 requirement. As a result, 10×10 accepts one correction instead of two.
    - Grid contract: the L finder is on the left and bottom edges. A mirrored retry reflects the grid across the diagonal through the bottom-left corner, which swaps the dimensions.
    - Ambiguous cases, resolved conservatively (details in `decode/encodation.rs`):
-     - Reader Programming (234) is rejected.
+     - Reader Programming (234) is accepted as the first codeword only and reported as `DataMatrixMeta::reader_init` ([D-035](../decisions.md#d-035)); anywhere else it rejects the symbol.
      - Empty payloads are rejected.
      - Pads must match the 253-state sequence exactly, except for uncorrected large blocks (above).
      - Structured Append is accepted only in the first position, and macros only before any data.
@@ -52,7 +52,7 @@ The structure mirrors `breader-qr`. The modules are `spec` (size table, region l
      - ASCII, including digit pairs, Upper Shift and padding with its 253-state randomization check;
      - C40 and Text, with the three shift sets;
      - X12, EDIFACT, and Base256 with its length field and 255-state derandomization;
-     - FNC1 (first or second position, or GS inside data), ECI, macros 05/06 (header and trailer applied to `data`), Structured Append (233, parsed and recorded), and Reader Programming (234).
+     - FNC1 (first or second position, or GS inside data), ECI, macros 05/06 (header and trailer applied to `data`), Structured Append (233, parsed and recorded), and Reader Programming (234, flagged in `reader_init`).
    - Invalid sequences reject the symbol. Data after the end of a mode must follow the spec's unlatch rules.
 6. **Results.** `data` holds the raw bytes. `segments` gives the charset (`Eci(n)` after ECI 241, otherwise `Latin1`, which is the Data Matrix default). The new `SymbolMeta::DataMatrix(DataMatrixMeta { rows, cols, errors_corrected, mirrored, structured_append })` carries the metadata. The AIM identifiers are `]d1` (default), `]d2` (FNC1 first, GS1), `]d3` (FNC1 second), and `]d4`/`]d5`/`]d6` for the same with ECI. `ContentClassifier` already treats AIM GS1 markers; `]d2` is added to its list.
 

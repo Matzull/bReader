@@ -56,7 +56,7 @@
       },
       "EAN-13": {
         "expected": 2521,
-        "read": 2099,
+        "read": 2100,
         "false_positives": 0
       },
       "EAN-8": {
@@ -251,8 +251,8 @@
     },
     "ZVZ-real": {
       "Aztec": {
-        "expected": 15,
-        "read": 0,
+        "expected": 14,
+        "read": 14,
         "false_positives": 0
       },
       "Code 128": {

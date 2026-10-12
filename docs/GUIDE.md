@@ -39,6 +39,8 @@ Input is converted to an 8-bit luma plane. `Luma8`, `Nv12`, `Nv21` and `I420` ar
 | `itf.allowed_lengths` | `itf_lengths` | `[14]` | Accepted digit counts. Empty means any even length >= `min_length`. |
 | `itf.min_length` | `itf_min_length` | `6` | Minimum digits. |
 
+GS1 DataBar (Omnidirectional/Truncated, Limited, Expanded in one row) has no options either and is on by default ([D-037](decisions.md#d-037)): `data` is the GS1 element string (FNC1 as GS), AIM `]e0`, `content` is GS1; `meta.databar_segments` counts the symbol characters of an Expanded row. Stacked variants are not read. Codabar has no options. It is on by default with the guards of [D-036](decisions.md#d-036): `data` excludes the start and stop characters (A-D), which `meta.codabar_start_stop` (Python) / `LinearMeta::codabar_start_stop` (Rust) report; at least 4 data characters, 10-module quiet zones, and one more agreeing scanline than `min_line_agreement`. Disable it with `symbologies` if you do not expect it.
+
 ITF has no start/stop redundancy strong enough to reject truncated reads, so the default accepts only 14 digits (GTIN-14). Widen `allowed_lengths` only for formats you expect, e.g. `[6, 14]`.
 
 ## Effort presets

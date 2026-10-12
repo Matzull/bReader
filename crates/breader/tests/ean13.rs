@@ -82,6 +82,7 @@ fn reads_a_rendered_ean13_with_default_options() {
         addon,
         checksum_verified,
         lines_agreeing,
+        ..
     }) = &s.meta
     else {
         panic!("linear metadata expected");

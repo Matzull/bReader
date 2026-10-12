@@ -24,8 +24,10 @@ pub(crate) struct DecodedAztec {
     pub erasures: u32,
     pub mirrored: bool,
     pub rune: Option<u8>,
+    /// Reader initialisation symbol: the top bit of the codeword count field.
+    pub reader_init: bool,
     /// Payload bytes; FNC1 in first or second position is not included,
-    /// later FNC1 become ASCII 29. A Rune's payload is its decimal text.
+    /// later FNC1 become ASCII 29. A Rune's payload is its value as three-digit decimal text.
     pub data: Vec<u8>,
     pub segments: Vec<DataSegment>,
     pub eci: Vec<u32>,
@@ -108,20 +110,7 @@ fn finder_score(grid: &BitMatrix, compact: bool) -> Option<usize> {
     }
     let ring_total = ((2 * core + 1) * (2 * core + 1)) as usize;
     let r = core + 1;
-    let marks: [(i32, i32, bool); 12] = [
-        (-r, -r, true),
-        (-r + 1, -r, true),
-        (-r, -r + 1, true),
-        (r, -r, true),
-        (r, -r + 1, true),
-        (r - 1, -r, false),
-        (r, r - 1, true),
-        (r, r, false),
-        (r - 1, r, false),
-        (-r, r, false),
-        (-r + 1, r, false),
-        (-r, r - 1, false),
-    ];
+    let marks = spec::orientation_marks(r);
     let marks_ok = marks.iter().filter(|&&(dx, dy, v)| at(dx, dy) == v).count();
     (ring_ok * 5 >= ring_total * 4 && marks_ok >= 10).then_some(ring_ok + marks_ok)
 }
@@ -149,14 +138,50 @@ fn correct_mode(mut words: Vec<u16>, check: usize) -> Result<(Vec<u16>, u32), Re
     }
 }
 
-fn decode_rune(grid: &BitMatrix, mirrored: bool) -> Result<DecodedAztec, Reject> {
+/// Value of the Aztec Rune whose bullseye and mode ring are in `grid`, and
+/// the corrections its mode message needed.
+fn rune_value(grid: &BitMatrix) -> Result<(u8, u32), Reject> {
     finder_score(grid, true).ok_or(Reject::NoPattern)?;
     let bits = read_mode_bits(grid, true);
     let mask = (0..28).map(|i| spec::RUNE_MASK >> (27 - i) & 1 == 1);
     let bits: Vec<bool> = bits.into_iter().zip(mask).map(|(b, m)| b ^ m).collect();
     let (words, errors) = correct_mode(words4(&bits), spec::COMPACT_MODE_CHECK)?;
-    let value = (words[0] << 4 | words[1]) as u8;
-    let data = value.to_string().into_bytes();
+    Ok(((words[0] << 4 | words[1]) as u8, errors))
+}
+
+/// What the central 15 x 15 modules of a symbol (bullseye, orientation marks
+/// and mode ring) can be, in the orientation `decode_grid` expects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Shape {
+    Rune,
+    Layout(Layout),
+}
+
+/// Reads the core of a sampled symbol: the shapes whose finder gate and mode
+/// message (within the correction guard) hold up. Cheap enough to try in
+/// every orientation.
+pub(crate) fn probe(core: &BitMatrix) -> Vec<Shape> {
+    let mut out = Vec::new();
+    if core.width() != spec::CORE_SIZE || core.height() != spec::CORE_SIZE {
+        return out;
+    }
+    for compact in [true, false] {
+        if finder_score(core, compact).is_none() {
+            continue;
+        }
+        if compact && rune_value(core).is_ok() {
+            out.push(Shape::Rune);
+        }
+        if let Ok((layout, _, _)) = read_mode(core, compact) {
+            out.push(Shape::Layout(layout));
+        }
+    }
+    out
+}
+
+fn decode_rune(grid: &BitMatrix, mirrored: bool) -> Result<DecodedAztec, Reject> {
+    let (value, errors) = rune_value(grid)?;
+    let data = format!("{value:03}").into_bytes();
     Ok(DecodedAztec {
         compact: true,
         layers: 0,
@@ -166,6 +191,7 @@ fn decode_rune(grid: &BitMatrix, mirrored: bool) -> Result<DecodedAztec, Reject>
         erasures: 0,
         mirrored,
         rune: Some(value),
+        reader_init: false,
         segments: vec![DataSegment {
             start: 0,
             end: data.len(),
@@ -207,6 +233,19 @@ fn read_mode(grid: &BitMatrix, compact: bool) -> Result<(Layout, usize, u32), Re
     ))
 }
 
+/// A one-layer symbol cannot hold the codeword count its field would give
+/// with the top bit set: there the bit flags a reader initialisation symbol
+/// and the count is the rest of the field.
+fn split_reader_init(layout: Layout, data_cw: usize, total: usize) -> (usize, bool) {
+    let top = if layout.compact { 1 << 5 } else { 1 << 10 };
+    let field = data_cw - 1;
+    if layout.layers == 1 && data_cw > total && field & top != 0 {
+        (field - top + 1, true)
+    } else {
+        (data_cw, false)
+    }
+}
+
 fn rs_decode(
     word_size: usize,
     block: &mut [u16],
@@ -231,6 +270,7 @@ fn decode_layout(
         return Err(Reject::Format);
     }
     let total = layout.total_codewords();
+    let (data_cw, reader_init) = split_reader_init(layout, data_cw, total);
     if data_cw + spec::MIN_CHECK_WORDS > total {
         return Err(Reject::Format);
     }
@@ -285,6 +325,7 @@ fn decode_layout(
         erasures: corr.erasures as u32,
         mirrored,
         rune: None,
+        reader_init,
         data: parsed.data,
         segments: parsed.segments,
         eci: parsed.eci,

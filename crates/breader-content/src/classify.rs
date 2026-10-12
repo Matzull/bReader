@@ -75,7 +75,7 @@ fn retail_gtin(symbol: &Symbol) -> Option<Vec<Gs1Element>> {
 
 fn gs1_content(symbol: &Symbol) -> Option<Vec<Gs1Element>> {
     match &symbol.aim_id {
-        b"]C1" | b"]Q3" | b"]Q4" | b"]d2" | b"]d5" => {
+        b"]C1" | b"]e0" | b"]Q3" | b"]Q4" | b"]d2" | b"]d5" => {
             gs1::parse(std::str::from_utf8(&symbol.data).ok()?).ok()
         }
         _ => retail_gtin(symbol),

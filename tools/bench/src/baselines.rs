@@ -17,7 +17,13 @@ fn map_rxing(format: &BarcodeFormat) -> Option<Symbology> {
         BarcodeFormat::CODE_128 => Some(Symbology::Code128),
         BarcodeFormat::CODE_39 => Some(Symbology::Code39),
         BarcodeFormat::ITF => Some(Symbology::Itf),
+        BarcodeFormat::CODABAR => Some(Symbology::Codabar),
+        BarcodeFormat::RSS_14 => Some(Symbology::DataBar),
+        BarcodeFormat::RSS_EXPANDED => Some(Symbology::DataBarExpanded),
         BarcodeFormat::DATA_MATRIX => Some(Symbology::DataMatrix),
+        BarcodeFormat::AZTEC => Some(Symbology::Aztec),
+        BarcodeFormat::MICRO_QR_CODE => Some(Symbology::MicroQr),
+        BarcodeFormat::RECTANGULAR_MICRO_QR_CODE => Some(Symbology::Rmqr),
         _ => None,
     }
 }
@@ -53,7 +59,12 @@ impl Engine for RxingEngine {
             .iter()
             .filter_map(|r| {
                 map_rxing(r.getBarcodeFormat()).map(|s| {
-                    let mut d = Decoded::new(s, r.getText().as_bytes().to_vec());
+                    let mut text = r.getText().as_bytes().to_vec();
+                    // rxing prints the GTIN-14 of DataBar without its (01) identifier.
+                    if s == Symbology::DataBar && text.len() == 14 {
+                        text.splice(0..0, *b"01");
+                    }
+                    let mut d = Decoded::new(s, text);
                     d.quad = r
                         .getPoints()
                         .iter()
