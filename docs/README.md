@@ -63,6 +63,7 @@ Per-symbology status, spec references and known gaps: [symbologies/README.md](sy
 | [FAILURES](FAILURES.md) | Triage of the Dynamsoft misses and the Code 39 video: root-cause classes, fixes, status |
 | [FAILURES-ZXING-SAMPLES](FAILURES-ZXING-SAMPLES.md) | Triage of the zxing-cpp samples that zxing-cpp reads and breader does not |
 | [FAILURES-BARBER-QR](FAILURES-BARBER-QR.md) | Triage of the BarBeR QR labels that zxing-cpp reads and breader does not: stages, causes, ranked fixes |
+| [FAILURES-BARBER-1D](FAILURES-BARBER-1D.md) | Triage of the BarBeR Code 39 and ITF labels that zxing-cpp reads and breader does not: stages, causes, ranked fixes, owner decisions |
 | [CI](CI.md) | Workflows, the regression gate, ARM runners, Python tests |
 | [decisions](decisions.md) | Decision log (license, zero false positives, defaults, scope) |
 
