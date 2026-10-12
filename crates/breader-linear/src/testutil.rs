@@ -588,3 +588,46 @@ pub fn line_options(f: impl FnOnce(&mut breader_core::ScanOptions)) -> crate::de
     f(&mut o);
     crate::decoder::LineOptions::from(&o)
 }
+
+fn databar_modules(encoding: anyd::output::Encoding) -> Vec<bool> {
+    match encoding {
+        anyd::output::Encoding::Linear(p) => p.modules,
+        _ => panic!("linear pattern expected"),
+    }
+}
+
+/// GS1 DataBar Omnidirectional of a 13-digit GTIN body, from the
+/// independent encoder: 96 modules, the first one the guard's space.
+pub fn databar_omni_modules(body: &str) -> Vec<bool> {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    databar_modules(
+        enc.encode(&enc.build_omni(body.as_bytes()).unwrap())
+            .unwrap(),
+    )
+}
+
+/// GS1 DataBar Expanded of a GS1 element string (FNC1 as byte 0x1D) in
+/// one row.
+pub fn databar_expanded_modules(elements: &str) -> Vec<bool> {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    databar_modules(
+        enc.encode(&enc.build_expanded(elements.as_bytes()).unwrap())
+            .unwrap(),
+    )
+}
+
+/// GS1 DataBar Limited of a 13-digit GTIN body (first digit 0 or 1):
+/// 74 modules and five of quiet zone.
+pub fn databar_limited_modules(body: &str) -> Vec<bool> {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    databar_modules(
+        enc.encode(&enc.build_limited(body.as_bytes()).unwrap())
+            .unwrap(),
+    )
+}

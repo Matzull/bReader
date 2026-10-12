@@ -107,7 +107,8 @@ fn generate_class(
     let codabar = pdf417;
     let microqr = pdf417;
     let rmqr = pdf417;
-    for i in 0..count + extra + pdf417 + aztec + codabar + microqr + rmqr {
+    let databar = pdf417;
+    for i in 0..count + extra + pdf417 + aztec + codabar + microqr + rmqr + databar {
         let (img, annotations) = if i < count {
             scene::generate(class, i, seed)
         } else if i < count + extra {
@@ -136,9 +137,15 @@ fn generate_class(
                 Some(g) => g,
                 None => break,
             }
-        } else {
+        } else if i < count + extra + pdf417 + aztec + codabar + microqr + rmqr {
             let before = count + extra + pdf417 + aztec + codabar + microqr;
             match scene::generate_rmqr(class, i - before, seed) {
+                Some(g) => g,
+                None => break,
+            }
+        } else {
+            let first = count + extra + pdf417 + aztec + codabar + microqr + rmqr;
+            match scene::generate_databar(class, i - first, seed) {
                 Some(g) => g,
                 None => break,
             }

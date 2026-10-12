@@ -197,6 +197,7 @@ enum Mix {
     Codabar,
     MicroQr,
     Rmqr,
+    DataBar,
 }
 
 fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
@@ -225,6 +226,9 @@ fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
             Mix::Codabar => Sym::Codabar,
             Mix::MicroQr => Sym::MicroQr,
             Mix::Rmqr => Sym::Rmqr,
+            Mix::DataBar => {
+                [Sym::DataBar, Sym::DataBarLimited, Sym::DataBarExpanded][rng.random_range(0..3)]
+            }
         };
         let enc = encode::encode(rng, sym);
         let dark: u8 = rng.random_range(0..=45);
@@ -412,6 +416,24 @@ pub fn generate_rmqr(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Ve
             let pick = j * 13 + class.index() as usize * 5;
             let enc = encode::encode_rmqr(rng, pick, j % 3 == 2);
             let (mut img, anns) = single_with(class, Sym::Rmqr, enc, rng);
+            degrade(class, &mut img, rng);
+            Some((img, anns))
+        }
+    }
+}
+
+/// GS1 DataBar images of a class (Omnidirectional, Limited and Expanded in
+/// turn), generated after the Micro QR ones so that every earlier image
+/// stays byte-identical.
+pub fn generate_databar(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Vec<Annotation>)> {
+    let mut rng = image_rng(seed.wrapping_add(0xDA7A_BA20), class, j);
+    let rng = &mut rng;
+    match class {
+        Class::Negative | Class::Datamatrix => None,
+        Class::Multi => Some(multi(rng, Mix::DataBar)),
+        _ => {
+            let sym = [Sym::DataBar, Sym::DataBarLimited, Sym::DataBarExpanded][j % 3];
+            let (mut img, anns) = single(class, sym, None, rng);
             degrade(class, &mut img, rng);
             Some((img, anns))
         }

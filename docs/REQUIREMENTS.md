@@ -23,6 +23,7 @@ The library is built as a pipeline of pluggable modules so symbologies and proce
 | Industrial 1D | Code 128 | Code sets A/B/C, FNC1 (GS1-128) |
 | | Code 39 | Standard, optional Full ASCII, optional mod-43 check |
 | | ITF (Interleaved 2 of 5) | ITF-14, configurable accepted lengths |
+| | GS1 DataBar Omnidirectional/Truncated, Limited, Expanded (one row) | ISO/IEC 24724, element string with AIM `]e0` and mandatory mod 79/89/211 checksum ([D-037](decisions.md#d-037)) |
 | | Codabar | ANSI/AIM BC3 / EN 798, start and stop A-D, no check character, minimum 4 data characters ([D-036](decisions.md#d-036)) |
 
 ### 2.2 Out of scope (v1)
@@ -31,7 +32,7 @@ The library is built as a pipeline of pluggable modules so symbologies and proce
 - WebAssembly and mobile (Android/iOS) targets.
 - Dynamically loaded plugins (`.so`/`.dll`).
 - QR Structured Append, Model 1 QR. Micro QR (M1 to M4) and rMQR (all 32 sizes) are implemented.
-- MaxiCode, MicroPDF417, other 1D symbologies (planned later; the architecture must accommodate them). Data Matrix, PDF417, Aztec and Codabar are implemented.
+- MaxiCode, MicroPDF417, other 1D symbologies (planned later; the architecture must accommodate them). Data Matrix, PDF417, Aztec, Codabar and GS1 DataBar (one row) are implemented.
 
 ## 3. Functional requirements
 

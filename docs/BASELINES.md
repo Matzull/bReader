@@ -332,3 +332,24 @@ Latency, indicative (other agents were running; `challenging-images`, p50 ms, th
 Allocations (`cargo test --release -p breader --test allocation -- --nocapture`, QR reader only, allocations/KiB; Fast, Balanced, Exhaustive): texture 800x600 1/6K, 6/45K, 6/44K; texture 320x240 0/0K, 3/19K, 12/70K; one QR 17/3K, 20/3K, 20/3K; blank frames 0. Bounds unchanged. `Homography::fit` no longer collects its solution into a `Vec`, which a debug build kept as an allocation per fit (the test also passes in debug builds now).
 
 Format distance: the sampled grid accepts 3 per copy (two copies agreeing) and 2 for a single copy. A limit of 2 for both copies was not measured separately; 3 is kept because two copies that agree cross-check each other.
+
+## GS1 DataBar (2026-10-11)
+
+First measurement of the DataBar decoders ([design](symbologies/linear.md#gs1-databar), [D-037](decisions.md#d-037)). Release build, Ryzen 5 5500U, `tools/bench` (breader; rxing with `--features baselines`; zxing-cpp 3.1.1 through `tools/bench/py_bench.py` in a virtualenv). Synthetic sets were generated into worktree-local directories (`synth-local/seed1`, `synth-local/seed2024`) with 3 DataBar images (Omnidirectional, Limited and Expanded in turn, from the independent `anyd` encoder) appended to every class but `negative` and `datamatrix` after the Micro QR ones; every earlier image is byte-identical to `data/synth` and `data/synth-2024`. Reads of the labels, breader Fast / Balanced / Exhaustive:
+
+| Set | Expected | breader | rxing (TryHarder) | zxing-cpp |
+|---|---|---|---|---|
+| zxing `rss14-1` and `rss14-2` (Omnidirectional; the 7 of `rss14-2` are stacked) | 20 | 10 / 10 / 10 | 13 (Balanced) | 17 |
+| zxing `databarltd-1` (Limited) | 2 | 2 / 2 / 2 | 0 (no Limited reader) | 2 |
+| zxing `rssexpanded-1`, `-2`, `-3` | 162 | 160 / 162 / 162 | 158 (Balanced) | 162 |
+| synthetic seed 1, Omnidirectional | 10 | 8 / 10 / 10 | 5 | 8 |
+| synthetic seed 1, Limited | 10 | 10 / 10 / 10 | 0 | 8 |
+| synthetic seed 1, Expanded | 11 | 7 / 11 / 11 | 6 | 9 |
+| synthetic seed 2024, Omnidirectional | 29 | 23 / 29 / 29 | 18 (2 false) | 21 |
+| synthetic seed 2024, Limited | 22 | 20 / 22 / 22 | 0 | 13 |
+| synthetic seed 2024, Expanded | 25 | 20 / 24 / 24 | 15 | 21 (2 false) |
+
+- **False positives: 0** (breader) on every dataset and effort, including the 46 zxing `falsepositives-*` images, the negative synthetic class, all Dynamsoft sets (`--check` passes at three efforts on `challenging-images`, `skewed-datamatrix`, `UPS-Synthetic-Labels` and `pdf417-small-module-size`; the video gate was not run here) and the EAN / Code 128 / Code 39 / ITF / Codabar images (checked with `BENCH_SHOW_FP=1`). No read count dropped for any other symbology (`--check` against the existing synthetic and zxing baselines). Two of the first runs read wrong strings from valid symbols (the 3203 weight offset and a date field of 38400 meaning "no date"); both are fixed and covered by tests. rxing reads the expanded stacked rows as Expanded (63 "false positives" there are labels still counted as unsupported).
+- **Misses.** Stacked symbols (the 7 of `rss14-2`, which rxing and zxing-cpp read; `rssexpandedstacked-*` are unsupported labels). `rss14-1` images 8, 11 and 13 to 15 are blurred photographs: 1 to 2 px modules whose narrow bars merge; Balanced reads 10 of 13, zxing-cpp 11. Images that touch the symbol with the border (`rss14-1/4`, `/5`, `rssexpanded-1/*`) are read through the cut-guard rule. Synthetic misses are rotated, perspective and blurred images at Fast.
+- **Latency** (`challenging-images`, p50 of 5 interleaved runs, two binaries with and without the decoder doing any work, indicative on a shared machine): Fast 5.82 / 5.80 / 6.01 / 6.18 / 5.91 ms with against 5.83 / 5.98 / 5.88 / 5.92 / 5.68 without; Balanced 20.71 / 20.90 / 23.25 / 20.88 / 19.57 with against 19.77 / 20.33 / 22.78 / 20.88 / 20.09 without. Mean cost +0.05 ms at Fast (limit 0.3 ms) and +0.2 ms at Balanced, so the decoders run at every effort. An earlier version without the screens (finder A for Expanded, narrow elements for Omnidirectional) cost +10 ms p95 at Balanced.
+- **Baselines.** `zxing-samples-{fast,balanced,exhaustive}.json` rewritten, additions only (the six DataBar sets); the synthetic baselines are regenerated after the merge.

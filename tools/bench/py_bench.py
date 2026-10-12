@@ -24,7 +24,7 @@ try:
 except ImportError:
     breader = None
 
-SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code", "rMQR Code"]
+SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code", "rMQR Code", "GS1 DataBar", "GS1 DataBar Limited", "GS1 DataBar Expanded"]
 
 ALIASES = {
     "QRCODE": "QR Code",
@@ -47,6 +47,17 @@ ALIASES = {
     "MICROQR": "Micro QR Code",
     "RMQRCODE": "rMQR Code",
     "RMQR": "rMQR Code",
+    "DATABAR": "GS1 DataBar",
+    "GS1DATABAR": "GS1 DataBar",
+    "RSS14": "GS1 DataBar",
+    "DATABAROMNIDIRECTIONAL": "GS1 DataBar",
+    "DATABARTRUNCATED": "GS1 DataBar",
+    "DATABARLIMITED": "GS1 DataBar Limited",
+    "GS1DATABARLIMITED": "GS1 DataBar Limited",
+    "RSSLIMITED": "GS1 DataBar Limited",
+    "DATABAREXPANDED": "GS1 DataBar Expanded",
+    "GS1DATABAREXPANDED": "GS1 DataBar Expanded",
+    "RSSEXPANDED": "GS1 DataBar Expanded",
 }
 
 BR_FORMATS = {
@@ -64,6 +75,9 @@ BR_FORMATS = {
     "aztec": "Aztec",
     "micro-qr": "Micro QR Code",
     "rmqr": "rMQR Code",
+    "databar": "GS1 DataBar",
+    "databar-limited": "GS1 DataBar Limited",
+    "databar-expanded": "GS1 DataBar Expanded",
 }
 
 
@@ -92,6 +106,12 @@ class ZxingEngine:
             bf.Aztec: "Aztec",
             bf.MicroQRCode: "Micro QR Code",
             bf.RMQRCode: "rMQR Code",
+            bf.DataBarOmni: "GS1 DataBar",
+            bf.DataBarStkOmni: "GS1 DataBar",
+            bf.DataBarStk: "GS1 DataBar",
+            bf.DataBarLtd: "GS1 DataBar Limited",
+            bf.DataBarExp: "GS1 DataBar Expanded",
+            bf.DataBarExpStk: "GS1 DataBar Expanded",
         }
 
     def read(self, gray):
@@ -203,6 +223,8 @@ def canonical(sym, data):
         if len(data) >= 2 and data[:1].upper() in (b"A", b"B", b"C", b"D") and data[-1:].upper() in (b"A", b"B", b"C", b"D"):
             data = data[1:-1]
         return (sym, data)
+    if sym.startswith("GS1 DataBar"):
+        return (sym, bytes(b for b in data if b not in b"()\x1d"))
     if sym in ("UPC-A", "UPC-E") and data.isdigit():
         upca = None
         if sym == "UPC-E" and len(data) == 8:

@@ -7,6 +7,7 @@ mod codabar;
 mod code128;
 mod code39;
 mod common;
+mod databar;
 mod decoder;
 mod ean;
 mod edges;
@@ -44,7 +45,8 @@ mod tests {
     #[test]
     fn symbology_set() {
         let set = LinearReader.symbologies();
-        assert_eq!(set.iter().count(), 8);
+        assert_eq!(set.iter().count(), 11);
+        assert!(set.contains(Symbology::DataBarExpanded));
         assert!(!set.contains(Symbology::Qr));
         assert!(set.contains(Symbology::Itf));
         assert_eq!(LinearReader.name(), "linear");

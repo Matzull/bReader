@@ -31,6 +31,12 @@ pub enum Symbology {
     MicroQr,
     /// Rectangular Micro QR Code (rMQR), ISO/IEC 23941.
     Rmqr,
+    /// GS1 DataBar Omnidirectional and Truncated (one row).
+    DataBar,
+    /// GS1 DataBar Limited.
+    DataBarLimited,
+    /// GS1 DataBar Expanded (one row).
+    DataBarExpanded,
 }
 
 impl Symbology {
@@ -50,6 +56,9 @@ impl Symbology {
         Self::Codabar,
         Self::MicroQr,
         Self::Rmqr,
+        Self::DataBar,
+        Self::DataBarLimited,
+        Self::DataBarExpanded,
     ];
 
     /// True for 1D symbologies.
@@ -77,6 +86,9 @@ impl Symbology {
             Self::Codabar => "Codabar",
             Self::MicroQr => "Micro QR Code",
             Self::Rmqr => "rMQR Code",
+            Self::DataBar => "GS1 DataBar",
+            Self::DataBarLimited => "GS1 DataBar Limited",
+            Self::DataBarExpanded => "GS1 DataBar Expanded",
         }
     }
 }

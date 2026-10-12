@@ -165,6 +165,12 @@ pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
     if sym == Symbology::Codabar {
         return (sym, strip_codabar_guards(&trimmed).to_vec());
     }
+    if matches!(
+        sym,
+        Symbology::DataBar | Symbology::DataBarLimited | Symbology::DataBarExpanded
+    ) {
+        return (sym, plain_element_string(&trimmed));
+    }
     if matches!(sym, Symbology::UpcA | Symbology::UpcE) && trimmed.iter().all(u8::is_ascii_digit) {
         let upca = match (sym, trimmed.len()) {
             (Symbology::UpcE, 8) => upce_to_upca(&trimmed),
@@ -181,6 +187,16 @@ pub fn canonical(sym: Symbology, data: &[u8]) -> Key {
         }
     }
     (sym, trimmed)
+}
+
+/// Datasets label GS1 DataBar symbols as raw element strings (`0104412345678909`), other
+/// readers print the human-readable form (`(01)04412345678909`) and some keep the FNC1
+/// separators as GS. All spellings reduce to the digits and characters of the element string.
+fn plain_element_string(data: &[u8]) -> Vec<u8> {
+    data.iter()
+        .copied()
+        .filter(|&b| !matches!(b, b'(' | b')' | 0x1d))
+        .collect()
 }
 
 /// Datasets and other readers spell a Codabar symbol with its start and stop characters
