@@ -38,6 +38,9 @@ pub(crate) struct Triplet {
     pub synthetic: bool,
     /// Use the parallelogram for the fourth corner (no perspective correction).
     pub parallel: bool,
+    /// Passed only the perspective-tolerant geometry limits; tried after
+    /// every strict triplet.
+    pub loose: bool,
 }
 
 #[derive(Debug, Default)]
@@ -424,7 +427,8 @@ impl FinderSearch {
             }
         }
         self.add_recovered_triplets(n);
-        self.triplets.sort_by(|a, b| a.score.total_cmp(&b.score));
+        self.triplets
+            .sort_by(|a, b| a.loose.cmp(&b.loose).then(a.score.total_cmp(&b.score)));
     }
 
     /// A verified timing pattern between two finders locates the third one
@@ -486,6 +490,13 @@ struct Link {
 }
 
 const RELAXED_MAX_FINDERS: usize = 60;
+/// Limits of the perspective tier: leg ratio, |cos| of the corner angle,
+/// module ratio between finders, and the relative disagreement of the
+/// per-side dimension estimates.
+const LOOSE_LEG: f32 = 3.0;
+const LOOSE_COS: f32 = 0.8;
+const LOOSE_MODULE: f32 = 3.2;
+const LOOSE_SIDE_DIFF: f32 = 0.25;
 const MAX_LINKS_PER_FINDER: usize = 8;
 /// With few finders, pairs without a verified timing pattern stay candidates
 /// (strong perspective or blur can break the check).
@@ -713,8 +724,8 @@ fn make_triplet(
     let cos = (v1.0 * v2.0 + v1.1 * v2.1) / (l1 * l2);
     // Both timing patterns agreeing on the dimension tolerates strong perspective.
     let hinted = relaxed && dp == dq && dp != 0;
-    let (max_leg, max_cos, max_mod) = if hinted {
-        (3.0, 0.8, 3.2)
+    let (max_leg, max_cos, max_mod) = if hinted || relaxed {
+        (LOOSE_LEG, LOOSE_COS, LOOSE_MODULE)
     } else {
         (1.6, 0.5, 1.6)
     };
@@ -741,13 +752,26 @@ fn make_triplet(
     }
     let d1 = tl.pos.distance(tr.pos) / ((tl.module + tr.module) / 2.0) + 7.0;
     let d2 = tl.pos.distance(bl.pos) / ((tl.module + bl.module) / 2.0) + 7.0;
-    let dim = if hinted {
+    let mut dim = if hinted {
         f32::from(dp)
     } else {
         (d1 + d2) / 2.0
     };
-    if !hinted && (!(19.0..=185.0).contains(&dim) || (d1 - d2).abs() > 0.2 * dim) {
-        return None;
+    let mut loose = false;
+    if !hinted {
+        let strict = leg_ratio <= 1.6
+            && cos.abs() <= 0.5
+            && mx / mn <= 1.6
+            && (19.0..=185.0).contains(&dim)
+            && (d1 - d2).abs() <= 0.2 * dim;
+        if !strict {
+            if !relaxed {
+                return None;
+            }
+            let est = perspective_dim(&tl, &tr, &bl, v1, v2, cross > 0.0)?;
+            dim = est;
+            loose = true;
+        }
     }
     let score =
         cos.abs() * 2.0 + (leg_ratio.ln()).abs() + (mx / mn).ln() + (d1 - d2).abs() / dim * 3.0
@@ -766,7 +790,47 @@ fn make_triplet(
         },
         synthetic: false,
         parallel: false,
+        loose,
     })
+}
+
+/// Module size along the unit direction (ux, uy) of a symbol side. The
+/// horizontal chord measures the side's module when the side is horizontal,
+/// the vertical chord when it is vertical, so foreshortening along one image
+/// axis shows up in one side only.
+fn module_side(f: &Finder, ux: f32, uy: f32) -> f32 {
+    let w = (f.chords[0] * ux * ux + f.chords[1] * uy * uy) * ux.abs().max(uy.abs());
+    w / 7.0
+}
+
+/// Dimension estimated per side with the module size along that side, for
+/// triplets outside the strict isotropic limits. A homography changes the
+/// module size along the two sides differently, so the sides must agree on
+/// the dimension within `LOOSE_SIDE_DIFF`, a bound far tighter than the
+/// isotropic estimate would need. `None` when they do not.
+fn perspective_dim(
+    tl: &Finder,
+    tr: &Finder,
+    bl: &Finder,
+    v1: (f32, f32),
+    v2: (f32, f32),
+    p_is_tr: bool,
+) -> Option<f32> {
+    let (vt, vb) = if p_is_tr { (v1, v2) } else { (v2, v1) };
+    let side = |end: &Finder, v: (f32, f32)| {
+        let l = v.0.hypot(v.1);
+        let (ux, uy) = (v.0 / l, v.1 / l);
+        let m = (module_side(tl, ux, uy) + module_side(end, ux, uy)) / 2.0;
+        (l, m)
+    };
+    let (lt, mt) = side(tr, vt);
+    let (lb, mb) = side(bl, vb);
+    if mt <= 0.0 || mb <= 0.0 {
+        return None;
+    }
+    let (da, db) = (lt / mt + 7.0, lb / mb + 7.0);
+    let dim = (da + db) / 2.0;
+    ((19.0..=185.0).contains(&dim) && (da - db).abs() <= LOOSE_SIDE_DIFF * dim).then_some(dim)
 }
 
 /// Valid dimensions near the fractional estimate, closest first.

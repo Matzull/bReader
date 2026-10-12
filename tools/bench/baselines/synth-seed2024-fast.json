@@ -652,7 +652,7 @@
       },
       "QR Code": {
         "expected": 20,
-        "read": 15,
+        "read": 18,
         "false_positives": 0
       },
       "UPC-A": {

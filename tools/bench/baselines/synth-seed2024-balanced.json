@@ -447,7 +447,7 @@
       },
       "EAN-13": {
         "expected": 40,
-        "read": 39,
+        "read": 40,
         "false_positives": 0
       },
       "EAN-8": {
@@ -652,7 +652,7 @@
       },
       "QR Code": {
         "expected": 20,
-        "read": 18,
+        "read": 20,
         "false_positives": 0
       },
       "UPC-A": {

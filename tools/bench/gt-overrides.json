@@ -579,6 +579,78 @@
           "text": "BL07676827455"
         },
         "reason": "The Aztec of this Trenitalia ticket is labelled with the printed ticket number (BL 6827454 ... under the caption), which is not what a ticket Aztec encodes: the symbol is clean and Reed-Solomon-valid and carries a binary payload, read identically by breader and zxing-cpp (it starts with the bytes 14 C2 08 10 like the other Trenitalia Aztecs of the set). Its true value is unknown, so the region is masked (undecodable) instead of expected."
+      },
+      {
+        "file": "IMG_3083.JPG",
+        "from": {
+          "format": "QR_CODE",
+          "text": "http//jdi.na.vutbr.cz/uvod"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://jdi.na.vutbr.cz/uvod"
+        },
+        "reason": "Label typo: the URL lacks the colon after the scheme. Breader decodes http://jdi.na.vutbr.cz/uvod from a Reed-Solomon validated symbol of the same series (IMG_20120226_164408)."
+      },
+      {
+        "file": "IMG_20120226_164408.jpg",
+        "from": {
+          "format": "QR_CODE",
+          "text": "http//jdi.na.vutbr.cz/uvod"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://jdi.na.vutbr.cz/uvod"
+        },
+        "reason": "Label typo: the URL lacks the colon after the scheme. Breader decodes http://jdi.na.vutbr.cz/uvod from a Reed-Solomon validated symbol of the same series (IMG_20120226_164408)."
+      },
+      {
+        "file": "IMG_20120226_164440.jpg",
+        "from": {
+          "format": "QR_CODE",
+          "text": "http//jdi.na.vutbr.cz/uvod"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://jdi.na.vutbr.cz/uvod"
+        },
+        "reason": "Label typo: the URL lacks the colon after the scheme. Breader decodes http://jdi.na.vutbr.cz/uvod from a Reed-Solomon validated symbol of the same series (IMG_20120226_164408)."
+      },
+      {
+        "file": "IMG_20120226_164453.jpg",
+        "from": {
+          "format": "QR_CODE",
+          "text": "http//jdi.na.vutbr.cz/uvod"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://jdi.na.vutbr.cz/uvod"
+        },
+        "reason": "Label typo: the URL lacks the colon after the scheme. Breader decodes http://jdi.na.vutbr.cz/uvod from a Reed-Solomon validated symbol of the same series (IMG_20120226_164408)."
+      },
+      {
+        "file": "IMG_20120226_165417.jpg",
+        "from": {
+          "format": "QR_CODE",
+          "text": "http//jdi.na.vutbr.cz/uvod"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://jdi.na.vutbr.cz/uvod"
+        },
+        "reason": "Label typo: the URL lacks the colon after the scheme. Breader decodes http://jdi.na.vutbr.cz/uvod from a Reed-Solomon validated symbol of the same series (IMG_20120226_164408)."
+      },
+      {
+        "file": "IMG_3029.JPG",
+        "from": {
+          "format": "QR_CODE",
+          "text": "http//jdi.na.vutbr.cz/uvod"
+        },
+        "to": {
+          "format": "QR_CODE",
+          "text": "http://jdi.na.vutbr.cz/uvod"
+        },
+        "reason": "Label typo: the URL lacks the colon after the scheme. Breader decodes http://jdi.na.vutbr.cz/uvod from a Reed-Solomon validated symbol of the same series (IMG_20120226_164408)."
       }
     ]
   }

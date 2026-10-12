@@ -217,14 +217,14 @@
     "qrcode-2": {
       "QR Code": {
         "expected": 57,
-        "read": 49,
+        "read": 51,
         "false_positives": 0
       }
     },
     "qrcode-3": {
       "QR Code": {
         "expected": 18,
-        "read": 17,
+        "read": 18,
         "false_positives": 0
       }
     },
