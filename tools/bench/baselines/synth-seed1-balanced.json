@@ -38,6 +38,21 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 1,
@@ -103,6 +118,21 @@
       "EAN-8": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
         "false_positives": 0
       },
       "ITF": {
@@ -179,6 +209,21 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 2,
@@ -244,6 +289,21 @@
       "EAN-8": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
         "false_positives": 0
       },
       "ITF": {
@@ -313,6 +373,21 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 2,
@@ -378,6 +453,21 @@
       "EAN-8": {
         "expected": 9,
         "read": 9,
+        "false_positives": 0
+      },
+      "GS1 DataBar": {
+        "expected": 2,
+        "read": 2,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "ITF": {
@@ -448,6 +538,21 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 2,
@@ -515,6 +620,21 @@
         "read": 2,
         "false_positives": 0
       },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
       "ITF": {
         "expected": 2,
         "read": 2,
@@ -580,6 +700,21 @@
       "EAN-8": {
         "expected": 2,
         "read": 2,
+        "false_positives": 0
+      },
+      "GS1 DataBar": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Expanded": {
+        "expected": 1,
+        "read": 1,
+        "false_positives": 0
+      },
+      "GS1 DataBar Limited": {
+        "expected": 1,
+        "read": 1,
         "false_positives": 0
       },
       "ITF": {
