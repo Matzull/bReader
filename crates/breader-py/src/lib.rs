@@ -35,6 +35,7 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::Aztec => "aztec",
         Symbology::Codabar => "codabar",
         Symbology::MicroQr => "micro-qr",
+        Symbology::Rmqr => "rmqr",
         Symbology::DataBar => "databar",
         Symbology::DataBarLimited => "databar-limited",
         Symbology::DataBarExpanded => "databar-expanded",
@@ -256,6 +257,8 @@ impl Symbol {
             SymbolMeta::Qr(m) => {
                 d.set_item("kind", "qr")?;
                 d.set_item("version", m.version)?;
+                d.set_item("width", m.width)?;
+                d.set_item("height", m.height)?;
                 d.set_item("ec_level", format!("{:?}", m.ec_level))?;
                 d.set_item("mask", m.mask)?;
                 d.set_item("errors_corrected", m.errors_corrected)?;

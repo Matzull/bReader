@@ -115,7 +115,9 @@ pub fn image_rng(seed: u64, class: Class, index: usize) -> ChaCha8Rng {
 
 fn geometry(cfg: &Config, sym: Sym, rng: &mut ChaCha8Rng) -> Geometry {
     let module_px = match sym {
-        Sym::Qr | Sym::DataMatrix | Sym::Aztec | Sym::MicroQr => uniform(rng, cfg.qr_module),
+        Sym::Qr | Sym::DataMatrix | Sym::Aztec | Sym::MicroQr | Sym::Rmqr => {
+            uniform(rng, cfg.qr_module)
+        }
         _ => uniform(rng, cfg.lin_module),
     };
     Geometry {
@@ -194,6 +196,7 @@ enum Mix {
     Aztec,
     Codabar,
     MicroQr,
+    Rmqr,
     DataBar,
 }
 
@@ -222,6 +225,7 @@ fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
             Mix::Aztec => Sym::Aztec,
             Mix::Codabar => Sym::Codabar,
             Mix::MicroQr => Sym::MicroQr,
+            Mix::Rmqr => Sym::Rmqr,
             Mix::DataBar => {
                 [Sym::DataBar, Sym::DataBarLimited, Sym::DataBarExpanded][rng.random_range(0..3)]
             }
@@ -393,6 +397,25 @@ pub fn generate_microqr(class: Class, j: usize, seed: u64) -> Option<(GrayImage,
             let pick = j + class.index() as usize * 3;
             let enc = encode::encode_microqr(rng, pick, j % 3 == 2);
             let (mut img, anns) = single_with(class, Sym::MicroQr, enc, rng);
+            degrade(class, &mut img, rng);
+            Some((img, anns))
+        }
+    }
+}
+
+/// rMQR images of a class, generated after the Micro QR ones so that every
+/// earlier image stays byte-identical: the 64 size and level variants are
+/// spread over the images, every third image is mirrored.
+pub fn generate_rmqr(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Vec<Annotation>)> {
+    let mut rng = image_rng(seed.wrapping_add(0x724D_5152), class, j);
+    let rng = &mut rng;
+    match class {
+        Class::Negative | Class::Datamatrix => None,
+        Class::Multi => Some(multi(rng, Mix::Rmqr)),
+        _ => {
+            let pick = j * 13 + class.index() as usize * 5;
+            let enc = encode::encode_rmqr(rng, pick, j % 3 == 2);
+            let (mut img, anns) = single_with(class, Sym::Rmqr, enc, rng);
             degrade(class, &mut img, rng);
             Some((img, anns))
         }

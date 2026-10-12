@@ -250,7 +250,13 @@
       }
     },
     "qrcode-7": {},
-    "rmqrcode-1": {},
+    "rmqrcode-1": {
+      "rMQR Code": {
+        "expected": 3,
+        "read": 3,
+        "false_positives": 0
+      }
+    },
     "rss14-1": {
       "GS1 DataBar": {
         "expected": 13,

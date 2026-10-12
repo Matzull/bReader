@@ -24,7 +24,7 @@ try:
 except ImportError:
     breader = None
 
-SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code", "GS1 DataBar", "GS1 DataBar Limited", "GS1 DataBar Expanded"]
+SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code", "rMQR Code", "GS1 DataBar", "GS1 DataBar Limited", "GS1 DataBar Expanded"]
 
 ALIASES = {
     "QRCODE": "QR Code",
@@ -45,6 +45,8 @@ ALIASES = {
     "AZTECCODE": "Aztec",
     "MICROQRCODE": "Micro QR Code",
     "MICROQR": "Micro QR Code",
+    "RMQRCODE": "rMQR Code",
+    "RMQR": "rMQR Code",
     "DATABAR": "GS1 DataBar",
     "GS1DATABAR": "GS1 DataBar",
     "RSS14": "GS1 DataBar",
@@ -72,6 +74,7 @@ BR_FORMATS = {
     "pdf417": "PDF417",
     "aztec": "Aztec",
     "micro-qr": "Micro QR Code",
+    "rmqr": "rMQR Code",
     "databar": "GS1 DataBar",
     "databar-limited": "GS1 DataBar Limited",
     "databar-expanded": "GS1 DataBar Expanded",
@@ -102,6 +105,7 @@ class ZxingEngine:
             bf.PDF417: "PDF417",
             bf.Aztec: "Aztec",
             bf.MicroQRCode: "Micro QR Code",
+            bf.RMQRCode: "rMQR Code",
             bf.DataBarOmni: "GS1 DataBar",
             bf.DataBarStkOmni: "GS1 DataBar",
             bf.DataBarStk: "GS1 DataBar",

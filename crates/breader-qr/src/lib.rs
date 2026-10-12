@@ -10,6 +10,7 @@ mod detect;
 pub mod fuzzing;
 mod micro;
 mod reader;
+mod rmqr;
 mod sample;
 mod spec;
 #[cfg(test)]

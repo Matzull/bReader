@@ -113,6 +113,7 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "PDF417" => Some(Symbology::Pdf417),
         "AZTEC" | "AZTECCODE" => Some(Symbology::Aztec),
         "MICROQRCODE" | "MICROQR" => Some(Symbology::MicroQr),
+        "RMQRCODE" | "RMQR" | "RECTANGULARMICROQRCODE" => Some(Symbology::Rmqr),
         _ => None,
     }
 }

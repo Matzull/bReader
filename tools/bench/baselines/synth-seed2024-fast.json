@@ -62,6 +62,11 @@
         "expected": 7,
         "read": 7,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
       }
     },
     "clean": {
@@ -121,6 +126,11 @@
         "false_positives": 0
       },
       "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "rMQR Code": {
         "expected": 7,
         "read": 7,
         "false_positives": 0
@@ -193,6 +203,11 @@
         "expected": 7,
         "read": 7,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
       }
     },
     "inverted": {
@@ -252,6 +267,11 @@
         "false_positives": 0
       },
       "UPC-A": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
+      "rMQR Code": {
         "expected": 7,
         "read": 7,
         "false_positives": 0
@@ -317,6 +337,11 @@
         "expected": 7,
         "read": 7,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
       }
     },
     "multi": {
@@ -378,6 +403,11 @@
       "UPC-A": {
         "expected": 45,
         "read": 36,
+        "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 24,
+        "read": 22,
         "false_positives": 0
       }
     },
@@ -442,6 +472,11 @@
         "expected": 7,
         "read": 7,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 7,
+        "read": 5,
+        "false_positives": 0
       }
     },
     "perspective": {
@@ -504,6 +539,11 @@
         "expected": 7,
         "read": 2,
         "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
       }
     },
     "rotated": {
@@ -565,6 +605,11 @@
       "UPC-A": {
         "expected": 7,
         "read": 3,
+        "false_positives": 0
+      },
+      "rMQR Code": {
+        "expected": 7,
+        "read": 7,
         "false_positives": 0
       }
     }

@@ -86,6 +86,7 @@ Dynamic dispatch happens only at stage boundaries (a handful of calls per pass).
 Validation is part of each decoder, not an optional post-step: a `SymbologyReader` must only push results that passed every check for its symbology (NFR-1). Checks per family:
 
 - **QR**: format information BCH, version information BCH (v ≥ 7), Reed-Solomon success with all blocks, bitstream well-formed until terminator/padding.
+- **rMQR**: before Reed-Solomon, the timing patterns of the four edges and of the alignment columns found as boundaries, both quiet rings, the finder with its separators and the other function patterns on the sampled grid, both copies of the BCH(18,6) format information agreeing and naming the sampled size. Reed-Solomon per block with the corrections capped (reserve 2 up to 8 check codewords, 1 above), strict padding after the terminator. See [rmqr](symbologies/rmqr.md).
 - **EAN/UPC**: check digit, guard patterns, quiet zones, module-width consistency, ≥ `min_line_agreement` agreeing scanlines.
 - **Code 128**: mod-103 checksum, stop pattern, quiet zones, scanline agreement.
 - **Code 39**: optional mod-43, inter-character gaps, minimum length, quiet zones, scanline agreement.
@@ -112,7 +113,7 @@ EAN/UPC, Code 128, Code 39, ITF, Codabar and GS1 DataBar over gray scanline prof
 
 ### 3.2 QR (`breader-qr`)
 
-Finder patterns, triplets, homography sampling, Reed-Solomon, retries (local threshold, pitch correction, nested symbols). Design: [symbologies/qr.md](symbologies/qr.md). Micro QR (M1 to M4) is read by the same `QrReader` from the finders of the same scan that no decoded symbol consumed: [symbologies/microqr.md](symbologies/microqr.md).
+Finder patterns, triplets, homography sampling, Reed-Solomon, retries (local threshold, pitch correction, nested symbols). Design: [symbologies/qr.md](symbologies/qr.md). Micro QR (M1 to M4) is read by the same `QrReader` from the finders of the same scan that no decoded symbol consumed: [symbologies/microqr.md](symbologies/microqr.md). rMQR is read by the same `QrReader` in the same candidate loop, from the timing patterns of all four edges: [symbologies/rmqr.md](symbologies/rmqr.md).
 
 ### 3.3 Error correction (`breader-ecc`)
 

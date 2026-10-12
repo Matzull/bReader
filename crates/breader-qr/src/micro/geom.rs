@@ -4,7 +4,7 @@
 use breader_core::{Homography, Plane, Point};
 
 /// Finder template agreement (of 81 modules) below which a candidate is dropped.
-pub(super) const TEMPLATE_MIN: i32 = 62;
+pub(crate) const TEMPLATE_MIN: i32 = 62;
 
 /// Tolerance in modules for a timing edge around its predicted position.
 const EDGE_TOL: f32 = 0.45;
@@ -22,7 +22,7 @@ fn len(p: Point) -> f32 {
 }
 
 /// Pixel value at `p`; `None` outside the image.
-fn dark(plane: Plane<'_>, p: Point) -> Option<bool> {
+pub(crate) fn dark(plane: Plane<'_>, p: Point) -> Option<bool> {
     if p.x < 0.0 || p.y < 0.0 {
         return None;
     }
@@ -33,7 +33,7 @@ fn dark(plane: Plane<'_>, p: Point) -> Option<bool> {
 /// Finder center and module vector `u` (pixels per module along the
 /// finder's x axis; the y axis is `u` turned by 90 degrees).
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Pose {
+pub(crate) struct Pose {
     pub c: Point,
     pub u: Point,
 }
@@ -99,7 +99,7 @@ fn unit(deg: f32, m: f32) -> Point {
 
 /// Fits the finder template (center, rotation, module size) around a
 /// detected finder. Returns the pose and its agreement score.
-pub(super) fn fit_pose(plane: Plane<'_>, c0: Point, m0: f32) -> Option<(Pose, i32)> {
+pub(crate) fn fit_pose(plane: Plane<'_>, c0: Point, m0: f32) -> Option<(Pose, i32)> {
     if !(m0 > 0.5 && m0 < 200.0) {
         return None;
     }
@@ -241,7 +241,7 @@ fn intersect(l1: (Point, Point), l2: (Point, Point)) -> Option<Point> {
 /// Image corners of the finder in the pose's frame, in the order
 /// (-,-), (+,-), (+,+), (-,+) in units of (u, v).
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Corners([Point; 4]);
+pub(crate) struct Corners([Point; 4]);
 
 impl Corners {
     /// Each side is the line through points found by walking outwards from

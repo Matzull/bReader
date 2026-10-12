@@ -467,6 +467,8 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
         aim_id: dec.aim_id,
         meta: SymbolMeta::Qr(QrMeta {
             version: dec.version,
+            width: found.dim as u16,
+            height: found.dim as u16,
             ec_level: dec.ec_level,
             mask: dec.mask,
             errors_corrected: dec.errors_corrected,
@@ -495,10 +497,14 @@ impl Known {
         };
         let c = s.quad.corners;
         let side = (0..4).map(|i| c[i].distance(c[(i + 1) % 4])).sum::<f32>() / 4.0;
-        let dim = if s.symbology == Symbology::MicroQr {
-            9.0 + 2.0 * f32::from(meta.version)
-        } else {
-            17.0 + 4.0 * f32::from(meta.version)
+        let dim = match s.symbology {
+            Symbology::MicroQr => 9.0 + 2.0 * f32::from(meta.version),
+            // The sides run along the width and the height alternately.
+            Symbology::Rmqr => {
+                2.0 * f32::from(meta.width) * f32::from(meta.height)
+                    / (f32::from(meta.width) + f32::from(meta.height))
+            }
+            _ => 17.0 + 4.0 * f32::from(meta.version),
         };
         Some(Self {
             quad: s.quad,
@@ -524,6 +530,7 @@ impl SymbologyReader for QrReader {
         SymbologySet::EMPTY
             .with(Symbology::Qr)
             .with(Symbology::MicroQr)
+            .with(Symbology::Rmqr)
     }
 
     fn handles_inversion(&self) -> bool {
@@ -535,14 +542,26 @@ impl SymbologyReader for QrReader {
         let want = ctx.options().symbologies;
         let want_qr = want.contains(Symbology::Qr);
         let want_micro = want.contains(Symbology::MicroQr);
-        if !want_qr && !want_micro {
+        let want_rmqr = want.contains(Symbology::Rmqr);
+        if !want_qr && !want_micro && !want_rmqr {
             return;
         }
-        let micro = MicroParams::new(ctx.options().effort, params.row_step, ctx.scale());
+        let micro = MicroParams::new(
+            ctx.options().effort,
+            params.row_step,
+            ctx.scale(),
+            want_micro,
+            want_rmqr,
+        );
         let scale = ctx.scale();
         let mut known: Vec<Known> = out
             .iter()
-            .filter(|s| matches!(s.symbology, Symbology::Qr | Symbology::MicroQr))
+            .filter(|s| {
+                matches!(
+                    s.symbology,
+                    Symbology::Qr | Symbology::MicroQr | Symbology::Rmqr
+                )
+            })
             .filter_map(|s| Known::new(s, scale))
             .collect();
         let original = ctx.original();
@@ -615,7 +634,7 @@ impl SymbologyReader for QrReader {
                     out.push(sym);
                 }
             }
-            if want_micro {
+            if want_micro || want_rmqr {
                 micro_scan(
                     plane,
                     work.gray,

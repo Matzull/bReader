@@ -128,3 +128,76 @@ pub fn threshold(luma: &[u8], w: usize, h: usize) -> breader_core::BitMatrix {
     }
     m
 }
+
+/// Image corners of the corners (0,0), (w,0), (w,h), (0,h) of a rectangular
+/// module grid.
+pub fn similarity_rect(
+    w: usize,
+    h: usize,
+    center: Point,
+    px_per_module: f32,
+    deg: f32,
+) -> [Point; 4] {
+    let (hw, hh) = (
+        w as f32 / 2.0 * px_per_module,
+        h as f32 / 2.0 * px_per_module,
+    );
+    let (s, c) = deg.to_radians().sin_cos();
+    [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)]
+        .map(|(x, y)| Point::new(center.x + x * c - y * s, center.y + x * s + y * c))
+}
+
+/// Rectangular variant of [`Render`] for a bit matrix; `mirrored` flips the
+/// symbol horizontally.
+pub struct RectRender {
+    pub w: usize,
+    pub h: usize,
+    pub quad: [Point; 4],
+    pub mirrored: bool,
+    pub blur: usize,
+    pub invert: bool,
+}
+
+impl RectRender {
+    pub fn draw(&self, g: &breader_core::BitMatrix) -> Vec<u8> {
+        let (gw, gh) = (g.width() as f32, g.height() as f32);
+        let sq = [
+            Point::new(0.0, 0.0),
+            Point::new(gw, 0.0),
+            Point::new(gw, gh),
+            Point::new(0.0, gh),
+        ];
+        let inv = Perspective::quad_to_quad(sq, self.quad)
+            .unwrap()
+            .inverse()
+            .unwrap();
+        let mut img = vec![255u8; self.w * self.h];
+        for y in 0..self.h {
+            for x in 0..self.w {
+                let mut acc = 0u32;
+                for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                    let p = Point::new(x as f32 + ox, y as f32 + oy);
+                    let dark = inv.map(p).is_some_and(|q| {
+                        let u = if self.mirrored { gw - q.x } else { q.x };
+                        u >= 0.0
+                            && q.y >= 0.0
+                            && u < gw
+                            && q.y < gh
+                            && g.get(u.floor() as usize, q.y.floor() as usize)
+                    });
+                    acc += if dark { 0 } else { 255 };
+                }
+                img[y * self.w + x] = (acc / 4) as u8;
+            }
+        }
+        if self.blur > 0 {
+            img = box_blur(&img, self.w, self.h, self.blur);
+        }
+        if self.invert {
+            for p in &mut img {
+                *p = 255 - *p;
+            }
+        }
+        img
+    }
+}

@@ -2,7 +2,7 @@
 
 mod bits;
 pub(crate) mod decode;
-mod geom;
+pub(crate) mod geom;
 pub(crate) mod reader;
 #[cfg(test)]
 mod reader_tests;
