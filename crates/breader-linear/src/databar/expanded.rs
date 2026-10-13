@@ -353,6 +353,7 @@ fn try_symbol(runs: &Runs, j: isize, n: usize, head_module: f32, out: &mut Vec<L
         inverted: false,
         start_stop: None,
         segments: n as u8,
+        thin: false,
     });
     true
 }

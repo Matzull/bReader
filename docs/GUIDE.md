@@ -36,12 +36,12 @@ Input is converted to an 8-bit luma plane. `Luma8`, `Nv12`, `Nv21` and `I420` ar
 | `code39.full_ascii` | `code39_full_ascii` | `false` | Decode Code 39 Full ASCII escape pairs. |
 | `code39.require_checksum` | `code39_checksum` | `false` | Require a valid mod-43 check character (it stays in the payload). |
 | `code39.min_length` | `code39_min_length` | `3` | Minimum data characters. |
-| `itf.allowed_lengths` | `itf_lengths` | `[14]` | Accepted digit counts. Empty means any even length >= `min_length`. |
+| `itf.allowed_lengths` | `itf_lengths` | `[14, 8, 10, 12, 16, 18]` | Accepted digit counts. Empty means any even length >= `min_length`. Lengths other than 14 need 4 agreeing scanlines (14 needs 3) while the list is the default one. |
 | `itf.min_length` | `itf_min_length` | `6` | Minimum digits. |
 
 GS1 DataBar (Omnidirectional/Truncated, Limited, Expanded in one row) has no options either and is on by default ([D-037](decisions.md#d-037)): `data` is the GS1 element string (FNC1 as GS), AIM `]e0`, `content` is GS1; `meta.databar_segments` counts the symbol characters of an Expanded row. Stacked variants are not read. Codabar has no options. It is on by default with the guards of [D-036](decisions.md#d-036): `data` excludes the start and stop characters (A-D), which `meta.codabar_start_stop` (Python) / `LinearMeta::codabar_start_stop` (Rust) report; at least 4 data characters, 10-module quiet zones, and one more agreeing scanline than `min_line_agreement`. Disable it with `symbologies` if you do not expect it.
 
-ITF has no start/stop redundancy strong enough to reject truncated reads, so the default accepts only 14 digits (GTIN-14). Widen `allowed_lengths` only for formats you expect, e.g. `[6, 14]`.
+ITF has no start/stop redundancy strong enough to reject truncated reads, so the default accepts 14 digits (GTIN-14, check digit verified, 3 agreeing scanlines) and 8, 10, 12, 16 and 18 digits with 4 agreeing scanlines ([D-041](decisions.md#d-041)). All ITF symbols need a quiet zone of 10 narrow widths on both sides. A list you set yourself is taken as chosen: every listed length then needs the 3 lines. Widen it only for formats you expect, e.g. `[6, 14]`.
 
 ## Effort presets
 

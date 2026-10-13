@@ -67,10 +67,18 @@ pub struct ItfOptions {
     pub min_length: usize,
 }
 
+impl ItfOptions {
+    /// Default lengths: 14 (GTIN-14), then 8, 10, 12, 16 and 18, which need one
+    /// more agreeing scanline than 14 (decision D-041). Any other
+    /// explicit list is chosen by the caller: every listed length then needs
+    /// the plain ITF agreement.
+    pub const DEFAULT_LENGTHS: [usize; 6] = [14, 8, 10, 12, 16, 18];
+}
+
 impl Default for ItfOptions {
     fn default() -> Self {
         Self {
-            allowed_lengths: vec![14],
+            allowed_lengths: Self::DEFAULT_LENGTHS.to_vec(),
             min_length: 6,
         }
     }

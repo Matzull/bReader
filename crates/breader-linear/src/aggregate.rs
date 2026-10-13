@@ -28,6 +28,8 @@ pub(crate) struct PlacedHit {
     pub inverted: bool,
     pub start_stop: Option<(u8, u8)>,
     pub segments: u8,
+    /// See `LineHit::thin`.
+    pub thin: bool,
 }
 
 impl PlacedHit {
@@ -97,6 +99,15 @@ const TOUCH: f32 = 1.0;
 /// ITF has no check digit in general and any even digit string is a valid
 /// payload, so it always needs this many agreeing lines.
 const ITF_MIN_AGREEMENT: u16 = 3;
+/// Two agreeing lines count as independent when they are this many times the
+/// smaller of their scanline steps apart (2 px to 6 px for retry lines).
+const INDEPENDENT_STEPS: f32 = 1.9;
+/// Largest deviation of a line's module estimate from the group median for
+/// the line to count towards the geometric guard.
+/// Lines a group read with the relaxed Code 39 rules needs beyond the plain
+/// requirement: 4 with the default `min_line_agreement` of 2.
+const THIN_EXTRA_LINES: u16 = 2;
+const MODULE_AGREEMENT: f32 = 0.15;
 /// Upper bound on hits kept per pass, a guard against pathological input.
 const MAX_HITS: usize = 4096;
 
@@ -108,6 +119,8 @@ pub(crate) struct Settings {
     /// the same pixels, so a group backed by a single plan line needs one
     /// more agreeing line than `min_agreement`.
     pub plan_lines: u32,
+    /// Bit `n` set: an ITF symbol of `n` digits needs one more agreeing line.
+    pub itf_strict: u128,
     pub addon: EanAddonPolicy,
     /// Added to the across extent of the quad on both sides, in pass pixels.
     pub across_pad: f32,
@@ -204,17 +217,45 @@ impl Aggregator {
         out.clear();
         self.group();
         for g in &self.groups {
-            let lines = distinct_lines(&self.hits, &g.members);
-            if lines < self.required(&g.members, settings) {
+            let (lines, need) = self.agreement(&g.members, settings);
+            if lines < need {
                 out.push(self.hits[g.members[0]].clone());
             }
         }
     }
 
+    /// Agreeing lines of a group and the lines it needs. Thin hits count only
+    /// in a group made of nothing else: next to ordinary hits they are
+    /// ignored, so they can neither help nor hinder.
+    fn agreement(&self, members: &[usize], settings: &Settings) -> (u16, u16) {
+        if members.iter().any(|&m| self.hits[m].thin) && members.iter().any(|&m| !self.hits[m].thin)
+        {
+            let plain: Vec<usize> = members
+                .iter()
+                .copied()
+                .filter(|&m| !self.hits[m].thin)
+                .collect();
+            return (
+                distinct_lines(&self.hits, &plain),
+                self.required(&plain, settings),
+            );
+        }
+        (
+            distinct_lines(&self.hits, members),
+            self.required(members, settings),
+        )
+    }
+
     fn required(&self, members: &[usize], settings: &Settings) -> u16 {
         let mut min = settings.min_agreement.max(1);
         match self.hits[members[0]].symbology {
-            Symbology::Itf => min = min.max(ITF_MIN_AGREEMENT),
+            Symbology::Itf => {
+                min = min.max(ITF_MIN_AGREEMENT);
+                let digits = self.hits[members[0]].text.len();
+                if digits < 128 && settings.itf_strict >> digits & 1 == 1 {
+                    min += 1;
+                }
+            }
             // No check character either: one more line than the setting asks.
             Symbology::Codabar => min += 1,
             _ => {}
@@ -224,7 +265,21 @@ impl Aggregator {
             .copied()
             .filter(|&m| self.hits[m].line < settings.plan_lines)
             .collect();
-        let mut need = if min >= 2 && distinct_lines(&self.hits, &sparse) < 2 {
+        let thin = members.iter().any(|&m| self.hits[m].thin);
+        if thin {
+            min += THIN_EXTRA_LINES;
+        }
+        // Code 39 and ITF have no check character, so retry lines around one
+        // plan line are not enough. Instead of one more line, `min` lines that
+        // are apart from each other and agree on the module width are.
+        let guarded = matches!(
+            self.hits[members[0]].symbology,
+            Symbology::Code39 | Symbology::Itf
+        ) && self.independent_lines(members, min);
+        if thin && !guarded {
+            return u16::MAX;
+        }
+        let mut need = if min >= 2 && !guarded && distinct_lines(&self.hits, &sparse) < 2 {
             min + 1
         } else {
             min
@@ -240,6 +295,38 @@ impl Aggregator {
         need
     }
 
+    /// True when at least `need` lines of the group are at least
+    /// `INDEPENDENT_STEPS` of their steps apart across the symbol and their
+    /// module estimates are within `MODULE_AGREEMENT` of the group median.
+    fn independent_lines(&self, members: &[usize], need: u16) -> bool {
+        let mut modules: Vec<f32> = members.iter().map(|&m| self.hits[m].module).collect();
+        modules.sort_by(f32::total_cmp);
+        let median = modules[modules.len() / 2];
+        if median <= 0.0 {
+            return false;
+        }
+        let (ux, uy) = self.hits[members[0]].unit();
+        let mut offsets: Vec<(f32, f32)> = members
+            .iter()
+            .map(|&m| &self.hits[m])
+            .filter(|h| (h.module / median - 1.0).abs() <= MODULE_AGREEMENT)
+            .map(|h| {
+                let c = h.center();
+                (c.x * -uy + c.y * ux, h.step)
+            })
+            .collect();
+        offsets.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut count = 0u16;
+        let mut last: Option<(f32, f32)> = None;
+        for &(off, step) in &offsets {
+            if last.is_none_or(|(o, s)| off - o >= INDEPENDENT_STEPS * step.min(s)) {
+                count += 1;
+                last = Some((off, step));
+            }
+        }
+        count >= need
+    }
+
     /// Groups hits by symbol identity and proximity, applies the agreement
     /// and conflict rules and appends the surviving symbols to `out`.
     pub fn finish(&mut self, settings: &Settings, out: &mut Vec<Symbol>) {
@@ -247,8 +334,8 @@ impl Aggregator {
         let min = settings.min_agreement.max(1);
         let mut candidates: Vec<Candidate> = Vec::new();
         for g in &self.groups {
-            let lines = distinct_lines(&self.hits, &g.members);
-            if lines < self.required(&g.members, settings) {
+            let (lines, need) = self.agreement(&g.members, settings);
+            if lines < need {
                 continue;
             }
             let addon = self.choose_addon(&g.members, min);
@@ -497,6 +584,7 @@ mod tests {
             inverted: false,
             start_stop: None,
             segments: 0,
+            thin: false,
         }
     }
 
@@ -504,6 +592,7 @@ mod tests {
         Settings {
             min_agreement: min,
             plan_lines: u32::MAX,
+            itf_strict: 0,
             addon: EanAddonPolicy::Optional,
             across_pad: 2.0,
             scale: (1.0, 1.0),
@@ -563,6 +652,112 @@ mod tests {
         assert_eq!(seeds.len(), 1, "still short of the required lines");
         agg.seeds(&sparse(10), &mut seeds);
         assert!(seeds.is_empty());
+    }
+
+    #[test]
+    fn code39_and_itf_retry_lines_need_to_be_apart_and_agree_on_the_module() {
+        let sparse = |plan_lines, min| Settings {
+            plan_lines,
+            ..settings(min)
+        };
+        let c = |y: f32, line: u32, module: f32| {
+            let mut h = hit(Symbology::Code39, "1234567", y, 0.0, 100.0, line);
+            h.checksum_verified = false;
+            h.module = module;
+            h
+        };
+        // Line 0 is the only plan line; step is 6, so 12 apart is two steps.
+        let apart = vec![c(10.0, 0, 3.0), c(22.0, 5, 3.0)];
+        assert_eq!(run(apart.clone(), &sparse(1, 2)).len(), 1);
+        let touching = vec![c(10.0, 0, 3.0), c(16.0, 5, 3.0)];
+        assert!(run(touching.clone(), &sparse(1, 2)).is_empty());
+        let mut three = touching;
+        three.push(c(22.0, 6, 3.0));
+        assert_eq!(run(three, &sparse(1, 2)).len(), 1);
+        let off_module = vec![c(10.0, 0, 3.0), c(22.0, 5, 3.6)];
+        assert!(run(off_module, &sparse(1, 2)).is_empty());
+        let near_module = vec![c(10.0, 0, 3.0), c(22.0, 5, 3.3)];
+        assert_eq!(run(near_module, &sparse(1, 2)).len(), 1);
+        // A check character keeps the old rule: other symbologies are unchanged.
+        let ean = |y: f32, line| hit(Symbology::Ean13, "5901234123457", y, 0.0, 100.0, line);
+        assert!(run(vec![ean(10.0, 0), ean(22.0, 5)], &sparse(1, 2)).is_empty());
+        // Duplicate hits on one line are one line.
+        let mut same = apart;
+        same.push(c(10.0, 0, 3.0));
+        same.remove(1);
+        assert!(run(same, &sparse(1, 2)).is_empty());
+    }
+
+    #[test]
+    fn itf_added_lengths_need_one_more_line_than_itf14() {
+        let strict = Settings {
+            itf_strict: (1 << 12) | (1 << 8),
+            ..settings(2)
+        };
+        let i = |text: &str, line: u32| {
+            let mut h = hit(
+                Symbology::Itf,
+                text,
+                10.0 + 8.0 * line as f32,
+                0.0,
+                100.0,
+                line,
+            );
+            h.checksum_verified = false;
+            h
+        };
+        let lines = |text: &str, n: u32| (0..n).map(|l| i(text, l)).collect::<Vec<_>>();
+        assert_eq!(run(lines("12345678901231", 3), &strict).len(), 1);
+        assert!(run(lines("123456789012", 3), &strict).is_empty());
+        assert_eq!(run(lines("123456789012", 4), &strict).len(), 1);
+        assert_eq!(
+            run(lines("1234567890", 3), &strict).len(),
+            1,
+            "not in the mask"
+        );
+        assert_eq!(run(lines("123456789012", 3), &settings(2)).len(), 1);
+        assert!(run(lines("12345678", 3), &strict).is_empty());
+        assert_eq!(run(lines("12345678", 4), &strict).len(), 1);
+    }
+
+    #[test]
+    fn thin_code39_needs_four_independent_lines() {
+        let s = Settings {
+            plan_lines: 1,
+            ..settings(2)
+        };
+        let t = |y: f32, line: u32, module: f32| {
+            let mut h = hit(Symbology::Code39, "1234567", y, 0.0, 100.0, line);
+            h.checksum_verified = false;
+            h.thin = true;
+            h.module = module;
+            h
+        };
+        let two = vec![t(10.0, 0, 1.5), t(22.0, 5, 1.5)];
+        assert!(run(two.clone(), &s).is_empty());
+        let mut three = two.clone();
+        three.push(t(34.0, 6, 1.5));
+        assert!(run(three.clone(), &s).is_empty());
+        // Lines 12 apart chain into one group (the gap limit is two steps).
+        three.push(t(46.0, 7, 1.5));
+        assert_eq!(run(three.clone(), &s).len(), 1);
+        // Three lines next to each other are one view of the symbol.
+        let near = vec![
+            t(10.0, 0, 1.5),
+            t(13.0, 5, 1.5),
+            t(16.0, 6, 1.5),
+            t(19.0, 7, 1.5),
+        ];
+        assert!(run(near, &s).is_empty());
+        // The module estimates must agree.
+        three[3].module = 2.0;
+        assert!(run(three, &s).is_empty());
+        // Plain Code 39 hits on the same lines need only two.
+        let mut plain = two;
+        for h in &mut plain {
+            h.thin = false;
+        }
+        assert_eq!(run(plain, &s).len(), 1);
     }
 
     #[test]

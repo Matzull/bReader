@@ -1,4 +1,4 @@
-use breader_core::{EanAddonPolicy, ScanOptions, Symbology, SymbologySet};
+use breader_core::{EanAddonPolicy, ItfOptions, ScanOptions, Symbology, SymbologySet};
 
 use crate::runs::Runs;
 
@@ -30,6 +30,8 @@ pub(crate) struct LineHit {
     pub start_stop: Option<(u8, u8)>,
     /// GS1 DataBar Expanded: symbol characters in the row; 0 otherwise.
     pub segments: u8,
+    /// Read with the relaxed element rules for small modules (Code 39).
+    pub thin: bool,
 }
 
 /// The subset of [`ScanOptions`] the decoders consume, copied once per scan.
@@ -46,6 +48,9 @@ pub(crate) struct LineOptions {
     /// Bit `n` set: `n` digits accepted. Only meaningful when `itf_any` is false.
     pub(crate) itf_lengths: u128,
     pub(crate) itf_any: bool,
+    /// Bit `n` set: `n` digits need one more agreeing line (the added default
+    /// lengths while the list is the default one).
+    pub(crate) itf_strict: u128,
     /// Read dark-on-light symbols.
     pub normal: bool,
     /// Read light-on-dark symbols.
@@ -71,6 +76,14 @@ impl From<&ScanOptions> for LineOptions {
                 lengths |= 1 << n;
             }
         }
+        let default = ItfOptions::DEFAULT_LENGTHS
+            .iter()
+            .fold(0u128, |m, &n| m | 1 << n);
+        let itf_strict = if lengths == default {
+            default & !(1 << 14)
+        } else {
+            0
+        };
         Self {
             symbologies: o.symbologies,
             ean_addon: o.ean_addon,
@@ -80,6 +93,7 @@ impl From<&ScanOptions> for LineOptions {
             itf_min_length: o.itf.min_length,
             itf_lengths: lengths,
             itf_any: o.itf.allowed_lengths.is_empty(),
+            itf_strict,
             normal: true,
             invert: o.try_invert.unwrap_or(true),
             marks: o.symbologies.contains(Symbology::Pdf417),
@@ -139,6 +153,7 @@ mod tests {
                 inverted: false,
                 start_stop: None,
                 segments: 0,
+                thin: false,
             });
             false
         }
@@ -148,10 +163,20 @@ mod tests {
     fn itf_length_list_becomes_a_bitset() {
         let mut o = ScanOptions::default();
         let opts = LineOptions::from(&o);
-        assert!(opts.itf_length_ok(14) && !opts.itf_length_ok(12));
+        for n in [8, 10, 12, 14, 16, 18] {
+            assert!(opts.itf_length_ok(n), "{n}");
+        }
+        assert!(!opts.itf_length_ok(6) && !opts.itf_length_ok(20));
+        assert_eq!(
+            opts.itf_strict,
+            (1 << 8) | (1 << 10) | (1 << 12) | (1 << 16) | (1 << 18)
+        );
         o.itf.allowed_lengths = vec![6, 10, 500];
         let opts = LineOptions::from(&o);
         assert!(opts.itf_length_ok(6) && opts.itf_length_ok(10) && !opts.itf_length_ok(14));
+        assert_eq!(opts.itf_strict, 0, "a user list keeps the plain agreement");
+        o.itf.allowed_lengths = vec![14, 12];
+        assert_eq!(LineOptions::from(&o).itf_strict, 0);
         assert!(!opts.itf_length_ok(500) && !opts.itf_length_ok(usize::MAX));
         o.itf.allowed_lengths.clear();
         assert!(LineOptions::from(&o).itf_length_ok(usize::MAX));

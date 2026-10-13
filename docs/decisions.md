@@ -13,7 +13,7 @@ Product-level defaults and scope are owner decisions ([contributing](contributin
 | [D-005](#d-005) | 2026-10-06 | Ground-truth overrides need visual verification |
 | [D-006](#d-006) | 2026-10-06 | Code 39 Full ASCII off by default |
 | [D-007](#d-007) | 2026-10-07 | v1 targets |
-| [D-008](#d-008) | 2026-10-07 | ITF default accepted lengths: 14 only |
+| [D-008](#d-008) | 2026-10-07 | ITF default accepted lengths: 14 only (default part superseded by D-041) |
 | [D-009](#d-009) | 2026-10-07 | License: AGPL-3.0-only plus commercial |
 | [D-010](#d-010) | 2026-10-07 | Regression gate with versioned baselines; CI on GitHub Actions |
 | [D-011](#d-011) | 2026-10-07 | Fuzz corpus is not versioned |
@@ -34,6 +34,9 @@ Product-level defaults and scope are owner decisions ([contributing](contributin
 | [D-037](#d-037) | 2026-10-11 | GS1 DataBar Omnidirectional, Limited and Expanded (one row) in `breader-linear`: checksums mandatory, tables cross-checked against `anyd`, stacked variants next |
 | [D-038](#d-038) | 2026-10-11 | Micro QR inside `breader-qr`: format distance 2, RS guard, M1 representation, AIM |
 | [D-039](#d-039) | 2026-10-11 | rMQR inside `breader-qr`: both format copies, timing-edge fit, block tables, AIM, metadata |
+| [D-041](#d-041) | 2026-10-12 | ITF default lengths: 14 plus 8, 10, 12, 16, 18 with 4 lines (supersedes the default of D-008) |
+| [D-042](#d-042) | 2026-10-12 | Code 39 and ITF: geometric guard instead of the single-plan-line extra line |
+| [D-043](#d-043) | 2026-10-12 | Code 39 thin modules: relaxed element rules, 4 independent lines, 7X quiet zones |
 
 ## D-001
 
@@ -64,6 +67,8 @@ Product-level defaults and scope are owner decisions ([contributing](contributin
 2026-10-07. **v1 targets:** 0 false positives everywhere including `negative`; challenging-images read rate at least 86 % (zxing-cpp level); synth at least 82 % overall and at least zxing-cpp in every class; Balanced p50 not above zxing-cpp; Fast p50 at most 10 ms on a 1080p frame. See [BASELINES](BASELINES.md#v1-targets-confirmed-2026-10-07).
 
 ## D-008
+
+Superseded by [D-041](#d-041) for the default list (the option and the reasoning on partial reads stay).
 
 2026-10-07. **ITF accepts only 14 digits by default** (`ItfOptions::allowed_lengths = [14]`, minimum length 6). Why: ITF has no start/stop redundancy to reject truncated reads, and partial ITF reads were the largest source of false positives in other engines. Consequence: most 4 to 10 digit ITF labels in the zxing samples are not read by design; users widen the list for formats they expect. See [GUIDE](GUIDE.md#scanoptions), [BASELINES](BASELINES.md#zxing-cpp-samples-2026-10-08).
 
@@ -197,3 +202,15 @@ Sources and checks. Tables were reconstructed from ISO/IEC 24724 as remembered a
 ## D-040
 
 2026-10-12. **QR triplets get a perspective-tolerant tier, tried after the strict ones.** A triplet outside the strict limits (leg ratio 1.6, corner angle within 30 degrees of right, module ratio 1.6, `|d1-d2| <= 0.2 dim` with the isotropic module) is kept only when at most 60 finders are in the frame (the existing `relaxed` condition) and its dimension, estimated per side with the module size along that side, is self-consistent. The horizontal chord of a finder measures a horizontal side and the vertical chord a vertical one, so foreshortening along one image axis shows up in one side only; the two side estimates must agree within 25 % of the dimension. Further bounds, the ones already used for timing-hinted triplets: leg ratio 3.0, corner angle within 37 degrees of right (|cos| 0.8), module ratio 3.2, dimension 19 to 185. The triplet is flagged `loose` and sorts after every strict triplet; it shares the failure budget of the pass, so the cost per frame is bounded as before. Every downstream guard is unchanged (plausibility tests, format and version BCH, Reed-Solomon). Why: the [BarBeR triage](FAILURES-BARBER-QR.md) found the isotropic dimension gate the largest cause of misses (about 140 of 240 labels zxing-cpp reads and breader does not); relaxing it alone gave +129 on the full set with no false positive. Measured effect: [BASELINES](BASELINES.md); latency on challenging-images unchanged within noise at Fast and Balanced. See [qr](symbologies/qr.md).
+
+## D-041
+
+2026-10-12 (owner decision). **ITF reads 14 digits as before, and 8, 10, 12, 16 and 18 digits by default; the added lengths need 4 agreeing scanlines.** `ItfOptions::DEFAULT_LENGTHS` is `[14, 8, 10, 12, 16, 18]`. Length 14 keeps its rules (check digit, 3 lines). The added lengths need 4 agreeing lines; every ITF symbol already needs quiet zones of 10 narrow widths on both sides, measured and never open at the profile border. The 4-line rule applies while `allowed_lengths` is the default set; a list the user sets keeps the plain 3 lines per listed length, as before. Why: the [BarBeR triage](FAILURES-BARBER-1D.md) found 13 of 29 missed ITF labels and 3 of 4 on challenging-images were pure length policy. Measured effect on BarBeR (Balanced): ITF 34 to 48 of 72 (one of them after the label fix below), challenging-images ITF 0 to 3 of 4 at every effort, zxing samples `itf-1` 2 to 7 of 14; 0 false positives. The only false positive of the full run, `Special_0166.jpg`, was a ground-truth error (see `gt-overrides.json`). Supersedes the default part of [D-008](#d-008). See [GUIDE](GUIDE.md#scanoptions), [linear](symbologies/linear.md).
+
+## D-042
+
+2026-10-12 (owner decision). **For Code 39 and ITF the "one more line when fewer than two plan lines agree" rule is waived when the agreeing lines are independent.** The aggregator counts lines that are at least 1.9 times the smaller of their scanline steps apart (retry lines are 2 to 6 px apart, plan lines 10 px and more) and whose module estimates are within 15 % of the group median; when `min_line_agreement` (ITF: 3, strict lengths: 4) such lines agree the extra line is not asked. Otherwise the old rule applies unchanged, so no read is lost. Why: Code 39 has no check character; retry lines next to one plan line are not independent evidence, two lines a few pixels apart with the same module are. Measured (BarBeR Balanced): Code 39 +4 (`ProductBarcode152_0`, `320`, `336_0`, `507`), ITF +0; 0 false positives; challenging-images unchanged. See [linear](symbologies/linear.md#linear-symbologies-breader-linear).
+
+## D-043
+
+2026-10-12. **Code 39 symbols with thin modules (narrow element of at most 2.4 samples) are read with relaxed element rules when the normal rules fail.** The smallest wide element must exceed the largest narrow one by 1.12 (normal: 1.3); every other start, stop, gap, ratio and drift check is the normal one. Guards that replace the lost separation: quiet zones of at least 7 narrow widths on both sides, measured (never open at the border); the group needs `min_line_agreement + 2` = 4 agreeing lines that are independent in the sense of D-042 (the guard is mandatory here); thin hits next to ordinary hits of the same text are ignored, so they neither help nor hinder them. Choice of 4 over 3 lines: 3 and 4 lines recovered the same 4 labels on BarBeR, so the stricter value was taken. Looser parameters (separation 1.05, ratio 1.5, module 2.6) recovered nothing more. Measured (BarBeR Balanced): Code 39 +4 (`ProductBarcode142_0`, `230`, `330`, `351`), 0 false positives on every gate set and effort; Balanced p50 on challenging-images about +0.4 ms. See [linear](symbologies/linear.md#code-39-thin-modules).

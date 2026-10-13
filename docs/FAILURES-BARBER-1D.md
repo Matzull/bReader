@@ -94,3 +94,17 @@ C1 (lengths) is the largest single gain (13 of 29 ITF labels) and is not in this
 1. ITF default lengths ([D-008](decisions.md#d-008), `[14]`): recovers 13 of 29 ITF misses on BarBeR and 3 of 4 on Dynamsoft, 16 labels of the 33 zxing-cpp-only ITF labels of both sets. A narrower option than an open list: add the lengths seen in the data (8, 10, 12, 16, 18) with 4 agreeing lines and both quiet zones at least 10 X, keep 14 at 3 lines. FP evidence so far is one unverified read in 257 images; a full-set run with open lengths and the quiet and line limits is needed before deciding.
 2. A Code 39 line-agreement rule with fewer lines (ranks 1 and 2) trades misread protection for reads on a symbology without a check character ([D-017](decisions.md#d-017) recorded the earlier extra-line rule as insurance).
 3. ITF with an invalid GTIN-14 check digit (`20140607_201410`): keep rejecting (current) or allow it with more lines. One label.
+
+## 6. Outcome
+
+The owner approved sections 5.1 and 5.2 and ranks 1 and 2 of section 4 on 2026-10-12. Implemented as [D-041](decisions.md#d-041), [D-042](decisions.md#d-042) and [D-043](decisions.md#d-043), each measured alone on the full BarBeR set at Balanced (same build, switches in sequence), 0 false positives after the ground-truth fix:
+
+| change | BarBeR reads | challenging-images | other sets | false positives |
+|---|---|---|---|---|
+| D-041 ITF lengths | ITF 34 to 47 (+13: `9008420501238-01`, `_N95`, `Special_0008`, `0054`, `0119`, `0218`, `0219`, `0249`, `0250`, `0251`, `0252`; `0119` has 3 labels) | ITF 0 to 3 of 4 | zxing samples `itf-1` 2 to 7 (Balanced and Exhaustive), 1 to 5 (Fast) | 1: `Special_0166` read `0067641801002510` against the annotation `^7641801002510`; viewed: a 16-digit ITF whose digits contain the printed F-Nr. `6764180100251`; ground-truth override added, the read counts |
+| D-042 geometric guard | Code 39 +4 (`152_0`, `320`, `336_0`, `507`), ITF +0 | 0 | 0 | 0 |
+| D-043 thin Code 39 | Code 39 +4 (`142_0`, `230`, `330`, `351`) | 0 | 0 | 0 |
+
+Not recovered by D-042: `ProductBarcode351` and `467_0` (two agreeing lines, not independent enough or modules differing by more than 15 %), and `283`, `334_0`, `475` (one line). The 4-line variant of D-043 reads exactly the labels the 3-line variant reads; looser parameters (separation 1.05, ratio 1.5, module 2.6) read nothing more, so most of the 24 thin misses fail on something else (character gaps, drift) than the separation threshold. Latency on challenging-images (three interleaved rounds): Fast p50 5.4 to 5.5 ms before and after (one 6.0 outlier), Balanced p50 19.8 to 21.2 ms before, 19.5 to 20.3 ms with D-041 and D-042, 20.1 to 20.3 ms with D-043 as well (about +0.4 ms for the thin pass).
+
+Still open: ITF decode failures inside the symbol (rank 3, 10 labels), the invalid check digit label, 2 `20140607_202330` labels, an upscaled profile for thin Code 39.

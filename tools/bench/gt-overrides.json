@@ -651,6 +651,18 @@
           "text": "http://jdi.na.vutbr.cz/uvod"
         },
         "reason": "Label typo: the URL lacks the colon after the scheme. Breader decodes http://jdi.na.vutbr.cz/uvod from a Reed-Solomon validated symbol of the same series (IMG_20120226_164408)."
+      },
+      {
+        "file": "Special_0166.jpg",
+        "from": {
+          "format": "ITF",
+          "text": "^7641801002510"
+        },
+        "to": {
+          "format": "ITF",
+          "text": "0067641801002510"
+        },
+        "reason": "The annotation is partial: its first character is the unknown placeholder and it has 13 digits. The symbol is a 16-digit ITF with quiet zones of 50+ modules; breader reads 0067641801002510 on 4+ agreeing scanlines, and the printed F-Nr. line above it reads 6764180100251, which the 16 digits contain between a leading 00 and a trailing 0 (viewed on the full image)."
       }
     ]
   }

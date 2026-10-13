@@ -69,6 +69,13 @@ const QUIET: f32 = 4.0;
 /// Below this many narrow widths the symbol is flagged `short_quiet` and the
 /// aggregator wants an additional agreeing line.
 const FULL_QUIET: f32 = 7.0;
+/// Quiet zone of a symbol read with the relaxed rules, measured, never open.
+const THIN_QUIET: f32 = 7.0;
+/// Relaxed rules apply to symbols whose narrow element is at most this many
+/// samples wide, and only where the normal ones failed.
+const THIN_MAX_MODULE: f32 = 2.4;
+/// Relaxed separation of the smallest wide over the largest narrow element.
+const THIN_SEPARATION: f32 = 1.12;
 /// Cheap first screen: the quiet zone as a fraction of the start character's
 /// width (4 narrow elements are at least 0.22 of a character of up to 17.6).
 const QUIET_SCREEN: f32 = 0.22;
@@ -92,12 +99,17 @@ struct CharRead {
     separation: f32,
 }
 
-fn read_char(runs: &Runs, at: usize, bias: f32, prev_narrow: f32) -> Option<CharRead> {
+fn read_char(runs: &Runs, at: usize, bias: f32, prev_narrow: f32, thin: bool) -> Option<CharRead> {
     let w = adjusted_widths::<9>(runs, at, bias)?;
     let s = split_wide(&w, 3)?;
     let ratio = s.wide / s.narrow;
+    let min_sep = if thin {
+        THIN_SEPARATION
+    } else {
+        MIN_SEPARATION
+    };
     if s.narrow < MIN_MODULE
-        || s.separation < MIN_SEPARATION
+        || s.separation < min_sep
         || !(RATIO.0..=RATIO.1).contains(&ratio)
         || (prev_narrow > 0.0
             && (s.narrow < prev_narrow / MODULE_DRIFT || s.narrow > prev_narrow * MODULE_DRIFT))
@@ -124,7 +136,7 @@ struct Read {
 
 /// Reads the start character at run `j` and returns it with the bar/space
 /// bias and whether the quiet zone before it is short.
-fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32, bool)> {
+fn start_of(runs: &Runs, j: usize, thin: bool) -> Option<(CharRead, f32, bool)> {
     let raw = adjusted_widths::<9>(runs, j, 0.0)?;
     if runs.space_before_open(j) < QUIET_SCREEN * raw.iter().sum::<f32>() {
         return None;
@@ -139,9 +151,16 @@ fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32, bool)> {
     if module < MIN_MODULE || bias.abs() > 0.45 * module {
         return None;
     }
-    let start = read_char(runs, j, bias, 0.0)?;
+    if thin && module > THIN_MAX_MODULE {
+        return None;
+    }
+    let start = read_char(runs, j, bias, 0.0, thin)?;
     if start.ch != STAR {
         return None;
+    }
+    if thin {
+        return (quiet_before(runs, j, bias) >= THIN_QUIET * start.narrow)
+            .then_some((start, bias, false));
     }
     // A margin that runs into the border is accepted whatever its length, but
     // its measured length still decides whether it is short.
@@ -149,8 +168,8 @@ fn start_of(runs: &Runs, j: usize) -> Option<(CharRead, f32, bool)> {
     (quiet_before_open(runs, j, bias) >= QUIET * start.narrow).then_some((start, bias, short))
 }
 
-fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
-    let (start, bias, short_start) = start_of(runs, j)?;
+fn read_symbol(runs: &Runs, j: usize, started: &mut bool, thin: bool) -> Option<Read> {
+    let (start, bias, short_start) = start_of(runs, j, thin)?;
     *started = true;
     let mut read = Read {
         chars: [0; MAX_CHARS],
@@ -168,13 +187,17 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
         if gap > MAX_GAP * narrow || gap < MIN_GAP * narrow {
             return None;
         }
-        let c = read_char(runs, at, bias, narrow)?;
+        let c = read_char(runs, at, bias, narrow, thin)?;
         narrow = c.narrow;
         read.separation_sum += c.separation;
         read.narrow_sum += c.narrow;
         read.count += 1;
         if c.ch == STAR {
-            if quiet_after_open(runs, at + 8, bias) < QUIET * narrow {
+            if thin {
+                if quiet_after(runs, at + 8, bias) < THIN_QUIET * narrow {
+                    return None;
+                }
+            } else if quiet_after_open(runs, at + 8, bias) < QUIET * narrow {
                 return None;
             }
             read.short_quiet |= quiet_after(runs, at + 8, bias) < FULL_QUIET * narrow;
@@ -250,7 +273,13 @@ impl LinearDecoder for Code39Decoder {
         let n = runs.len();
         let mut j = usize::from(n > 0 && !runs.is_bar(0));
         while j + 9 + 10 + 9 <= n {
-            if let Some(read) = read_symbol(runs, j, &mut started) {
+            let mut thin = false;
+            let mut read = read_symbol(runs, j, &mut started, false);
+            if read.is_none() {
+                read = read_symbol(runs, j, &mut false, true);
+                thin = read.is_some();
+            }
+            if let Some(read) = read {
                 let mut data = &read.chars[..read.len];
                 let checked = opts.code39_checksum;
                 if checked {
@@ -289,6 +318,7 @@ impl LinearDecoder for Code39Decoder {
                         inverted: false,
                         start_stop: None,
                         segments: 0,
+                        thin,
                     });
                 }
             }
@@ -636,5 +666,151 @@ mod tests {
             }
         }
         assert!(right > 50 && none > 0, "{right} {none}");
+    }
+
+    /// Narrow 1.4 to 1.6 px, wide twice the narrow: the third-largest element
+    /// is not 1.3 times the fourth, so only the relaxed rules read it.
+    fn thin_profile(text: &str, px: f32, sigma: f32, quiet: f32, rng: &mut Rng) -> Vec<u8> {
+        let r = Render {
+            sigma,
+            quiet_left: quiet,
+            quiet_right: quiet,
+            offset: rng.unit(),
+            ..Render::px(px)
+        };
+        let mut p = r.profile(&code39_modules(text, 2, 1));
+        add_noise(&mut p, 4.0, rng);
+        p
+    }
+
+    #[test]
+    fn thin_symbols_are_read_with_the_relaxed_rules_and_flagged() {
+        let mut rng = Rng(5);
+        let (mut thin, mut plain) = (0, 0);
+        for _ in 0..60 {
+            let text = rng.digits(7);
+            let p = thin_profile(&text, 1.6, 0.7, 12.0, &mut rng);
+            for h in decode_all(&Code39Decoder, &p, &opts()) {
+                assert_eq!(h.text, text.as_bytes());
+                assert!(!h.short_quiet);
+                if h.thin { thin += 1 } else { plain += 1 }
+            }
+        }
+        assert!(thin >= 10 && plain > 0, "{thin} {plain}");
+    }
+
+    #[test]
+    fn thin_symbols_need_seven_narrow_widths_of_quiet_zone_on_both_sides() {
+        let mut rng = Rng(8);
+        let text = "7654321";
+        let reads = |left: f32, right: f32, rng: &mut Rng| {
+            let mut n = 0;
+            for _ in 0..40 {
+                let r = Render {
+                    sigma: 0.5,
+                    quiet_left: left,
+                    quiet_right: right,
+                    offset: rng.unit(),
+                    ..Render::px(1.4)
+                };
+                let mut p = r.profile(&code39_modules(text, 2, 1));
+                add_noise(&mut p, 4.0, rng);
+                n += decode_all(&Code39Decoder, &p, &opts())
+                    .iter()
+                    .filter(|h| h.thin)
+                    .count();
+            }
+            n
+        };
+        assert!(reads(12.0, 12.0, &mut rng) > 3);
+        assert_eq!(reads(5.0, 12.0, &mut rng), 0);
+        assert_eq!(reads(12.0, 5.0, &mut rng), 0);
+        assert_eq!(reads(6.0, 6.0, &mut rng), 0);
+    }
+
+    #[test]
+    fn thin_rules_do_not_apply_above_the_module_limit() {
+        // Wide 1.5 modules at 3 px: ambiguous, and too coarse for the relaxed rules.
+        let mut rng = Rng(3);
+        for _ in 0..40 {
+            let text = rng.digits(7);
+            let r = Render {
+                sigma: 1.4,
+                ..Render::px(3.2)
+            };
+            let p = r.profile(&code39_modules(&text, 2, 1));
+            assert!(
+                decode_all(&Code39Decoder, &p, &opts())
+                    .iter()
+                    .all(|h| !h.thin)
+            );
+        }
+    }
+
+    #[test]
+    fn thin_symbols_cut_by_the_border_or_truncated_are_never_read() {
+        let mut rng = Rng(13);
+        let text = "1234567";
+        let m = code39_modules(text, 2, 1);
+        for sigma in [0.5, 0.7] {
+            let r = Render {
+                sigma,
+                ..Render::px(1.5)
+            };
+            let p = r.profile(&m);
+            for (depth, cut) in border_cuts(&p, 18.0, m.len() as f32 * 1.5) {
+                assert!(
+                    decode_all(&Code39Decoder, &cut, &opts()).is_empty(),
+                    "depth {depth}"
+                );
+            }
+            // Stop character blanked out.
+            let mut broken = m.clone();
+            let n = broken.len();
+            broken[n - 12..].fill(false);
+            let mut p = Render {
+                sigma,
+                ..Render::px(1.5)
+            }
+            .profile(&broken);
+            add_noise(&mut p, 3.0, &mut rng);
+            assert!(decode_all(&Code39Decoder, &p, &opts()).is_empty());
+        }
+    }
+
+    #[test]
+    fn thin_rules_never_read_noise_stripes_or_other_symbologies() {
+        let mut rng = Rng(77);
+        for _ in 0..3000 {
+            let mut widths = Vec::new();
+            while widths.iter().sum::<usize>() < 400 {
+                widths.push(1 + rng.below(3) as usize);
+            }
+            let r = Render {
+                sigma: 0.6,
+                ..Render::px(1.5)
+            };
+            let mut p = r.profile(&runs_to_modules(&widths));
+            add_noise(&mut p, 5.0, &mut rng);
+            assert!(decode_all(&Code39Decoder, &p, &opts()).is_empty());
+        }
+        let others: [Vec<bool>; 4] = [
+            ean13_modules("5901234123457"),
+            itf_modules("1234567890", 2),
+            code128_modules(&[104, 33, 34, 35, 36, 37, 38]),
+            codabar_modules('A', "1234567", 'B', 2, 1),
+        ];
+        for modules in &others {
+            for px in [1.3, 1.5, 1.8] {
+                for sigma in [0.5, 0.8] {
+                    let r = Render {
+                        sigma,
+                        ..Render::px(px)
+                    };
+                    let p = r.profile(modules);
+                    assert!(decode_all(&Code39Decoder, &p, &opts()).is_empty());
+                }
+            }
+        }
     }
 }

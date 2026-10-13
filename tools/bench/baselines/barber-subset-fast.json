@@ -117,7 +117,7 @@
       },
       "ITF": {
         "expected": 1,
-        "read": 0,
+        "read": 1,
         "false_positives": 0
       }
     },
@@ -212,7 +212,7 @@
       },
       "ITF": {
         "expected": 2,
-        "read": 0,
+        "read": 1,
         "false_positives": 0
       },
       "PDF417": {

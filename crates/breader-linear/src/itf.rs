@@ -217,6 +217,7 @@ impl LinearDecoder for ItfDecoder {
                         inverted: false,
                         start_stop: None,
                         segments: 0,
+                        thin: false,
                     });
                 }
             }
@@ -304,10 +305,22 @@ mod tests {
     fn length_rules() {
         let t12 = "123456789012";
         let t14 = with_gs1_check("1234567890123");
-        assert!(
-            decode_all(&ItfDecoder, &prof(t12, 3, 3.0), &opts()).is_empty(),
-            "default is 14 only"
-        );
+        for n in [8, 10, 12, 14, 16, 18] {
+            let t = if n == 14 {
+                t14.clone()
+            } else {
+                "12345678901234567890"[..n].to_string()
+            };
+            assert_eq!(
+                decode_all(&ItfDecoder, &prof(&t, 3, 3.0), &opts()).len(),
+                1,
+                "default list, {n} digits"
+            );
+        }
+        for n in [6, 20] {
+            let t = &"12345678901234567890"[..n];
+            assert!(decode_all(&ItfDecoder, &prof(t, 3, 3.0), &opts()).is_empty());
+        }
         let any = decode_all(&ItfDecoder, &prof(t12, 3, 3.0), &any_length());
         assert_eq!(texts(&any), [t12.as_bytes().to_vec()]);
         assert_eq!(&any[0].aim, b"]I0");
