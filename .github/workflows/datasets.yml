@@ -12,49 +12,38 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  dynamsoft:
+  # Tier c2 (docs/testing.md): every set at every effort and the video gate with all engines.
+  # The full BarBeR set has no redistributable license and is skipped here (data/barber is absent).
+  gate-c2:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Resolve the upstream dataset commit
+      - name: Resolve the upstream dataset commit and the pinned zxing-cpp tag
         id: upstream
         run: |
           sha=$(git ls-remote https://github.com/Dynamsoft/datasets-from-dynamsoft HEAD | cut -f1)
           test -n "$sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=$(sed -n 's/^zxing_tag="\(.*\)"$/\1/p' tools/fetch-datasets.sh)" >> "$GITHUB_OUTPUT"
       - name: Cache data/dynamsoft
         id: cache
         uses: actions/cache@v4
         with:
           path: data/dynamsoft
           key: dynamsoft-${{ steps.upstream.outputs.sha }}
-      - name: Fetch datasets
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: tools/fetch-datasets.sh dynamsoft
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - name: Dynamsoft regression gate
-        run: tools/check-regression.sh --dynamsoft
-
-  zxing-samples:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Resolve the pinned zxing-cpp tag
-        id: upstream
-        run: echo "tag=$(sed -n 's/^zxing_tag="\(.*\)"$/\1/p' tools/fetch-datasets.sh)" >> "$GITHUB_OUTPUT"
       - name: Cache data/zxing-samples
         uses: actions/cache@v4
         with:
           path: data/zxing-samples
           key: zxing-samples-${{ steps.upstream.outputs.tag }}
       - name: Fetch datasets and write annotations
-        run: tools/fetch-datasets.sh zxing-samples
-      - name: zxing-cpp samples regression gate
-        run: tools/check-regression.sh --zxing-samples
+        run: |
+          if [ "${{ steps.cache.outputs.cache-hit }}" != true ]; then tools/fetch-datasets.sh dynamsoft; fi
+          tools/fetch-datasets.sh zxing-samples
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Tier c2 regression gate
+        run: tools/check-regression.sh --tier c2

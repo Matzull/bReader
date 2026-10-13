@@ -217,7 +217,10 @@ fn run_gate(args: &Args, reports: &[Report]) -> Result<bool, String> {
         Baseline::new(None, groups).save(path)?;
         println!("baseline written to {}", path.display());
     } else if let Some(path) = &args.check {
-        let outcome = Baseline::load(path)?.check(None, &groups);
+        let mut baseline = Baseline::load(path)?;
+        // Engines that were not run are not part of this check (`--engines tracker`).
+        baseline.retain_items(&args.engines);
+        let outcome = baseline.check(None, &groups);
         outcome.print();
         return Ok(outcome.passed());
     }

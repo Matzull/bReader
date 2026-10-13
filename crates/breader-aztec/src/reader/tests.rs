@@ -52,10 +52,11 @@ fn assert_read(found: &[Symbol], data: &[u8], what: &str) {
 #[test]
 fn reads_compact_and_full_symbols_of_every_size_rotated() {
     let mut failures = Vec::new();
-    for layers in [-1i32, -2, -4, 1, 3, 6, 14, 32] {
+    // The stage tests (detect, sample, decode) cover every layer count; this keeps five.
+    for layers in [-1i32, -4, 1, 6, 32] {
         let (data, r) = rxing_fill(layers.unsigned_abs() as u64 + 40, 4000, layers).unwrap();
         let px = if r.grid.width() > 100 { 3.5 } else { 4.0 };
-        for deg in [0.0, 23.0, 161.0, 270.0] {
+        for deg in [0.0, 23.0, 161.0] {
             let (luma, side, _) = scene(&r.grid, px, deg, 0.0, |_| {});
             let found = scan(&luma, side, side, Effort::Balanced);
             let ok = found.len() == 1 && found[0].data == data;
@@ -92,9 +93,9 @@ fn a_compact_and_a_full_symbol_of_the_same_size_are_told_apart() {
 #[test]
 fn reads_in_perspective() {
     let mut failures = Vec::new();
-    for layers in [-2i32, -4, 2, 5, 11, 20] {
+    for layers in [-4i32, 5, 20] {
         let (data, r) = rxing_fill(60 + layers.unsigned_abs() as u64, 4000, layers).unwrap();
-        for (deg, tilt) in [(0.0, 0.15), (-15.0, 0.2), (35.0, 0.2), (200.0, 0.15)] {
+        for (deg, tilt) in [(-15.0, 0.2), (200.0, 0.15)] {
             let (luma, side, _) = scene(&r.grid, 4.5, deg, tilt, |_| {});
             let found = scan(&luma, side, side, Effort::Balanced);
             if found.len() != 1 || found[0].data != data {

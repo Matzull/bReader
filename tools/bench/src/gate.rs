@@ -75,6 +75,15 @@ impl Baseline {
         Ok(b)
     }
 
+    /// Drops baseline items (engines, for the video gate) that are not in `keep`, so a run of a
+    /// subset of them is not failed for the ones it did not run. Groups left empty are removed.
+    pub fn retain_items(&mut self, keep: &[String]) {
+        for items in self.groups.values_mut() {
+            items.retain(|item, _| keep.iter().any(|k| k == item));
+        }
+        self.groups.retain(|_, items| !items.is_empty());
+    }
+
     pub fn save(&self, path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent()
             && !parent.as_os_str().is_empty()
@@ -216,6 +225,18 @@ mod tests {
             Some("Fast"),
             groups(&[("a", "qr", c(10, 8, 0)), ("a", "ean13", c(5, 5, 0))]),
         )
+    }
+
+    #[test]
+    fn retain_items_ignores_items_that_were_not_run() {
+        let mut b = Baseline::new(
+            None,
+            groups(&[("v", "tracker", c(1, 1, 0)), ("v", "fast", c(1, 1, 0))]),
+        );
+        let cur = groups(&[("v", "tracker", c(1, 1, 0))]);
+        assert!(!b.check(None, &cur).passed());
+        b.retain_items(&["tracker".to_owned()]);
+        assert!(b.check(None, &cur).passed());
     }
 
     #[test]

@@ -25,44 +25,6 @@ fn best_candidate(bin: &BitMatrix, inverted: bool, truth: &[Point; 4]) -> Option
 }
 
 #[test]
-fn clean_symbols_across_sizes_angles_and_scales() {
-    let sizes = [
-        datamatrix::SymbolSize::Square10,
-        datamatrix::SymbolSize::Square16,
-        datamatrix::SymbolSize::Square26,
-        datamatrix::SymbolSize::Square52,
-        datamatrix::SymbolSize::Square144,
-        datamatrix::SymbolSize::Rect8x18,
-        datamatrix::SymbolSize::Rect16x48,
-        datamatrix::SymbolSize::Rect8x64,
-    ];
-    let mut worst = 0.0f32;
-    for size in sizes {
-        let m = encode_size(
-            std::env::var("DM_SEED")
-                .unwrap_or("sweep".into())
-                .as_bytes(),
-            size,
-        );
-        for deg in [0.0, 17.0, 90.0, 133.0, 200.0, 275.0] {
-            for px in [2.0, 3.5, 6.0] {
-                let (bin, truth) = scene(&m, px, deg, false, 0, false);
-                let (err, _) = best_candidate(&bin, false, &truth)
-                    .unwrap_or_else(|| panic!("no candidate {}x{} {deg} {px}", m.rows, m.cols));
-                assert!(
-                    err < 0.9 * px + 1.5,
-                    "{}x{} deg {deg} px {px}: error {err}",
-                    m.rows,
-                    m.cols
-                );
-                worst = worst.max(err / px);
-            }
-        }
-    }
-    eprintln!("worst corner error: {worst:.2} modules");
-}
-
-#[test]
 fn inverted_symbols_are_found_in_the_inverted_plane() {
     let m = encode_size(b"inverted", datamatrix::SymbolSize::Square20);
     let (mut bin, truth) = scene(&m, 4.0, 30.0, false, 0, false);

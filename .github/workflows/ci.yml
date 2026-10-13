@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches: [main]
+    tags: ["v*"]
   pull_request:
 
 permissions:
@@ -41,19 +43,51 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
-      - run: cargo test --workspace --features breader/rayon
+      # Only the crates with the rayon feature have feature-gated code.
+      - run: cargo test -p breader -p breader-imgproc -p breader-linear -p breader-qr -p breader-datamatrix --features breader/rayon
+      # Release only (ignored in debug builds): the NFR-4 allocation counts are release numbers.
+      - name: Allocation test (release)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo test --release -p breader --test allocation
 
   regression:
+    # Tier a on pull requests, tier b on pushes to main (docs/testing.md). The real datasets are only
+    # fetched by datasets.yml, so CI runs the synthetic sets of the tier.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Synthetic regression gate
-        run: tools/check-regression.sh
+        run: tools/check-regression.sh --synthetic-only --tier ${{ github.event_name == 'pull_request' && 'a' || 'b' }}
+
+  changes:
+    # The wheels and pytest cost far more than the tests: build them on main, on tags, and when the
+    # bindings or the facade crate changed.
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.diff.outputs.python }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE"...HEAD | grep -qE '^(crates/breader-py/|crates/breader/|\.github/workflows/ci\.yml)'; then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "python=false" >> "$GITHUB_OUTPUT"
+          fi
 
   python-wheels:
     name: wheel (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

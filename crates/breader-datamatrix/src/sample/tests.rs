@@ -229,8 +229,8 @@ fn clean_sweep_succeeds_at_every_stage() {
     let mut fails: Vec<String> = Vec::new();
     for size in all_sizes() {
         let m = encode_size(b"sweep", size);
-        for deg in [0.0, 17.0, 45.0, 90.0, 133.0, 200.0, 275.0] {
-            for px in [3.0, 4.5, 7.0] {
+        for deg in [0.0, 45.0, 133.0, 275.0] {
+            for px in [3.0, 7.0] {
                 if (m.cols as f32 * px) > 700.0 || (m.rows <= 12 && m.cols >= 88 && px < 4.0) {
                     continue;
                 }

@@ -63,6 +63,11 @@ codegen-units = 1
 [profile.bench]
 debug = true
 
+[profile.dev]
+# Optimised dev profile: the decoder sweeps in cargo test run 10 to 25 times faster than at
+# opt-level 0. Debug assertions and overflow checks stay on (docs/TEST-STUDY.md).
+opt-level = 1
+
 [profile.dev.package.qrcode]
 opt-level = 3
 
