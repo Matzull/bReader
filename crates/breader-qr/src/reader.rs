@@ -38,6 +38,11 @@ struct Params {
     max_failures: usize,
     /// Same for triplets whose third finder was inferred from a timing pattern.
     max_recovered_failures: usize,
+    /// Oblique-view fallback: finders with a wide chord aspect, tried when
+    /// the strict tier decoded nothing.
+    wide_finders: bool,
+    /// Failure budget of the wide tier (its own, after the strict one).
+    max_wide_failures: usize,
 }
 
 impl Params {
@@ -48,18 +53,24 @@ impl Params {
                 max_finders: 320,
                 max_failures: 3,
                 max_recovered_failures: 4,
+                wide_finders: true,
+                max_wide_failures: 4,
             },
             breader_core::Effort::Balanced => Self {
                 row_step: 2,
                 max_finders: 320,
                 max_failures: 4,
                 max_recovered_failures: 6,
+                wide_finders: true,
+                max_wide_failures: 12,
             },
             breader_core::Effort::Exhaustive => Self {
                 row_step: 1,
                 max_finders: 640,
                 max_failures: 24,
                 max_recovered_failures: 24,
+                wide_finders: true,
+                max_wide_failures: 24,
             },
         }
     }
@@ -583,7 +594,8 @@ impl SymbologyReader for QrReader {
             micro: spare.micro,
             plausible: 0,
         };
-        work.search.find_finders(bin, params.row_step);
+        work.search
+            .find_finders(bin, params.row_step, params.wide_finders);
         if !known.is_empty() {
             work.search
                 .finders
@@ -593,23 +605,44 @@ impl SymbologyReader for QrReader {
         // per polarity.
         for inverted in [false, true] {
             let plane = Plane::new(bin, inverted);
+            let has_wide = params.wide_finders && work.search.finders.iter().any(|f| f.is_wide());
             if want_qr {
-                work.search
-                    .select_triplets(plane, params.max_finders, params.row_step);
+                work.search.select_triplets(
+                    plane,
+                    params.max_finders,
+                    params.row_step,
+                    params.wide_finders,
+                );
             } else {
                 work.search.triplets.clear();
             }
             let mut failures = 0;
             let mut syn_failures = 0;
             let mut successes = 0;
+            let mut in_wide = false;
             let mut ti = 0;
             while ti < work.search.triplets.len() {
                 let t = work.search.triplets[ti];
                 ti += 1;
+                // The wide tier is a fallback: only when nothing else decoded.
+                if t.wide && successes > 0 {
+                    break;
+                }
+                if t.wide && !in_wide {
+                    // Its own failure budget.
+                    in_wide = true;
+                    failures = 0;
+                    syn_failures = 0;
+                }
                 let spent = if t.synthetic {
                     syn_failures >= params.max_recovered_failures + 3 * successes
                 } else {
-                    failures >= params.max_failures + 3 * successes
+                    failures
+                        >= (if in_wide {
+                            params.max_wide_failures
+                        } else {
+                            params.max_failures
+                        }) + 3 * successes
                 };
                 if spent {
                     continue;
@@ -635,10 +668,11 @@ impl SymbologyReader for QrReader {
                 }
             }
             if want_micro || want_rmqr {
+                let strict_finders = work.search.strict_finders(has_wide);
                 micro_scan(
                     plane,
                     work.gray,
-                    &work.search.finders,
+                    strict_finders,
                     micro,
                     &mut work.micro,
                     &mut known,

@@ -68,7 +68,7 @@
     "Dubska": {
       "QR Code": {
         "expected": 81,
-        "read": 52,
+        "read": 59,
         "false_positives": 0
       }
     },

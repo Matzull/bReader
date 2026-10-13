@@ -23,6 +23,10 @@ Measurement-only refresh on main at `c171fe4` (no reader change), on an idle AMD
 - **Baselines.** The Dynamsoft video, skewed-datamatrix, UPS and pdf417-small-module-size baselines, synth seed 2024 (three efforts) and synth seed 1 (Balanced) were re-written with `--write-baseline` on the same build: byte-identical to the committed files (no read count moved up or down), so nothing was rewritten.
 - **Engines.** breader columns are the Rust `bench` (the committed baselines); zxing-cpp 3.1.1 and zbar 0.23 (pyzbar) come from `tools/bench/py_bench.py` at default options, with `breader-py` rebuilt from main. Until 2026-10-13 the Python breader gave different counts and false positives from the Rust bench on the same images (challenging-images Balanced 411 reads, 2 FP, against 411 reads, 0 FP in Rust; zxing-samples 662 reads, 19 FP, against 681 and 0; BarBeR subset 802, 0 FP, against 803, 0). The cause was the harness, not the binding (both build the same `ScanOptions`): `py_bench.py` did not offer the alternative forms of a read that the Rust bench offers (the charset-decoded text of the symbol, a Shift JIS reading of non-UTF-8 bytes), so a correct read of a label written in another charset counted as a false positive and a miss; it also converted to gray with PIL's Rec. 601 weights instead of the `image` crate's 2126/7152/722, and did not repair the double-encoded UTF-8 of some labels. Fixed in `py_bench.py` ([FAILURES-BARBER-2D](FAILURES-BARBER-2D.md#0-the-python-bench-disagreement)): challenging-images 412 / 0 FP, zxing-samples 682 / 0 FP, BarBeR subset 807 / 0 FP; the remaining 1 to 4 reads are marginal reads that flip with the JPEG decoder (PIL against the Rust `image` crate: 11 of 1104 subset images read differently). zxing-cpp and zbar columns above were measured before the fix and shift by at most a few reads. rxing was not re-run.
 
+## Status 2026-10-14: QR wide-aspect tier
+
+[D-045](decisions.md#d-045), on main `c6e0690`. Tier c1 passed with 0 false positives on every set (gate details in the decision). Reads that moved (everything else is identical to the table above): BarBeR full QR Code Fast 975 to 1028 (+53; Dubska 561 to 613, Szentandrasi-Dubska 187 to 188), Balanced 1094 to 1156 (+62; Dubska 630 to 683, Szentandrasi-Dubska 196 to 205) against zxing-cpp 1153, Exhaustive 1101 to 1161 (+60; Dubska 634 to 685, Szentandrasi-Dubska 199 to 208); BarBeR 1/8 subset 688 / 803 / 828 to 695 / 809 / 834 (all classes); zxing-cpp samples Fast 568 to 569 (QR `qrcode-2` 44 to 45). The Fast full-set total is 5400 to 5451: the QR gain is +53, and two Data Matrix reads (Deal Kaist 24 to 23 and one in another source) that the committed Fast baseline still held are lost on main itself (not from this change: the main build reads the same 23), so the baseline now records them. Latency, interleaved old/new, 5 runs, Balanced p50: challenging-images 19.49 to 19.61 ms (+0.6 %), BarBeR subset 21.74 to 22.03 (+1.3 %); Fast: 4.77 to 4.81 (+0.8 %), 5.32 to 5.39 (+1.3 %); Fast p95 on challenging-images 35.0 to 40.8 ms.
+
 ### Read rate and false positives
 
 Reads / expected symbols, false positives (FP). breader F / B / E = Fast / Balanced / Exhaustive. Default options for zxing-cpp and zbar.
@@ -31,8 +35,8 @@ Reads / expected symbols, false positives (FP). breader F / B / E = Fast / Balan
 |---|---|---|---|---|---|
 | challenging-images | 333 / 448, 0 FP | 411 / 448, 0 FP | 424 / 448, 0 FP | 388 / 448, 1 FP | 160 / 448, 5 FP |
 | zxing-cpp samples | 568 / 794, 0 FP | 681 / 794, 0 FP | 689 / 794, 0 FP | 716 / 794, 69 FP | 450 / 794, 74 FP |
-| BarBeR 1/8 subset | 688 / 1093, 0 FP | 803 / 1093, 0 FP | 828 / 1093, 0 FP | 765 / 1093, 15 FP | 713 / 1093, 29 FP |
-| BarBeR full | 5400 / 8585, 0 FP | 6358 / 8585, 0 FP | 6566 / 8585, 0 FP | 6123 / 8585, 91 FP | not run |
+| BarBeR 1/8 subset | 695 / 1093, 0 FP | 809 / 1093, 0 FP | 834 / 1093, 0 FP | 765 / 1093, 15 FP | 713 / 1093, 29 FP |
+| BarBeR full | 5451 / 8585, 0 FP | 6420 / 8585, 0 FP | 6626 / 8585, 0 FP | 6123 / 8585, 91 FP | not run |
 | synth seed 1 | 426 / 487, 0 FP | 482 / 487, 0 FP | 483 / 487, 0 FP | 381 / 487, 11 FP (2026-10-13 earlier) | 201 / 487, 43 FP (same) |
 | synth seed 2024 (60 per class) | 1144 / 1311, 0 FP | 1286 / 1311, 0 FP | 1292 / 1311, 0 FP | not run | not run |
 | skewed-datamatrix | 729 / 1324, 0 FP | 1012 / 1324, 0 FP | 1022 / 1324, 0 FP | not run | not run |
@@ -99,7 +103,7 @@ BarBeR full (8585 symbols):
 
 | Class | Expected | breader B | zxing-cpp | Gap |
 |---|---|---|---|---|
-| QR Code | 1329 | 1094 / 0 | 1153 / 0 | -59 |
+| QR Code | 1329 | 1156 / 0 | 1153 / 0 | +3 |
 | Code 39 | 198 | 130 / 0 | 151 / 1 | -21 |
 | ITF | 72 | 48 / 0 | 59 / 1 | -11 |
 | PDF417 | 67 | 26 / 0 | 36 / 1 | -10 |
@@ -110,13 +114,13 @@ BarBeR full (8585 symbols):
 | Code 128 | 1428 | 597 / 0 | 450 / 2 | +147 |
 | EAN-13 | 4970 | 4015 / 0 | 3841 / 76 | +174 |
 
-BarBeR 1/8 subset: QR Code 128 against 132 (-4), Code 39 12 against 18 (-6), ITF 11 against 13 (-2); leads on EAN-13 524 / 0 against 496 / 13 (+28), Code 128 67 against 51 (+16), UPC-A 39 against 35 (+4), EAN-8 +1, PDF417 +1.
+BarBeR 1/8 subset: QR Code 134 against 132 (+2), Code 39 12 against 18 (-6), ITF 11 against 13 (-2); leads on EAN-13 524 / 0 against 496 / 13 (+28), Code 128 67 against 51 (+16), UPC-A 39 against 35 (+4), EAN-8 +1, PDF417 +1.
 
 zxing-cpp samples (794 symbols; here the gaps are largest, mostly in classes with few BarBeR labels): ITF 7 against 20 (-13; the default ITF length list, [D-008](decisions.md#d-008)), GS1 DataBar 10 against 17 (-7), Data Matrix 87 against 93 (-6), EAN-13 39 against 45 (-6), Codabar 12 against 15 (-3), PDF417 56 against 58 (-2), and -1 each for Code 128, Code 39, EAN-8 and Micro QR; leads on QR Code 128 against 125 (+3) and UPC-A 53 against 50 (+3); ties Aztec, GS1 DataBar Expanded and Limited, UPC-E, rMQR. zxing-cpp reads the stacked Expanded labels, which are unsupported, so its 64 Expanded false positives are not read errors.
 
 challenging-images (448): Code 128 41 against 28 (+13), QR Code 229 / 0 against 220 / 1 (+9), Data Matrix 45 against 44 (+1), UPC-A 71 against 70 (+1); ITF 3 against 4 (-1); ties EAN-13 (17), EAN-8, Code 39 (1) and PDF417 (3).
 
-Ranked gaps where breader trails zxing-cpp (reads, Balanced): QR Code on BarBeR (-59 of 1329, mostly Dubska and Muenster), Code 39 on BarBeR (-21), ITF on zxing-samples (-13), ITF on BarBeR (-11), PDF417 on BarBeR (-10), GS1 DataBar on zxing-samples (-7), Data Matrix (-6 on zxing-samples, -4 on BarBeR), EAN-13 on zxing-samples (-6), Code 39 on the BarBeR subset (-6). The v1 target "read rate >= zxing-cpp per class" is therefore still not met on real photos for QR Code, Code 39, ITF, PDF417 and Data Matrix; breader leads on Code 128, EAN-13, UPC-A and Aztec on BarBeR and on Code 128 and QR Code on challenging-images, with 0 false positives against zxing-cpp's 91 on BarBeR.
+Ranked gaps where breader trails zxing-cpp (reads, Balanced; QR on BarBeR is closed, see [the QR update](#status-2026-10-14-qr-wide-aspect-tier)): Code 39 on BarBeR (-21), ITF on zxing-samples (-13), ITF on BarBeR (-11), PDF417 on BarBeR (-10), GS1 DataBar on zxing-samples (-7), Data Matrix (-6 on zxing-samples, -4 on BarBeR), EAN-13 on zxing-samples (-6), Code 39 on the BarBeR subset (-6). The v1 target "read rate >= zxing-cpp per class" is therefore still not met on real photos for QR Code, Code 39, ITF, PDF417 and Data Matrix; breader leads on Code 128, EAN-13, UPC-A and Aztec on BarBeR and on Code 128 and QR Code on challenging-images, with 0 false positives against zxing-cpp's 91 on BarBeR.
 
 ## Dynamsoft `challenging-images`
 
