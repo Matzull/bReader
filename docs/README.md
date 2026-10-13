@@ -64,6 +64,7 @@ Per-symbology status, spec references and known gaps: [symbologies/README.md](sy
 | [FAILURES-ZXING-SAMPLES](FAILURES-ZXING-SAMPLES.md) | Triage of the zxing-cpp samples that zxing-cpp reads and breader does not |
 | [FAILURES-BARBER-QR](FAILURES-BARBER-QR.md) | Triage of the BarBeR QR labels that zxing-cpp reads and breader does not: stages, causes, ranked fixes |
 | [FAILURES-BARBER-1D](FAILURES-BARBER-1D.md) | Triage of the BarBeR Code 39 and ITF labels that zxing-cpp reads and breader does not: stages, causes, ranked fixes, owner decisions |
+| [FAILURES-BARBER-2D](FAILURES-BARBER-2D.md) | Triage of the BarBeR QR, PDF417 and Data Matrix labels (and zxing-samples Data Matrix) that zxing-cpp reads and breader does not: stages, causes, measured switches, ranked fixes; also the cause of the py_bench disagreement |
 | [CI](CI.md) | Workflows, the regression gate, ARM runners, Python tests |
 | [decisions](decisions.md) | Decision log (license, zero false positives, defaults, scope) |
 
