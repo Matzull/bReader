@@ -6,14 +6,42 @@ What protects the project from regressions and false positives, and how to run a
 
 | Layer | Where | Run |
 |---|---|---|
-| Unit and integration tests | `crates/*/src` (`#[cfg(test)]`), `crates/breader/tests` | `cargo test --workspace` and `cargo test --workspace --features breader/rayon` |
-| Allocation test (NFR-4) | `crates/breader/tests/allocation.rs` (counting allocator; own test binary) | `cargo test --release -p breader --test allocation -- --nocapture`; results in [REQUIREMENTS](REQUIREMENTS.md) NFR-4 |
+| Unit and integration tests | `crates/*/src` (`#[cfg(test)]`), `crates/breader/tests` | `cargo test --workspace` (about 17 s run time with a warm build; the dev profile is `opt-level = 1`, see below) and, for the crates with the `rayon` feature, `cargo test -p breader -p breader-imgproc -p breader-linear -p breader-qr -p breader-datamatrix --features breader/rayon` |
+| Allocation test (NFR-4) | `crates/breader/tests/allocation.rs` (counting allocator; own test binary) | Release only: it is ignored in debug builds, because the counts differ and the documented NFR-4 numbers are release ones. Run `cargo test --release -p breader --test allocation -- --nocapture` (about 3 s plus the release build) in tiers a and b below, and in CI; results in [REQUIREMENTS](REQUIREMENTS.md) NFR-4 |
 | Python tests | `crates/breader-py/tests` (against the installed wheel) | `pytest` after `maturin develop --release`; see [breader-py](../crates/breader-py/README.md) |
-| Regression gate | `tools/bench`, `tools/video-bench`, baselines in `tools/bench/baselines/` | `tools/check-regression.sh [--dynamsoft] [--zxing-samples] [--barber] [--barber-full] [--all]` |
+| Regression gate | `tools/bench`, `tools/video-bench`, baselines in `tools/bench/baselines/` | `tools/check-regression.sh [--tier a\|b\|c1\|c2] [--efforts LIST]`, see [tiers](#test-and-gate-tiers) |
 | Fuzzing | `fuzz/` (nightly toolchain, not a workspace member) | see [fuzz/README.md](../fuzz/README.md) |
 | Micro-benchmarks | `criterion` in `breader-imgproc` and `breader-ecc` (`benches/`), `tools/bench` `stages` binary | `cargo bench -p breader-imgproc` |
 
 Test symbols are produced by encoder crates used as dev-dependencies only (for example `qrcode`); the decoder sources of those crates or of other readers are never read ([clean-room](contributing.md#clean-room-rules)). Misdecode protections (the zero-false-positive policy) get a test each, with the failing case that motivated them.
+
+## Test and gate tiers
+
+How much to run depends on the change; the measurements and the reasoning are in [TEST-STUDY](TEST-STUDY.md). `tools/check-regression.sh` takes `--tier a|b|c1|c2` (default a) and `--efforts fast,balanced,exhaustive` to keep only some efforts of a tier. Any false positive fails every tier. Synth seed 1 is gated at Balanced only; seed 2024 keeps all three efforts.
+
+| Tier | When | Contents | Time |
+|---|---|---|---|
+| **a** | every change, locally | `cargo test --workspace`; `cargo test --release -p breader --test allocation`; gates at Balanced on synth seed 1, synth seed 2024, Dynamsoft challenging-images, Dynamsoft pdf417-small and zxing-cpp samples (includes the `falsepositives` images and the synth `negative` class); pytest when `crates/breader-py` or the facade API changed | about 1.5 to 2 min with a warm build (tests 17 s, gates about 33 s, plus the incremental release build) |
+| **b** | before merging; CI on pushes to main | a, the rayon test run, and all three efforts on synth seed 2024, challenging-images, skewed-datamatrix, UPS-Synthetic-Labels, pdf417-small and zxing samples; BarBeR 1/8 subset at Balanced and Exhaustive; the video gate with the tracker engine only; pytest | about 10 min (7.5 without the video) |
+| **c1** | changes that raise false-positive exposure (list below) | b without the subset, with the full BarBeR set at Balanced and Exhaustive | about 35 min |
+| **c2** | phase end, before a release; weekly in CI (without BarBeR, which is local) | every set at every effort, the full BarBeR set (Fast too) and the video gate with all engines (tracker, fast, balanced); `--all` is an alias | about 42 min |
+
+Fuzzing is separate (nightly in CI). CI runs tier a on pull requests and tier b on pushes to main, restricted to the synthetic sets (`--synthetic-only`, because the real datasets are only fetched by the weekly job); the weekly job runs c2 ([CI](CI.md)). The numbers above are from a shared machine with 4 threads; a full BarBeR run takes 297 s (Fast), 549 s (Balanced) and 1071 s (Exhaustive) there.
+
+### When to run c1
+
+Run c1 instead of b when a change can add false positives that the 1/8 subset would miss (it sees a new, independent FP mode with probability 1/8 per instance):
+
+- a new default symbology;
+- a relaxed guard or acceptance rule (quiet zone, agreement lines, length list, triplet geometry such as D-040);
+- any change to aggregation or dedup;
+- a change of default features or of escalation.
+
+Otherwise b is enough. Do not replace c1 by the subset for these.
+
+### Dev profile
+
+`[profile.dev] opt-level = 1` in the workspace `Cargo.toml` (debug assertions and overflow checks stay on; `qrcode` and `breader-ecc` keep their opt-level 3 overrides). It takes the workspace tests from about 4 min 13 s to about 20 s run time; the decoder sweeps are 10 to 25 times slower at opt-level 0. Cold build of the tests is about 1.5 minutes.
 
 ## Gates
 
@@ -21,12 +49,12 @@ A gate compares a run with a versioned baseline and fails CI on any regression. 
 
 | Gate | Dataset | Baselines | Runs in |
 |---|---|---|---|
-| synth seed 1 / seed 2024 | generated | `synth-seed1-*`, `synth-seed2024-*` | every push (`ci.yml` `regression`) |
-| Dynamsoft challenging / skewed Data Matrix | `data/dynamsoft/...` | `dynamsoft-challenging-*`, `dynamsoft-skewed-*` | weekly or manual (`datasets.yml`), `--dynamsoft` locally |
-| Dynamsoft videos | `data/dynamsoft/video-based-testing` | `dynamsoft-video.json` | same |
-| zxing-cpp samples | `data/zxing-samples/test/samples` | `zxing-samples-*` | `datasets.yml` `zxing-samples` job, `--zxing-samples` locally |
-| BarBeR, 1/8 subset | `data/barber` (manual download, [datasets](datasets.md#barber)) | `barber-subset-*` | locally only, `--barber` |
-| BarBeR, full set | same, 8748 images | `barber-*` | locally only, `--barber-full` and `--all` |
+| synth seed 1 (Balanced only) / seed 2024 | generated | `synth-seed1-balanced`, `synth-seed2024-*` | every pull request and push to main (`ci.yml` `regression`) |
+| Dynamsoft challenging / skewed Data Matrix | `data/dynamsoft/...` | `dynamsoft-challenging-*`, `dynamsoft-skewed-*`, `dynamsoft-ups-*`, `dynamsoft-pdf417-*` | weekly or manual (`datasets.yml`, tier c2), locally from tier a (challenging, pdf417) and tier b (all) |
+| Dynamsoft videos | `data/dynamsoft/video-based-testing` | `dynamsoft-video.json` | same; tier b and c1 run the tracker engine only (159 s), c2 all three engines (about 285 s) |
+| zxing-cpp samples | `data/zxing-samples/test/samples` | `zxing-samples-*` | weekly (`datasets.yml`), locally from tier a |
+| BarBeR, 1/8 subset | `data/barber` (manual download, [datasets](datasets.md#barber)) | `barber-subset-*` | locally only, tier b (`--barber` in the older flag form) |
+| BarBeR, full set | same, 8748 images | `barber-*` | locally only, tiers c1 and c2 (`--barber-full`) |
 
 ### How it works
 
@@ -42,10 +70,10 @@ Higher read counts and entries not yet in the baseline are only notices. Latency
 
 ### The BarBeR gate
 
-BarBeR has no redistributable license, so it is never run in CI. A full run takes about 5 to 16 minutes per effort (8748 photos, some of 20 megapixels), too long for every local check, so there are two gates over the same ground truth ([datasets](datasets.md#barber)):
+BarBeR has no redistributable license, so it is never run in CI. A full run takes about 5, 9 and 18 minutes at Fast, Balanced and Exhaustive (297, 549 and 1071 s on a shared machine with 4 threads; 8748 photos, some of 20 megapixels), too long for every local check, so there are two gates over the same ground truth ([datasets](datasets.md#barber)):
 
-- `--barber`: a deterministic 1/8 subset (`bench data/barber --subset 8`: the images whose FNV-1a hash of the file name is divisible by 8, about 1100 images, all twelve sources represented), baselines `barber-subset-<effort>.json`, about 4 minutes for the three efforts.
-- `--barber-full` (and `--all`): the whole set, baselines `barber-<effort>.json`.
+- `--barber` (tier b, Balanced and Exhaustive): a deterministic 1/8 subset (`bench data/barber --subset 8`: the images whose FNV-1a hash of the file name is divisible by 8, about 1100 images, all twelve sources represented), baselines `barber-subset-<effort>.json`, about 4 minutes for the three efforts.
+- `--barber-full` (tier c1 at Balanced and Exhaustive, c2 at all three): the whole set, baselines `barber-<effort>.json`.
 
 Both skip with a message when `data/barber` is missing. The subset baselines are recorded with `--subset 8`, so the expected counts in them differ from the full ones; the two sets are checked against their own files. The group of a baseline is one BarBeR source dataset, the items are the symbologies, so a regression is localised to a source. Undecodable regions are not expected reads and mask false positives on their polygon, which is why this gate can hold the zero-false-positive rule on photos whose ground truth is partly unknown ([datasets](datasets.md#loader)). Rewrite both sets after a change that moves reads:
 
@@ -85,11 +113,17 @@ Branches that each improve reads edit the same JSON files, so a textual merge is
 ### Local runs
 
 ```sh
-tools/check-regression.sh                  # synthetic sets
-tools/fetch-datasets.sh                    # once
-tools/check-regression.sh --all            # also Dynamsoft (needs ffmpeg), zxing samples and the full BarBeR set
-tools/check-regression.sh --barber         # only the quick 1/8 BarBeR subset on top of the synthetic sets
+tools/fetch-datasets.sh                    # once (Dynamsoft video needs ffmpeg)
+tools/check-regression.sh                  # tier a
+tools/check-regression.sh --tier b         # before merging
+tools/check-regression.sh --tier c1        # FP-exposure changes, about 35 min
+tools/check-regression.sh --tier c2        # phase end (--all is the same)
+tools/check-regression.sh --tier b --efforts exhaustive   # one slice of a tier
+tools/check-regression.sh --tier a --synthetic-only       # no downloaded datasets (CI)
+tools/check-regression.sh --dynamsoft      # older per-set flags: synthetic sets plus that set, all efforts
 ```
+
+The video gate also accepts `--engines`; with `--engines tracker`, baseline entries of the engines not run are ignored. Run one heavy job at a time (a tier b or c run, a bench, a wheel build), with `RAYON_NUM_THREADS=4` on a shared machine.
 
 Measure latency only on an idle machine and compare builds in interleaved runs; concurrent jobs distort timings by up to 2x.
 

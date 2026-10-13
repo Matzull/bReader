@@ -217,4 +217,4 @@ Work items, in priority order. Each must keep read counts and 0 FP unchanged.
 - QR (`sample.rs`: `Warped`, `timing_warp`) and Data Matrix (`sample.rs`: `Warp`, `clock_warp`) carry two near-identical per-axis pitch corrections.
 - Data Matrix keeps its own `f64` homography `Mapper` instead of `breader_core::Homography`.
 
-Unify only with a gate run (`tools/check-regression.sh --all`) proving that reads are unchanged.
+Unify only with a gate run (`tools/check-regression.sh --tier c1`) proving that reads are unchanged.

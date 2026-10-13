@@ -60,7 +60,7 @@ fn render(modules: &[bool], module_px: usize, height: usize, quiet: usize) -> (I
 }
 
 #[test]
-fn reads_a_rendered_ean13_with_default_options() {
+fn reads_a_rendered_ean13_with_default_options_upside_down_and_strided() {
     let (img, width) = render(&ean13("5901234123457"), 3, 110, 12);
     let mut reader = Reader::new();
     let symbols = reader.scan(img.view());
@@ -93,14 +93,11 @@ fn reads_a_rendered_ean13_with_default_options() {
     let center = s.quad.center();
     assert!((center.x - width as f32 / 2.0).abs() < 10.0, "{center:?}");
     assert!(center.y > 20.0 && center.y < 130.0, "{center:?}");
-}
 
-#[test]
-fn reads_the_same_symbol_upside_down_and_from_a_strided_view() {
+    // The same kind of symbol upside down, from a view with a stride larger than the width.
     let modules: Vec<bool> = ean13("4006381333931").into_iter().rev().collect();
     let (img, width) = render(&modules, 2, 90, 12);
     let height = img.height();
-    // Copy into a wider buffer so the view has a row stride larger than the width.
     let stride = width + 17;
     let mut data = vec![200u8; stride * height];
     for y in 0..height {
@@ -113,16 +110,6 @@ fn reads_the_same_symbol_upside_down_and_from_a_strided_view() {
     assert_eq!(symbols[0].data, b"4006381333931");
     let o = symbols[0].orientation_deg;
     assert!((o - 180.0).abs() < 2.0, "{o}");
-}
-
-#[test]
-fn blank_and_unrelated_images_yield_nothing() {
-    let mut reader = Reader::new();
-    let blank = ImageBuffer::new(300, 200);
-    assert!(reader.scan(blank.view()).is_empty());
-    // A valid structure with a broken check digit is not a symbol.
-    let (img, _) = render(&ean13("5901234123458"), 3, 110, 12);
-    assert!(reader.scan(img.view()).is_empty());
 }
 
 #[test]

@@ -6,7 +6,7 @@ Every dataset the project measures against. `data/` is gitignored: nothing here 
 
 | Dataset | Location | Obtain | Terms | Gated by | Baseline files |
 |---|---|---|---|---|---|
-| Synthetic seed 1 | `data/synth` | `cargo run -r -p synth -- data/synth` (generated, 20 per class) | ours, deterministic | CI `regression`, `tools/check-regression.sh` | `synth-seed1-*.json` |
+| Synthetic seed 1 | `data/synth` | `cargo run -r -p synth -- data/synth` (generated, 20 per class) | ours, deterministic | CI `regression`, `tools/check-regression.sh` | `synth-seed1-balanced.json` |
 | Synthetic seed 2024 | `data/synth-2024` | `synth data/synth-2024 --count 60 --seed 2024` | ours, deterministic | same | `synth-seed2024-*.json` |
 | Dynamsoft `challenging-images` | `data/dynamsoft/challenging-images` | `tools/fetch-datasets.sh dynamsoft` | no license stated; internal only | `--dynamsoft`, `datasets.yml` | `dynamsoft-challenging-*.json` |
 | Dynamsoft `skewed-datamatrix` | `data/dynamsoft/skewed-datamatrix` | same | no license stated; internal only | `--dynamsoft`, `datasets.yml` | `dynamsoft-skewed-*.json` |
@@ -14,7 +14,7 @@ Every dataset the project measures against. `data/` is gitignored: nothing here 
 | Dynamsoft `UPS-Synthetic-Labels` | `data/dynamsoft/UPS-Synthetic-Labels` | same | CC BY 4.0 | `--dynamsoft`, `datasets.yml` (Code 128; MaxiCode unsupported) | `dynamsoft-ups-*.json` |
 | Dynamsoft `pdf417-small-module-size` | `data/dynamsoft/pdf417-small-module-size` | same | no license stated; internal only | `--dynamsoft`, `datasets.yml` (PDF417 counted; 7 unlabelled Code 128 added as overrides) | `dynamsoft-pdf417-*.json` |
 | zxing-cpp samples | `data/zxing-samples/test/samples` | `tools/fetch-datasets.sh zxing-samples` | Apache-2.0, test data only | `--zxing-samples`, `datasets.yml` (`zxing-samples` job) | `zxing-samples-*.json` |
-| BarBeR | `data/barber/BarBeR - Dataset` | manual: `data/BarBeR_Dataset.zip` (6 GB), extract into `data/barber/` | no license stated, sources have their own terms; internal only | `--barber` (1/8 subset), `--barber-full`, `--all`; not in CI | `barber-subset-*.json`, `barber-*.json` |
+| BarBeR | `data/barber/BarBeR - Dataset` | manual: `data/BarBeR_Dataset.zip` (6 GB), extract into `data/barber/` | no license stated, sources have their own terms; internal only | `--barber` (1/8 subset), `--barber-full`, `--tier b` (subset), `--tier c1`/`c2` (full); not in CI | `barber-subset-*.json`, `barber-*.json` |
 
 All Dynamsoft subsets come from one clone, [Dynamsoft/datasets-from-dynamsoft](https://github.com/Dynamsoft/datasets-from-dynamsoft) (`git clone --depth 1`, updated with `pull --ff-only`). CI caches it keyed on the upstream commit.
 

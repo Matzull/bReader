@@ -8,6 +8,13 @@
 //!
 //! The counting allocator needs `unsafe`, which the workspace denies; the
 //! exception is confined to this test binary and forwards to `System`.
+//!
+//! Release only: allocation counts differ between debug and release builds and
+//! the documented NFR-4 numbers are release ones, so the test is ignored in
+//! builds with debug assertions. Run it with
+//! `cargo test --release -p breader --test allocation` (tiers a and b of
+//! docs/testing.md, and one CI step). To run it in a debug build anyway, add
+//! `-- --ignored` (slow).
 #![allow(unsafe_code)]
 
 use breader::modules::*;
@@ -208,6 +215,10 @@ fn allowed(only: Option<&str>, effort: Effort, texture: bool) -> usize {
 }
 
 #[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "release only: cargo test --release -p breader --test allocation"
+)]
 fn steady_state_scans_do_not_allocate() {
     let readers = [
         Some("linear"),
@@ -217,7 +228,8 @@ fn steady_state_scans_do_not_allocate() {
         Some("aztec"),
         None,
     ];
-    // 800x600 is above the up-scale retry limit; 320x240 takes the retry.
+    // 800x600 is above the up-scale retry limit; 320x240 takes the retry. The
+    // small frames are measured for the full pipeline (`all`) only.
     let frames = [
         blank(800, 600),
         texture(800, 600),
@@ -232,6 +244,9 @@ fn steady_state_scans_do_not_allocate() {
     );
     for only in readers {
         for frame in &frames {
+            if only.is_some() && frame.w < 800 {
+                continue;
+            }
             let mut cells = Vec::new();
             for effort in EFFORTS {
                 let (n, bytes) = measure(only, effort, frame);

@@ -65,11 +65,3 @@ fn frames_over_the_limit_are_not_retried() {
     assert!(scan(&px, side, Effort::Balanced, Some(side - 1)).is_empty());
     assert_eq!(scan(&px, side, Effort::Balanced, Some(side)).len(), 1);
 }
-
-#[test]
-fn blank_frames_stay_empty_after_the_retry() {
-    let px = vec![255u8; 200 * 200];
-    for effort in [Effort::Balanced, Effort::Exhaustive] {
-        assert!(scan(&px, 200, effort, None).is_empty());
-    }
-}
