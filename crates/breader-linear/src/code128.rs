@@ -454,6 +454,7 @@ impl LinearDecoder for Code128Decoder {
                     inverted: false,
                     start_stop: None,
                     segments: 0,
+                    thin: false,
                 });
             }
             j += 2;

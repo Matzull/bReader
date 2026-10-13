@@ -168,6 +168,7 @@ fn scan_profile<D: LinearDecoder>(
                 inverted: hit.inverted,
                 start_stop: hit.start_stop,
                 segments: hit.segments,
+                thin: hit.thin,
             });
         }
     }
@@ -537,6 +538,7 @@ impl LinearReader {
         let settings = Settings {
             min_agreement: min_line_agreement,
             plan_lines,
+            itf_strict: opts.itf_strict,
             addon,
             across_pad: plan.spacing(0.0).min(plan.spacing(90.0)) / 2.0,
             scale,
@@ -1029,6 +1031,34 @@ mod tests {
         let bad = format!("{}{}", &text[..13], (text.as_bytes()[13] - b'0' + 1) % 10);
         let img = wide_picture(&itf_modules(&bad, 3), 2.6, 7.0);
         assert!(scan(&img, &any).is_empty());
+    }
+
+    #[test]
+    fn itf_default_lengths_beyond_14_read_with_four_lines_and_a_clear_margin() {
+        let defaults = ScanOptions::default();
+        for digits in ["12345678", "1234567890", "123456789012", "1234567890123456"] {
+            let img = wide_picture(&itf_modules(digits, 3), 2.6, 0.0);
+            let found = scan(&img, &defaults);
+            assert_eq!(found.len(), 1, "{digits}");
+            assert_eq!(found[0].data, digits.as_bytes());
+            assert!(linear_meta(&found[0]).lines_agreeing >= 4, "{digits}");
+        }
+        let img = wide_picture(&itf_modules("123456789012", 3), 2.6, 0.0);
+        let own = ScanOptions {
+            itf: breader_core::ItfOptions {
+                allowed_lengths: vec![12],
+                min_length: 6,
+            },
+            ..ScanOptions::default()
+        };
+        assert_eq!(scan(&img, &own).len(), 1);
+        // 20 digits are not on the default list.
+        let img = wide_picture(&itf_modules("12345678901234567890", 3), 2.6, 0.0);
+        assert!(scan(&img, &defaults).is_empty());
+        // A quiet zone below 10 modules rejects the symbol whatever the length.
+        let tight = with_neighbours(&itf_modules("123456789012", 3), 8, 8);
+        let img = wide_picture(&tight, 2.6, 0.0);
+        assert!(scan(&img, &defaults).is_empty());
     }
 
     #[test]

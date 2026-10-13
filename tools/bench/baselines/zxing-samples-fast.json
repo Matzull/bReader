@@ -163,7 +163,7 @@
     "itf-1": {
       "ITF": {
         "expected": 14,
-        "read": 1,
+        "read": 5,
         "false_positives": 0
       }
     },
