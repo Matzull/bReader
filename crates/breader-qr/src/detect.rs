@@ -9,6 +9,10 @@ const FINDER_UNITS: [f32; 5] = [1.0, 1.0, 3.0, 1.0, 1.0];
 const ROW_TOL: f32 = 0.65;
 const ROW_TOL_PERCENT: u32 = 65;
 const MAX_FINDERS: usize = 1024;
+/// Accepted vertical/horizontal chord ratio of a finder, strict tier and the
+/// relaxed fallback tier (oblique photos foreshorten one axis).
+const STRICT_ASPECT: std::ops::RangeInclusive<f32> = 0.6..=1.7;
+const WIDE_ASPECT: std::ops::RangeInclusive<f32> = 0.35..=2.8;
 
 /// A confirmed finder pattern, in pass-image coordinates.
 #[derive(Debug, Clone, Copy)]
@@ -22,6 +26,17 @@ pub(crate) struct Finder {
     pub count: u32,
     /// Light-on-dark symbol: the pattern was found in the inverted plane.
     pub inv: bool,
+    /// Every confirmation had a chord aspect outside the strict limits.
+    wide: bool,
+}
+
+impl Finder {
+    /// Vertical over horizontal chord of the outer ring lies outside the
+    /// strict aspect limits (an oblique view); such finders only join the
+    /// fallback tier of the triplet search.
+    pub fn is_wide(&self) -> bool {
+        self.wide
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -41,6 +56,9 @@ pub(crate) struct Triplet {
     /// Passed only the perspective-tolerant geometry limits; tried after
     /// every strict triplet.
     pub loose: bool,
+    /// Involves a finder of a wide chord aspect; tried only when no strict
+    /// triplet of the frame decoded.
+    pub wide: bool,
 }
 
 #[derive(Debug, Default)]
@@ -54,6 +72,10 @@ pub(crate) struct FinderSearch {
     max_module: f32,
     links: Vec<Link>,
     incident: Vec<(usize, f32, u16)>,
+    /// Finders with a wide chord aspect are collected too.
+    wide: bool,
+    /// Scratch for `strict_finders`.
+    strict: Vec<Finder>,
 }
 
 /// Run lengths must follow `units` within `tol` units (center run twice as lenient).
@@ -144,7 +166,13 @@ fn line_check(m: Plane<'_>, x: i32, y: i32, d: (i32, i32), limit: u32) -> Option
     })
 }
 
-fn confirm_finder(m: Plane<'_>, hx: f32, y: usize, h_total: f32) -> Option<(Point, [f32; 3])> {
+fn confirm_finder(
+    m: Plane<'_>,
+    hx: f32,
+    y: usize,
+    h_total: f32,
+    aspect: &std::ops::RangeInclusive<f32>,
+) -> Option<(Point, [f32; 3])> {
     let limit = (h_total * 1.5) as u32 + 2;
     let (mut cx, mut cy) = (hx, y as f32 + 0.5);
     let mut chords = [h_total, 0.0, 0.0];
@@ -164,7 +192,7 @@ fn confirm_finder(m: Plane<'_>, hx: f32, y: usize, h_total: f32) -> Option<(Poin
         cx = cx.floor() + h.shift2 as f32 / 2.0;
         chords[0] = h.runs.iter().sum();
         let ratio = chords[1] / chords[0];
-        if round == 1 && !(0.6..=1.7).contains(&ratio) {
+        if round == 1 && !aspect.contains(&ratio) {
             return None;
         }
     }
@@ -241,9 +269,21 @@ fn row_hits(m: &BitMatrix, y: usize, bounds: &mut Vec<u32>, out: &mut Vec<RowHit
 }
 
 impl FinderSearch {
+    /// The finders without the wide ones (when `has_wide`, else all of them).
+    pub fn strict_finders(&mut self, has_wide: bool) -> &[Finder] {
+        if !has_wide {
+            return &self.finders;
+        }
+        self.strict.clear();
+        self.strict
+            .extend(self.finders.iter().copied().filter(|f| !f.is_wide()));
+        &self.strict
+    }
+
     /// Scans every `row_step`-th row of the binary image for finder patterns.
-    pub fn find_finders(&mut self, m: &BitMatrix, row_step: usize) {
+    pub fn find_finders(&mut self, m: &BitMatrix, row_step: usize, wide: bool) {
         self.finders.clear();
+        self.wide = wide;
         self.recent.clear();
         self.max_module = 0.0;
         let step = row_step.max(1);
@@ -314,7 +354,10 @@ impl FinderSearch {
         let yf = y as f32 + 0.5;
         for &i in &self.recent {
             let f = &mut self.finders[i];
+            // A wide finder keeps being re-confirmed: a later row may show
+            // the proper aspect, and the merge below moves its chords.
             if f.inv == inv
+                && !f.is_wide()
                 && (hx - f.pos.x).abs() < f.module * 2.5
                 && (yf - f.pos.y).abs() < f.module * 2.5
             {
@@ -327,13 +370,38 @@ impl FinderSearch {
         {
             return;
         }
-        let Some((pos, chords)) = confirm_finder(plane, hx, y, h_total) else {
+        let Some((pos, chords)) = confirm_finder(
+            plane,
+            hx,
+            y,
+            h_total,
+            if self.wide {
+                &WIDE_ASPECT
+            } else {
+                &STRICT_ASPECT
+            },
+        ) else {
             return;
         };
         let reach = chords.iter().copied().fold(f32::MAX, f32::min) / 7.0 * 3.5;
+        let wide = !STRICT_ASPECT.contains(&(chords[1] / chords[0]));
         for &i in &self.recent {
             let f = &mut self.finders[i];
             if f.inv == inv && f.pos.distance(pos) < reach.max(f.module * 3.5) {
+                if wide && !f.wide {
+                    // A strict finder is not changed by wide confirmations.
+                    return;
+                }
+                if !wide && f.wide {
+                    // The first strict confirmation replaces the wide ones.
+                    f.pos = pos;
+                    f.chords = chords;
+                    f.wide = false;
+                    f.module = chords.iter().copied().fold(f32::MAX, f32::min) / 7.0;
+                    f.count += 1;
+                    self.max_module = self.max_module.max(f.module);
+                    return;
+                }
                 let n = f.count as f32;
                 f.pos = Point::new(
                     (f.pos.x * n + pos.x) / (n + 1.0),
@@ -357,32 +425,64 @@ impl FinderSearch {
             chords,
             count: 1,
             inv,
+            wide,
         });
     }
 
     /// Builds candidate triplets from the strongest `max_finders` finders,
     /// best score first. Finder pairs are kept only when the timing pattern
     /// between them alternates, so triplets are not formed across symbols.
-    pub fn select_triplets(&mut self, m: Plane<'_>, max_finders: usize, row_step: usize) {
+    ///
+    /// With `wide`, finders of a wide chord aspect take part too. Their
+    /// triplets are flagged `wide` and sort after every other triplet;
+    /// everything not involving a wide finder is judged as if they were
+    /// absent (finder count thresholds, link ranking), so the strict tier is
+    /// the one of a search without them.
+    pub fn select_triplets(
+        &mut self,
+        m: Plane<'_>,
+        max_finders: usize,
+        row_step: usize,
+        wide: bool,
+    ) {
         let inv = m.inverted();
         self.triplets.clear();
         let strength = |f: &Finder| f.count as f32 * row_step as f32 / (7.0 * f.module.max(0.5));
         self.order.clear();
-        self.order
-            .extend((0..self.finders.len()).filter(|&i| self.finders[i].inv == inv));
         let fs = &self.finders;
-        self.order
-            .sort_by(|&a, &b| strength(&fs[b]).total_cmp(&strength(&fs[a])));
-        self.order.truncate(max_finders);
+        // Strict finders first, capped as without the wide tier; the wide
+        // ones come after them, with a smaller cap of their own, so they
+        // cannot crowd strict finders out of a frame with many symbols.
+        for (want_wide, cap) in [(false, max_finders), (true, max_finders / 4)] {
+            if want_wide && !wide {
+                break;
+            }
+            let start = self.order.len();
+            self.order.extend(
+                (0..fs.len()).filter(|&i| fs[i].inv == inv && fs[i].is_wide() == want_wide),
+            );
+            self.order[start..].sort_by(|&a, &b| strength(&fs[b]).total_cmp(&strength(&fs[a])));
+            self.order
+                .truncate(start + cap.min(self.order.len() - start));
+        }
         let n = self.order.len();
+        let n_strict = self
+            .order
+            .iter()
+            .filter(|&&i| !self.finders[i].is_wide())
+            .count();
         self.links.clear();
-        // Few finders: strong perspective is worth the extra false pairs.
-        let relaxed = n <= RELAXED_MAX_FINDERS;
         for i in 0..n {
             for j in i + 1..n {
                 let (a, b) = (&self.finders[self.order[i]], &self.finders[self.order[j]]);
-                if let Some(l) = link(m, a, b, i, j, relaxed)
-                    && (l.score >= 0.75 || n <= UNVERIFIED_LINK_MAX_FINDERS)
+                // Few finders: strong perspective is worth the extra false pairs.
+                let count = if a.is_wide() || b.is_wide() {
+                    n
+                } else {
+                    n_strict
+                };
+                if let Some(l) = link(m, a, b, i, j, count <= RELAXED_MAX_FINDERS)
+                    && (l.score >= 0.75 || count <= UNVERIFIED_LINK_MAX_FINDERS)
                 {
                     self.links.push(l);
                 }
@@ -392,13 +492,22 @@ impl FinderSearch {
         self.incident.clear();
         for corner in 0..n {
             self.incident.clear();
+            let fs = &self.finders;
+            let order = &self.order;
             self.incident.extend(
                 self.links
                     .iter()
                     .filter(|l| l.a == corner || l.b == corner)
                     .map(|l| (if l.a == corner { l.b } else { l.a }, l.score, l.dim)),
             );
-            self.incident.sort_by(|x, y| y.1.total_cmp(&x.1));
+            // Links to wide finders rank after the others so they cannot
+            // crowd out strict triplets.
+            self.incident.sort_by(|x, y| {
+                fs[order[x.0]]
+                    .is_wide()
+                    .cmp(&fs[order[y.0]].is_wide())
+                    .then(y.1.total_cmp(&x.1))
+            });
             self.incident.truncate(MAX_LINKS_PER_FINDER);
             for p in 0..self.incident.len() {
                 for q in p + 1..self.incident.len() {
@@ -410,21 +519,41 @@ impl FinderSearch {
                         &self.finders[self.order[iq]],
                     );
                     let st = strength(a) + strength(b) + strength(c);
-                    if let Some(t) = make_triplet(c, a, b, st, (sp, sq), (dp, dq), relaxed) {
+                    let count = if c.is_wide() || a.is_wide() || b.is_wide() {
+                        n
+                    } else {
+                        n_strict
+                    };
+                    if let Some(t) = make_triplet(
+                        c,
+                        a,
+                        b,
+                        st,
+                        (sp, sq),
+                        (dp, dq),
+                        count <= RELAXED_MAX_FINDERS,
+                    ) {
                         self.triplets.push(t);
                     }
                 }
             }
         }
-        self.add_recovered_triplets(n);
-        self.triplets
-            .sort_by(|a, b| a.loose.cmp(&b.loose).then(a.score.total_cmp(&b.score)));
+        self.add_recovered_triplets(n, n_strict);
+        for t in &mut self.triplets {
+            t.wide = t.tl.is_wide() || t.tr.is_wide() || t.bl.is_wide();
+        }
+        self.triplets.sort_by(|a, b| {
+            a.wide
+                .cmp(&b.wide)
+                .then(a.loose.cmp(&b.loose))
+                .then(a.score.total_cmp(&b.score))
+        });
     }
 
     /// A verified timing pattern between two finders locates the third one
     /// even when it is too damaged to be detected; such triplets rank after
     /// real ones.
-    fn add_recovered_triplets(&mut self, n: usize) {
+    fn add_recovered_triplets(&mut self, n: usize, n_strict: usize) {
         for li in 0..self.links.len() {
             let l = self.links[li];
             if l.score < 0.75 || l.dim == 0 || l.side == 0 || l.a >= n || l.b >= n {
@@ -438,7 +567,9 @@ impl FinderSearch {
             for (corner, other) in [(fa, fb), (fb, fa)] {
                 let c = Point::new(corner.pos.x + px, corner.pos.y + py);
                 let near = self.finders.iter().any(|f| {
-                    f.inv == corner.inv && f.pos.distance(c) < 2.0 * corner.module.max(1.0)
+                    f.inv == corner.inv
+                        && !f.is_wide()
+                        && f.pos.distance(c) < 2.0 * corner.module.max(1.0)
                 });
                 if near {
                     continue;
@@ -455,7 +586,11 @@ impl FinderSearch {
                     0.0,
                     (l.score, l.score),
                     (l.dim, l.dim),
-                    n <= RELAXED_MAX_FINDERS,
+                    (if fa.is_wide() || fb.is_wide() {
+                        n
+                    } else {
+                        n_strict
+                    }) <= RELAXED_MAX_FINDERS,
                 ) {
                     t.score += 1.5;
                     t.synthetic = true;
@@ -779,6 +914,7 @@ fn make_triplet(
             0
         },
         synthetic: false,
+        wide: false,
         parallel: false,
         loose,
     })

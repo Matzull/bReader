@@ -51,7 +51,7 @@
       },
       "Data Matrix": {
         "expected": 33,
-        "read": 24,
+        "read": 23,
         "false_positives": 0
       },
       "EAN-13": {
@@ -83,7 +83,7 @@
     "Dubska": {
       "QR Code": {
         "expected": 802,
-        "read": 561,
+        "read": 613,
         "false_positives": 0
       }
     },
@@ -159,7 +159,7 @@
     "Open Food Facts": {
       "Data Matrix": {
         "expected": 2,
-        "read": 2,
+        "read": 1,
         "false_positives": 0
       },
       "EAN-13": {
@@ -245,7 +245,7 @@
     "Szentandrasi-Dubska QR": {
       "QR Code": {
         "expected": 227,
-        "read": 187,
+        "read": 188,
         "false_positives": 0
       }
     },

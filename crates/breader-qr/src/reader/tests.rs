@@ -51,8 +51,8 @@ fn sample_best_in(
 ) -> Option<(BitMatrix, Triplet)> {
     let bin = Plane::new(raw, inverted);
     let mut s = FinderSearch::default();
-    s.find_finders(raw, 1);
-    s.select_triplets(bin, 30, 1);
+    s.find_finders(raw, 1, false);
+    s.select_triplets(bin, 30, 1, false);
     let t = *s.triplets.iter().find(|t| {
         let (dims, n) = candidate_dims(t.dim);
         t.dim_hint == expect_dim || dims[..n].contains(&expect_dim)
@@ -117,8 +117,8 @@ fn finders_and_triplet_clean() {
             let (m, r, img) = render_case(version, px, deg, 0, false);
             let bin = threshold(&img, r.w, r.h);
             let mut s = FinderSearch::default();
-            s.find_finders(&bin, 1);
-            s.select_triplets(Plane::new(&bin, false), 30, 1);
+            s.find_finders(&bin, 1, false);
+            s.select_triplets(Plane::new(&bin, false), 30, 1, false);
             let t = s
                 .triplets
                 .first()
@@ -552,7 +552,7 @@ fn finder_search_tags_polarity() {
     for (luma, expect_inv) in [(&img, false), (&inv, true)] {
         let bin = threshold(luma, r.w, r.h);
         let mut s = FinderSearch::default();
-        s.find_finders(&bin, 1);
+        s.find_finders(&bin, 1, false);
         let strong: Vec<_> = s.finders.iter().filter(|f| f.count >= 3).collect();
         assert!(strong.len() >= 3);
         assert!(strong.iter().all(|f| f.inv == expect_inv));
@@ -633,8 +633,8 @@ fn foreshortened_symbols_are_read_through_the_loose_tier() {
             let (w, h, img) = foreshortened(version, fx, fy, skew);
             let bin = threshold(&img, w, h);
             let mut s = FinderSearch::default();
-            s.find_finders(&bin, 1);
-            s.select_triplets(Plane::new(&bin, false), 30, 1);
+            s.find_finders(&bin, 1, false);
+            s.select_triplets(Plane::new(&bin, false), 30, 1, false);
             loose_seen += usize::from(s.triplets.first().is_some_and(|t| t.loose));
             assert!(
                 !s.triplets.windows(2).any(|p| p[0].loose && !p[1].loose),
@@ -655,9 +655,39 @@ fn clean_symbols_never_use_the_loose_tier_first() {
             let (_, r, img) = render_case(version, 4.0, deg, 0, false);
             let bin = threshold(&img, r.w, r.h);
             let mut s = FinderSearch::default();
-            s.find_finders(&bin, 1);
-            s.select_triplets(Plane::new(&bin, false), 30, 1);
+            s.find_finders(&bin, 1, false);
+            s.select_triplets(Plane::new(&bin, false), 30, 1, false);
             assert!(s.triplets.first().is_some_and(|t| !t.loose));
+        }
+    }
+}
+
+/// A symbol squeezed to 0.45 of its height has finder chords outside the
+/// strict aspect limits; the wide tier reads it.
+#[test]
+fn squeezed_symbol_is_read_by_the_wide_tier() {
+    for version in [3, 7] {
+        let m = make_modules(version, &payload(version));
+        let w = ((m.dim as f32 + 8.0) * 8.0) as usize;
+        let h = ((m.dim as f32 + 8.0) * 5.0) as usize;
+        let center = Point::new(w as f32 / 2.0, h as f32 / 2.0);
+        let mut quad = similarity_quad(m.dim, center, 8.0, 0.0);
+        for p in &mut quad {
+            p.y = center.y + (p.y - center.y) * 0.45;
+        }
+        let r = Render {
+            w,
+            h,
+            quad,
+            mirrored: false,
+            blur: 0,
+            invert: false,
+        };
+        let img = r.draw(&m);
+        for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+            let out = scan_one(&img, w, h, effort);
+            assert_eq!(out.len(), 1, "v{version} {effort:?}");
+            assert_eq!(out[0].data, payload(version), "v{version} {effort:?}");
         }
     }
 }

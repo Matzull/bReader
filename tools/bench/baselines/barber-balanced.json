@@ -83,7 +83,7 @@
     "Dubska": {
       "QR Code": {
         "expected": 802,
-        "read": 630,
+        "read": 683,
         "false_positives": 0
       }
     },
@@ -245,7 +245,7 @@
     "Szentandrasi-Dubska QR": {
       "QR Code": {
         "expected": 227,
-        "read": 196,
+        "read": 205,
         "false_positives": 0
       }
     },

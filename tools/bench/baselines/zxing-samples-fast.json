@@ -217,7 +217,7 @@
     "qrcode-2": {
       "QR Code": {
         "expected": 57,
-        "read": 44,
+        "read": 45,
         "false_positives": 0
       }
     },
