@@ -35,7 +35,7 @@ Reads / expected symbols, false positives (FP). breader F / B / E = Fast / Balan
 | BarBeR full | 5400 / 8585, 0 FP | 6358 / 8585, 0 FP | 6566 / 8585, 0 FP | 6123 / 8585, 91 FP | not run |
 | synth seed 1 | 426 / 487, 0 FP | 482 / 487, 0 FP | 483 / 487, 0 FP | 381 / 487, 11 FP (2026-10-13 earlier) | 201 / 487, 43 FP (same) |
 | synth seed 2024 (60 per class) | 1144 / 1311, 0 FP | 1286 / 1311, 0 FP | 1292 / 1311, 0 FP | not run | not run |
-| skewed-datamatrix | 724 / 1324, 0 FP | 1012 / 1324, 0 FP | 1022 / 1324, 0 FP | not run | not run |
+| skewed-datamatrix | 729 / 1324, 0 FP | 1012 / 1324, 0 FP | 1022 / 1324, 0 FP | not run | not run |
 | UPS-Synthetic-Labels | 84 / 104, 0 FP | 98 / 104, 0 FP | 99 / 104, 0 FP | not run | not run |
 | pdf417-small-module-size | 3 / 22, 0 FP | 4 / 22, 0 FP | 7 / 22, 0 FP | not run | not run |
 
@@ -72,7 +72,24 @@ Balanced is below zxing-cpp's p50 on the three photo sets and above it on the zx
 | rotated_vertical_ITF | 5.6 | 15.4 |
 | wide_to_close_datamatrix | 4.3 | 16.4 |
 
-Three of ten videos are over 10 ms (`batch_code39`, `batch_rotated_small_pdf417`, `batch_datamatrix`), the same three as in Phase D, with `batch_code39` 1.1 ms higher than then (15.9 -> 17.0) and the other two about equal (11.3 -> 11.5, 10.9 -> 11.4); `damaged_qrcode` (9.7) and `batch_inverted_datamatrix` (9.5) are within 5 % of the target. Median video: 7.65 ms at Fast, 19.7 ms at Balanced. The tracker gate (`video-bench --check`, c2) passes with 0 false positives; all engines in total: tracker 256 / 277 reads (mean 48.8 ms), balanced 246 / 277, fast 102 / 277.
+**After the Fast latency work ([D-044](decisions.md#d-044)), same method, interleaved old and new binaries, median of 3 rounds** (the machine was shared with another benchmark at the time, so the absolute values may be 2 to 3 % high; old = the table above re-measured):
+
+| Video | Fast before | Fast after |
+|---|---|---|
+| batch_EAN13 | 6.1 | 5.5 |
+| batch_code39 | 17.5 | **12.4** |
+| batch_dark_environment_1d | 6.0 | 5.6 |
+| batch_datamatrix | 11.8 | **11.4** |
+| batch_inverted_datamatrix | 9.9 | 9.6 |
+| batch_rotated_small_pdf417 | 11.6 | **11.2** |
+| damaged_qrcode | 10.1 | 8.5 |
+| reflective_surface_qrcode | 6.5 | 6.0 |
+| rotated_vertical_ITF | 6.4 | 5.9 |
+| wide_to_close_datamatrix | 5.2 | 4.6 |
+
+Fast on the still-image sets (p50 / p95, old to new): challenging-images 5.44 / 36.8 to 4.79 / 35.2, BarBeR 1/8 subset 6.09 / 24.9 to 5.35 / 21.8, synth seed 1 1.76 / 8.3 to 1.44 / 8.3. Fast reads are unchanged everywhere except skewed-datamatrix Data Matrix 724 to 729 (baseline rewritten); 0 false positives. Three videos are still over 10 ms.
+
+Three of ten videos were over 10 ms before this work (`batch_code39`, `batch_rotated_small_pdf417`, `batch_datamatrix`), the same three as in Phase D, with `batch_code39` 1.1 ms higher than then (15.9 -> 17.0) and the other two about equal (11.3 -> 11.5, 10.9 -> 11.4); `damaged_qrcode` (9.7) and `batch_inverted_datamatrix` (9.5) are within 5 % of the target. Median video: 7.65 ms at Fast, 19.7 ms at Balanced. The tracker gate (`video-bench --check`, c2) passes with 0 false positives; all engines in total: tracker 256 / 277 reads (mean 48.8 ms), balanced 246 / 277, fast 102 / 277.
 
 ### Per-class comparison at Balanced
 

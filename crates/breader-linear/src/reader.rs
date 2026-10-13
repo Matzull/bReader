@@ -319,7 +319,9 @@ fn scan_lines_parallel(
 }
 
 /// Parallel lines on both sides of `seed`, stopping per side once the
-/// symbol stops being read.
+/// symbol stops being read, or, with `settings`, as soon as the symbol has
+/// the agreement it needs.
+#[allow(clippy::too_many_arguments)]
 fn refine<D: LinearDecoder>(
     decoders: &D,
     img: &ImageView<'_>,
@@ -328,6 +330,7 @@ fn refine<D: LinearDecoder>(
     opts: &LineOptions,
     work: &mut Work,
     next_index: &mut u32,
+    settings: Option<&Settings>,
 ) {
     let len = seed.from.distance(seed.to);
     if len < 1.0 {
@@ -371,6 +374,10 @@ fn refine<D: LinearDecoder>(
                 &mut work.stage,
             );
             *next_index += 1;
+            // Further lines of a confirmed symbol only widen its quad.
+            if settings.is_some_and(|st| work.stage.aggregator.seed_met(seed, st)) {
+                return;
+            }
             if work.stage.aggregator.count_matching(before, seed) > 0 {
                 misses = 0;
             } else {
@@ -547,7 +554,17 @@ impl LinearReader {
         let mut seeds = std::mem::take(&mut work.seeds);
         work.stage.aggregator.seeds(&settings, &mut seeds);
         for seed in seeds.iter().take(REFINE_MAX_SEEDS) {
-            refine(&DECODERS, &img, seed, pass, &opts, work, &mut next_index);
+            let early = (effort == Effort::Fast).then_some(&settings);
+            refine(
+                &DECODERS,
+                &img,
+                seed,
+                pass,
+                &opts,
+                work,
+                &mut next_index,
+                early,
+            );
         }
         work.seeds = seeds;
         work.lines = lines;

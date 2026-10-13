@@ -57,13 +57,13 @@ Measured with the default pipeline on an AMD Ryzen 5 5500U (release build, singl
 
 | Dataset | Effort | Read rate | False positives | Latency p50 / p95 (ms) |
 |---|---|---|---|---|
-| challenging-images (448 symbols) | Fast | 74.3 % | 0 | 5.4 / 36.8 |
+| challenging-images (448 symbols) | Fast | 74.3 % | 0 | 4.8 / 35.2 |
 | challenging-images | Balanced | 91.7 % | 0 | 20.2 / 130.5 |
 | challenging-images | Exhaustive | 94.6 % | 0 | 51.8 / 362.7 |
-| BarBeR 1/8 subset (1093 symbols) | Fast | 62.9 % | 0 | 6.0 / 24.9 |
+| BarBeR 1/8 subset (1093 symbols) | Fast | 62.9 % | 0 | 5.4 / 21.8 |
 | BarBeR 1/8 subset | Balanced | 73.5 % | 0 | 22.4 / 103.9 |
 | BarBeR 1/8 subset | Exhaustive | 75.8 % | 0 | 58.5 / 277.6 |
-| synth (487 symbols) | Fast | 87.5 % | 0 | 1.7 / 8.3 |
+| synth (487 symbols) | Fast | 87.5 % | 0 | 1.4 / 8.3 |
 | synth | Balanced | 99.0 % | 0 | 6.1 / 40.0 |
 | synth | Exhaustive | 99.2 % | 0 | 14.0 / 100.3 |
 

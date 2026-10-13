@@ -15,6 +15,7 @@ use crate::common::MIN_MODULE;
 use crate::decoder::LineHit;
 
 use super::Row;
+use crate::runs::Runs;
 
 /// Modules between the first and the last bar edge.
 const SPAN_MODULES: f32 = 73.0;
@@ -168,6 +169,28 @@ pub(super) fn checksum(left: &[u8; 14], right: &[u8; 14]) -> usize {
 
 pub(super) fn check_pattern(checksum: usize) -> &'static [u8] {
     CHECK_PATTERNS[checksum].as_bytes()
+}
+
+/// Looser than the piece test of `decode` by this share of the expected
+/// width, so that float rounding between positions and summed widths cannot
+/// change a verdict.
+const SCREEN_SLACK: f32 = PIECE_SLACK + 0.02;
+
+/// Necessary condition of `decode` on the window of runs starting at `j`
+/// (all 45 runs inside the line): the pieces of the symbol measure their
+/// module counts. Evaluated on run positions, without building the row.
+pub(super) fn pieces_plausible(runs: &Runs, j: usize) -> bool {
+    if !super::opening_ok(runs, j, SPAN_MODULES, (QUIET_BEFORE, QUIET_AFTER)) {
+        return false;
+    }
+    let at = |k: usize| runs.start(j + k);
+    let span = (runs.end(j + super::ROW_RUNS - 1) - at(0)).abs();
+    let module = span / SPAN_MODULES;
+    SEGMENTS[1..4].iter().all(|s| {
+        let sum = (at(s.at + s.len) - at(s.at)).abs();
+        let expected = f32::from(s.modules) * module;
+        (sum - expected).abs() <= SCREEN_SLACK * expected
+    })
 }
 
 /// Reads a Limited symbol.

@@ -92,24 +92,14 @@ fn in_bounds(m: Plane<'_>, x: i32, y: i32) -> bool {
 /// count and whether the walk left the image or hit `limit`.
 fn count_run(
     m: Plane<'_>,
-    mut x: i32,
-    mut y: i32,
+    x: i32,
+    y: i32,
     d: (i32, i32),
     dark: bool,
     limit: u32,
 ) -> (u32, i32, i32, bool) {
-    let mut n = 0;
-    loop {
-        if !in_bounds(m, x, y) || n >= limit {
-            return (n, x, y, true);
-        }
-        if m.get(x as usize, y as usize) != dark {
-            return (n, x, y, false);
-        }
-        n += 1;
-        x += d.0;
-        y += d.1;
-    }
+    let (n, stopped) = m.run_len(x, y, d, dark, limit);
+    (n, x + d.0 * n as i32, y + d.1 * n as i32, stopped)
 }
 
 struct Line {

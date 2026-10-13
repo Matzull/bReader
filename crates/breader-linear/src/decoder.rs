@@ -57,6 +57,10 @@ pub(crate) struct LineOptions {
     pub invert: bool,
     /// Record start and stop patterns of PDF417 for its reader.
     pub marks: bool,
+    /// Only one edge variant is tried per line, so the "start pattern seen"
+    /// result of the decoders is never used and decoders may skip shapes
+    /// that cannot decode.
+    pub single_variant: bool,
 }
 
 impl LineOptions {
@@ -97,6 +101,7 @@ impl From<&ScanOptions> for LineOptions {
             normal: true,
             invert: o.try_invert.unwrap_or(true),
             marks: o.symbologies.contains(Symbology::Pdf417),
+            single_variant: o.effort == breader_core::Effort::Fast,
         }
     }
 }

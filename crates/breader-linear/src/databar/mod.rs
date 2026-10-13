@@ -48,7 +48,18 @@ impl LinearDecoder for DataBarDecoder {
         // that the edges do not show: window -1.
         let mut j: isize = if runs.is_bar(0) { 0 } else { -1 };
         while (omni || limited) && j + ROW_RUNS as isize <= n + 1 {
-            let (maybe_omni, maybe_limited) = screen(runs.widths(), j);
+            let (mut maybe_omni, mut maybe_limited) = screen(runs.widths(), j);
+            if j >= 0 && j as usize + ROW_RUNS <= runs.len() {
+                // Whole windows: the piece test of the decoders on positions
+                // alone drops nearly every window of a busy line.
+                let at = j as usize;
+                maybe_omni = maybe_omni && omni && omni::pieces_plausible(runs, at);
+                // With a single edge variant (Fast) nothing reads whether a
+                // shape looked like a symbol, so windows without finders skip.
+                maybe_omni =
+                    maybe_omni && (!opts.single_variant || omni::finders_plausible(runs, at));
+                maybe_limited = maybe_limited && limited && limited::pieces_plausible(runs, at);
+            }
             if (omni && maybe_omni || limited && maybe_limited)
                 && let Some(row) = Row::at(runs, j)
             {
@@ -79,6 +90,29 @@ fn screen(w: &[f32], j: isize) -> (bool, bool) {
     let omni = narrow(w[12]) && narrow(w[13]) && narrow(w[30]) && narrow(w[31]);
     let limited = w[15..29].iter().all(|&v| (0.4 * g..=4.0 * g).contains(&v));
     (omni, limited)
+}
+
+/// The checks that open `omni::decode` and `limited::decode`, on a whole
+/// window of runs at `j` without building its [`Row`]: the module from the
+/// span, and the light areas before and after as `Row::at` measures them.
+fn opening_ok(runs: &Runs, j: usize, span_modules: f32, quiet: (f32, f32)) -> bool {
+    let last = j + ROW_RUNS - 1;
+    let span = (runs.end(last) - runs.start(j)).abs();
+    let module = span / span_modules;
+    if module < crate::common::MIN_MODULE {
+        return false;
+    }
+    let before = if j == 0 {
+        f32::INFINITY
+    } else {
+        quiet_before_open(runs, j, 0.0)
+    };
+    let after = if last + 1 == runs.len() {
+        f32::INFINITY
+    } else {
+        quiet_after_open(runs, last, 0.0)
+    };
+    !(before < quiet.0 * module || after < quiet.1 * module)
 }
 
 /// The 45 runs of a symbol of 46 elements, without the guard space that
