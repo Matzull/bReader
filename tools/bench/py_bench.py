@@ -206,8 +206,26 @@ class BreaderEngine:
         for s in self.reader.scan(gray):
             if s.symbology in BR_FORMATS:
                 fmt = BR_FORMATS[s.symbology]
+                # Same alternative forms as the Rust bench (engine.rs): the charset-decoded text, a Shift JIS
+                # reading of undeclared non-UTF-8 bytes, and the Code 39 Full ASCII expansion.
+                alts = []
+                if s.text is not None:
+                    alts.append(s.text.encode("utf-8"))
+                try:
+                    s.data.decode("utf-8")
+                except UnicodeDecodeError:
+                    try:
+                        alts.append(s.data.decode("shift_jis").encode("utf-8"))
+                    except UnicodeDecodeError:
+                        pass
                 full = code39_full_ascii(s.data) if fmt == "Code 39" else None
-                out.append((fmt, s.data, [full] if full not in (None, s.data) else [], list(s.corners)))
+                if full is not None:
+                    try:
+                        alts.append(full.decode("utf-8").encode("utf-8"))
+                    except UnicodeDecodeError:
+                        pass
+                alts = [a for a in alts if a != s.data]
+                out.append((fmt, s.data, alts, list(s.corners)))
         return out
 
 
@@ -278,6 +296,34 @@ def strip_aztec_structured_append(text):
     if sep and ident and len(tail) >= 2 and "A" <= tail[0] <= "Z" and "A" <= tail[1] <= "Z" and tail[0] <= tail[1]:
         return tail[2:]
     return text
+
+
+def to_luma8(pil):
+    """Grayscale like the Rust bench (`image` crate `into_luma8`): Rec. 709 weights 2126/7152/722 with
+    truncating integer division, not PIL's Rec. 601 `convert("L")`; the two differ by up to a few levels,
+    enough to flip marginal reads."""
+    if pil.mode == "L":
+        return np.asarray(pil)
+    if pil.mode == "LA":
+        return np.ascontiguousarray(np.asarray(pil)[..., 0])
+    rgb = np.asarray(pil.convert("RGB"), dtype=np.uint32)
+    luma = (rgb[..., 0] * 2126 + rgb[..., 1] * 7152 + rgb[..., 2] * 722) // 10000
+    return luma.astype(np.uint8)
+
+
+def undo_latin1_utf8(data):
+    """Labels only (like matching.rs::canonical_label): UTF-8 that was read as Latin-1 and encoded again
+    is repaired; anything else is returned unchanged."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    if text.isascii() or any(ord(c) > 0xFF for c in text):
+        return data
+    try:
+        return bytes(ord(c) for c in text).decode("utf-8").encode("utf-8")
+    except UnicodeDecodeError:
+        return data
 
 
 def canonical(sym, data):
@@ -359,7 +405,7 @@ def score(found, expected, stats, ignore=()):
     unexpected read on an `ignore` polygon (undecodable symbol of unknown value) is not a false positive."""
     found_keys = [canonical(f[0], f[1]) for f in found]
     alt_keys = [[canonical(f[0], a) for a in f[2]] for f in found]
-    exp_keys = [canonical(s, d) if s else None for s, d in expected]
+    exp_keys = [canonical(s, undo_latin1_utf8(d)) if s else None for s, d in expected]
     used = [False] * len(found)
     for (sym, _), key in zip(expected, exp_keys):
         if sym is None:
@@ -797,7 +843,7 @@ def run_dataset(base, ann, engine, subset=1):
         try:
             pil = Image.open(paths[file])
             orientation = pil.getexif().get(274, 1)
-            gray = np.asarray(pil.convert("L"))
+            gray = to_luma8(pil)
         except Exception as e:
             print(f"{paths[file]}: {e}", file=sys.stderr)
             stats.errors += 1
