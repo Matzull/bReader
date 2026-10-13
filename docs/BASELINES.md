@@ -15,7 +15,95 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-13
+
+Measurement-only refresh on main at `c171fe4` (no reader change), on an idle AMD Ryzen 5 5500U (no other process; `uptime`, `free` and `pgrep` checked before each block), release builds, `RAYON_NUM_THREADS=4`, the library single-threaded, decode call only. This section supersedes the numbers of the older sections below (they stay as history, each marked); the next refresh replaces it.
+
+- **Gate.** `BENCH_SHOW_FP=1 tools/check-regression.sh --tier c2` passed with 0 false positives at every effort on every set (40.3 minutes in all). Stage times in seconds: synth seed 1 (Balanced) 5, synth seed 2024 (F / B / E) 8 / 11 / 32, challenging-images 3 / 5 / 10, skewed-datamatrix 6 / 12 / 18, UPS-Synthetic-Labels 8 / 14 / 30, pdf417-small-module-size 1 / 1 / 3, BarBeR full 297 / 553 / 1093, zxing-cpp samples 8 / 7 / 13, videos (tracker, fast, balanced) 281.
+- **Baselines.** The Dynamsoft video, skewed-datamatrix, UPS and pdf417-small-module-size baselines, synth seed 2024 (three efforts) and synth seed 1 (Balanced) were re-written with `--write-baseline` on the same build: byte-identical to the committed files (no read count moved up or down), so nothing was rewritten.
+- **Engines.** breader columns are the Rust `bench` (the committed baselines); zxing-cpp 3.1.1 and zbar 0.23 (pyzbar) come from `tools/bench/py_bench.py` at default options, with `breader-py` rebuilt from main. The Python breader gives different counts and false positives from the Rust bench on the same images (challenging-images Balanced 411 reads, 2 FP, against 411 reads, 0 FP in Rust; zxing-samples 662 reads, 19 FP, against 681 and 0; BarBeR subset 802, 0 FP, against 803, 0) (the cause was not investigated); it was not used for the breader columns. rxing was not re-run.
+
+### Read rate and false positives
+
+Reads / expected symbols, false positives (FP). breader F / B / E = Fast / Balanced / Exhaustive. Default options for zxing-cpp and zbar.
+
+| Dataset | breader F | breader B | breader E | zxing-cpp | zbar |
+|---|---|---|---|---|---|
+| challenging-images | 333 / 448, 0 FP | 411 / 448, 0 FP | 424 / 448, 0 FP | 388 / 448, 1 FP | 160 / 448, 5 FP |
+| zxing-cpp samples | 568 / 794, 0 FP | 681 / 794, 0 FP | 689 / 794, 0 FP | 716 / 794, 69 FP | 450 / 794, 74 FP |
+| BarBeR 1/8 subset | 688 / 1093, 0 FP | 803 / 1093, 0 FP | 828 / 1093, 0 FP | 765 / 1093, 15 FP | 713 / 1093, 29 FP |
+| BarBeR full | 5400 / 8585, 0 FP | 6358 / 8585, 0 FP | 6566 / 8585, 0 FP | 6123 / 8585, 91 FP | not run |
+| synth seed 1 | 426 / 487, 0 FP | 482 / 487, 0 FP | 483 / 487, 0 FP | 381 / 487, 11 FP (2026-10-13 earlier) | 201 / 487, 43 FP (same) |
+| synth seed 2024 (60 per class) | 1144 / 1311, 0 FP | 1286 / 1311, 0 FP | 1292 / 1311, 0 FP | not run | not run |
+| skewed-datamatrix | 724 / 1324, 0 FP | 1012 / 1324, 0 FP | 1022 / 1324, 0 FP | not run | not run |
+| UPS-Synthetic-Labels | 84 / 104, 0 FP | 98 / 104, 0 FP | 99 / 104, 0 FP | not run | not run |
+| pdf417-small-module-size | 3 / 22, 0 FP | 4 / 22, 0 FP | 7 / 22, 0 FP | not run | not run |
+
+(Synth seed 1 Fast and Exhaustive come from the latency runs below; the committed gate is Balanced only. The synth seed 1 zxing-cpp and zbar cells were not re-measured.) breader has 0 false positives on every set and effort. On the BarBeR full set, zxing-cpp has 91 (EAN-13 76, UPC-E 9, ...) and 5 scan errors.
+
+### Latency
+
+p50 / p95 in ms per image. breader: the median of 5 interleaved runs of the Rust `bench` (rounds over the nine dataset and effort pairs, so drift hits all alike; spread of the p50 across the 5 runs 0.2 ms or less, except challenging-images Balanced 0.8 ms and Exhaustive 1.4 ms and synth Exhaustive 0.3 ms). zxing-cpp and zbar: one run of `py_bench.py` (includes the Python call; zxing-cpp agrees with the earlier measurement within 6 %). The zxing-cpp samples and BarBeR full rows of breader are single runs, from the c2 gate.
+
+| Dataset | breader Fast | breader Balanced | breader Exhaustive | zxing-cpp | zbar |
+|---|---|---|---|---|---|
+| challenging-images | 5.43 / 36.8 | 20.24 / 130.5 | 51.78 / 362.7 | 22.2 / 322.7 | 46.3 / 583 |
+| BarBeR 1/8 subset | 6.04 / 24.9 | 22.39 / 103.9 | 58.54 / 277.6 | 33.0 / 192.3 | 65.9 / 394 |
+| synth seed 1 | 1.72 / 8.3 | 6.11 / 40.0 | 13.96 / 100.3 | 13.3 / 41 (earlier) | 16.4 / 88 (earlier) |
+| zxing-cpp samples (single run) | 0.87 / 4.1 | 4.09 / 23.8 | 8.45 / 50.9 | 1.39 / 8.0 | 1.87 / 12.2 |
+| BarBeR full (single run) | 6.29 / 25.8 | 23.43 / 110.5 | 59.42 / 287.3 | 32.7 / 198.3 | not run |
+
+Balanced is below zxing-cpp's p50 on the three photo sets and above it on the zxing-cpp samples (small, clean images, where zxing-cpp is fastest of the three). Against Phase D (2026-10-12) the Fast p50 is unchanged within 1 % on challenging-images (5.43 against 5.39), BarBeR subset (6.04 against 6.00) and synth (1.72 against 1.75); Balanced moved +3.5 % (20.24 against 19.55), +2.7 % (22.39 against 21.80) and +0.5 % (6.11 against 6.08).
+
+### Fast at 1080p (video-bench)
+
+`video-bench data/dynamsoft/video-based-testing --engines fast,balanced --filter 1080p`, 3 rounds, per-frame p50 in ms, median over the rounds (the method of [Phase D latency](#phase-d-latency-2026-10-12)). The target is 10 ms at Fast.
+
+| Video | Fast | Balanced |
+|---|---|---|
+| batch_EAN13 | 5.5 | 17.9 |
+| batch_code39 | **17.0** | 81.5 |
+| batch_dark_environment_1d | 5.5 | 14.0 |
+| batch_datamatrix | **11.4** | 63.2 |
+| batch_inverted_datamatrix | 9.5 | 49.6 |
+| batch_rotated_small_pdf417 | **11.5** | 50.4 |
+| damaged_qrcode | 9.7 | 21.2 |
+| reflective_surface_qrcode | 5.8 | 18.2 |
+| rotated_vertical_ITF | 5.6 | 15.4 |
+| wide_to_close_datamatrix | 4.3 | 16.4 |
+
+Three of ten videos are over 10 ms (`batch_code39`, `batch_rotated_small_pdf417`, `batch_datamatrix`), the same three as in Phase D, with `batch_code39` 1.1 ms higher than then (15.9 -> 17.0) and the other two about equal (11.3 -> 11.5, 10.9 -> 11.4); `damaged_qrcode` (9.7) and `batch_inverted_datamatrix` (9.5) are within 5 % of the target. Median video: 7.65 ms at Fast, 19.7 ms at Balanced. The tracker gate (`video-bench --check`, c2) passes with 0 false positives; all engines in total: tracker 256 / 277 reads (mean 48.8 ms), balanced 246 / 277, fast 102 / 277.
+
+### Per-class comparison at Balanced
+
+Reads, with false positives after the slash; the gap is breader minus zxing-cpp (reads). Only classes with a gap are listed; BarBeR full is the largest sample and ranks first.
+
+BarBeR full (8585 symbols):
+
+| Class | Expected | breader B | zxing-cpp | Gap |
+|---|---|---|---|---|
+| QR Code | 1329 | 1094 / 0 | 1153 / 0 | -59 |
+| Code 39 | 198 | 130 / 0 | 151 / 1 | -21 |
+| ITF | 72 | 48 / 0 | 59 / 1 | -11 |
+| PDF417 | 67 | 26 / 0 | 36 / 1 | -10 |
+| Data Matrix | 110 | 95 / 0 | 99 / 0 | -4 |
+| EAN-8 | 70 | 67 / 0 | 64 / 1 | +3 |
+| Aztec | 14 | 14 / 0 | 11 / 0 | +3 |
+| UPC-A | 327 | 272 / 0 | 259 / 0 | +13 |
+| Code 128 | 1428 | 597 / 0 | 450 / 2 | +147 |
+| EAN-13 | 4970 | 4015 / 0 | 3841 / 76 | +174 |
+
+BarBeR 1/8 subset: QR Code 128 against 132 (-4), Code 39 12 against 18 (-6), ITF 11 against 13 (-2); leads on EAN-13 524 / 0 against 496 / 13 (+28), Code 128 67 against 51 (+16), UPC-A 39 against 35 (+4), EAN-8 +1, PDF417 +1.
+
+zxing-cpp samples (794 symbols; here the gaps are largest, mostly in classes with few BarBeR labels): ITF 7 against 20 (-13; the default ITF length list, [D-008](decisions.md#d-008)), GS1 DataBar 10 against 17 (-7), Data Matrix 87 against 93 (-6), EAN-13 39 against 45 (-6), Codabar 12 against 15 (-3), PDF417 56 against 58 (-2), and -1 each for Code 128, Code 39, EAN-8 and Micro QR; leads on QR Code 128 against 125 (+3) and UPC-A 53 against 50 (+3); ties Aztec, GS1 DataBar Expanded and Limited, UPC-E, rMQR. zxing-cpp reads the stacked Expanded labels, which are unsupported, so its 64 Expanded false positives are not read errors.
+
+challenging-images (448): Code 128 41 against 28 (+13), QR Code 229 / 0 against 220 / 1 (+9), Data Matrix 45 against 44 (+1), UPC-A 71 against 70 (+1); ITF 3 against 4 (-1); ties EAN-13 (17), EAN-8, Code 39 (1) and PDF417 (3).
+
+Ranked gaps where breader trails zxing-cpp (reads, Balanced): QR Code on BarBeR (-59 of 1329, mostly Dubska and Muenster), Code 39 on BarBeR (-21), ITF on zxing-samples (-13), ITF on BarBeR (-11), PDF417 on BarBeR (-10), GS1 DataBar on zxing-samples (-7), Data Matrix (-6 on zxing-samples, -4 on BarBeR), EAN-13 on zxing-samples (-6), Code 39 on the BarBeR subset (-6). The v1 target "read rate >= zxing-cpp per class" is therefore still not met on real photos for QR Code, Code 39, ITF, PDF417 and Data Matrix; breader leads on Code 128, EAN-13, UPC-A and Aztec on BarBeR and on Code 128 and QR Code on challenging-images, with 0 false positives against zxing-cpp's 91 on BarBeR.
+
 ## Dynamsoft `challenging-images`
+
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
 
 392 expected symbols in v1 symbologies after GT cleanup (56 Data Matrix / PDF417 excluded). See [Ground-truth cleanup](#ground-truth-cleanup).
 
@@ -43,6 +131,8 @@ Totals before this cleanup (same engines, first measurement): 458 expected symbo
 
 ## Synthetic (`tools/synth`, seed 1, 20 images per class)
 
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
+
 228 expected symbols; the `negative` class has none.
 
 | Class | rxing | rqrr | zxing-cpp |
@@ -64,6 +154,8 @@ No engine produced false positives on the `negative` class. Most false positives
 
 ## breader (Balanced, commit after QR optimization, 2026-10-07)
 
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
+
 | Dataset | Read rate | QR | False positives | Latency p50 / p95 / max |
 |---|---|---|---|---|
 | challenging-images | 348/392 = 88.8 % | 225/234 | 0 | 22.8 / 217.7 / 305.5 |
@@ -72,6 +164,8 @@ No engine produced false positives on the `negative` class. Most false positives
 Timings on this machine vary up to 2x between runs; compare engines in the same session.
 
 ## breader after M7 kernels, QR polarity and 1D work (2026-10-07)
+
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
 
 | Dataset | Effort | Read rate | FP | Latency p50 / p95 / max |
 |---|---|---|---|---|
@@ -86,6 +180,8 @@ zxing-cpp in the same session on challenging-images: 341/392 = 87.0 %, 1 FP, 23.
 
 ## Linear reader fixes (2026-10-08)
 
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
+
 Four changes after the failure triage in [FAILURES.md](FAILURES.md): Code 39 quiet zone of 4 modules (symbols below 7 modules and without a check character need one more agreeing line), geometric grouping of equal-text hits in the aggregator, a weak Code 128 start character, and no change for ITF (default length list). Read counts, false positives 0 everywhere; latency not re-measured.
 
 | Set | Fast | Balanced | Exhaustive |
@@ -99,6 +195,8 @@ Four changes after the failure triage in [FAILURES.md](FAILURES.md): Code 39 qui
 Synthetic sets and skewed-datamatrix are unchanged.
 
 ## Edge relocation and border quiet zone (2026-10-08)
+
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
 
 Two linear-reader changes after the zxing-cpp samples triage ([FAILURES-ZXING-SAMPLES.md](FAILURES-ZXING-SAMPLES.md)): the half-level edge reference is blended with the extremes of a window scaled by the local run width, and a quiet zone that ends at the profile border is open for EAN/UPC, Code 128 and Code 39 (not ITF). Read counts, 0 false positives everywhere:
 
@@ -125,6 +223,8 @@ Each cell is before -> after edge relocation -> after both changes (video: befor
 
 ## Data Matrix (2026-10-08)
 
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
+
 Release build, same machine. Balanced unless noted; false positives 0 everywhere. zxing-cpp 3.1.1 with default options.
 
 | Set | Expected | breader Fast | breader Balanced | breader Exhaustive | zxing-cpp |
@@ -144,6 +244,8 @@ Ground truth: `skewed-datamatrix` leaves some clearly visible symbols unlabeled 
 Misses on challenging-images (6 of 50): two cans whose symbols sit inside a dark ring that merges with them (`datamatrix-2`), two dot-peened symbols on rough metal (`datamatrix-3`), one blurred 14x14 with clock tracks that do not alternate cleanly (`healthcare-2`), and a symbol of about 2.7 px modules (`tiny-barcodes-4`).
 
 ## zxing-cpp samples (2026-10-08)
+
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
 
 The `test/samples` images and expected-result files of zxing-cpp, tag `v3.1.1`, fetched by `tools/fetch-datasets.sh zxing-samples` (shallow sparse checkout into `data/zxing-samples`). Only the images and the expected values are used, as test data. The binary `zxing-samples-gt` (`tools/bench/src/bin/zxing_samples_gt.rs`) writes an `annotations.json` into each sample directory:
 
@@ -196,7 +298,7 @@ Where breader reads less than zxing-cpp:
 
 ## BarBeR (2026-10-11)
 
-First measurement on [BarBeR](datasets.md#barber): 8748 real photos of 12 source datasets, 8585 supported expected symbols (227 more labels are postal codes, IATA 2 of 5 and EAN-2, excluded; about 1000 regions are undecodable or of unknown value and are not expected reads). Internal use only (no license). Loader rules, ground-truth findings and overrides: [datasets](datasets.md#barber); the gate: [testing](testing.md#the-barber-gate). Measured on the tree with the Aztec, Codabar, Micro QR, rMQR and DataBar readers (none of the last four has a BarBeR label). Release build, zxing-cpp 3.1.1 Python with default options, rxing with `--features baselines` (`TryHarder`, multi). Read count / false positives; the machine was shared with other jobs, so latency is indicative only.
+First measurement on [BarBeR](datasets.md#barber): 8748 real photos of 12 source datasets, 8585 supported expected symbols (227 more labels are postal codes, IATA 2 of 5 and EAN-2, excluded; about 1000 regions are undecodable or of unknown value and are not expected reads). Internal use only (no license). Loader rules, ground-truth findings and overrides: [datasets](datasets.md#barber); the gate: [testing](testing.md#the-barber-gate). Measured on the tree with the Aztec, Codabar, Micro QR, rMQR and DataBar readers (none of the last four has a BarBeR label). Release build, zxing-cpp 3.1.1 Python with default options, rxing with `--features baselines` (`TryHarder`, multi). Read count / false positives. The tables below are refreshed on 2026-10-13 (breader and zxing-cpp; see [Status 2026-10-13](#status-2026-10-13)); the prose of the triage is from 2026-10-11.
 
 | Symbology | Expected | breader Fast | breader Balanced | breader Exhaustive | rxing | zxing-cpp |
 |---|---|---|---|---|---|---|
@@ -204,34 +306,34 @@ First measurement on [BarBeR](datasets.md#barber): 8748 real photos of 12 source
 | UPC-A | 327 | 227 / 0 | 272 / 0 | 280 / 0 | 237 / 14 | 259 / 0 |
 | EAN-8 | 70 | 63 / 0 | 67 / 0 | 69 / 0 | 60 / 126 | 64 / 1 |
 | Code 128 | 1428 | 425 / 0 | 597 / 0 | 671 / 0 | 431 / 6 | 450 / 2 |
-| Code 39 | 198 | 71 / 0 | 122 / 0 | 133 / 0 | 114 / 3 | 151 / 1 |
-| ITF | 72 | 32 / 0 | 34 / 0 | 38 / 0 | 50 / 6 | 58 / 2 |
-| QR Code | 1329 | 858 / 0 | 945 / 0 | 949 / 0 | 1030 / 3 | 1150 / 3 |
+| Code 39 | 198 | 73 / 0 | 130 / 0 | 138 / 0 | 114 / 3 | 151 / 1 |
+| ITF | 72 | 46 / 0 | 48 / 0 | 52 / 0 | 50 / 6 | 59 / 1 |
+| QR Code | 1329 | 975 / 0 | 1094 / 0 | 1101 / 0 | 1030 / 3 | 1153 / 0 |
 | Data Matrix | 110 | 93 / 0 | 95 / 0 | 96 / 0 | 67 / 0 | 99 / 0 |
 | PDF417 | 67 | 25 / 0 | 26 / 0 | 24 / 0 | 0 / 0 | 36 / 1 |
 | Aztec | 14 | 11 / 0 | 14 / 0 | 14 / 0 | 0 / 0 | 11 / 0 |
-| **Total** | 8585 | 5267 / 0 (61.4 %) | 6187 / 0 (72.1 %) | 6395 / 0 (74.5 %) | 5476 / 828 (63.8 %) | 6119 / 95 (71.3 %) |
+| **Total** | 8585 | 5400 / 0 (62.9 %) | 6358 / 0 (74.1 %) | 6566 / 0 (76.5 %) | 5476 / 828 (63.8 %) | 6123 / 91 (71.3 %) |
 
-Latency per image, p50 / p95 ms: breader Fast 6.1 / 26, Balanced 23.5 / 110, Exhaustive 58 / 278; zxing-cpp 34 / 209; rxing 157 / 1033 (it is run on a worker thread with a 30 s timeout and took 4.6 hours for the set). Scan errors: breader 0, rxing 0, zxing-cpp 5 (images it fails on). zxing-cpp also reports 9 UPC-E reads for labels that are never UPC-E (counted in its false positives; no label is UPC-E). **The rxing column predates the last label overrides** (it was run with 8585 expected symbols but before the overrides for `Special_0329`, `8886467105357` and `Special_0177` and before the Aztec and newline rules; it has no Aztec reader in any case); breader and zxing-cpp are on the final labels.
+Latency per image, p50 / p95 ms (2026-10-13, idle machine, single runs of the c2 gate and of `py_bench.py`): breader Fast 6.3 / 25.8, Balanced 23.4 / 110.5, Exhaustive 59.4 / 287.3; zxing-cpp 32.7 / 198.3; rxing 157 / 1033 (it is run on a worker thread with a 30 s timeout and took 4.6 hours for the set; measured on the shared machine of 2026-10-11, not re-run). Scan errors: breader 0, rxing 0, zxing-cpp 5 (images it fails on). zxing-cpp also reports 9 UPC-E reads for labels that are never UPC-E (counted in its false positives; no label is UPC-E). **The breader and zxing-cpp columns were re-measured on 2026-10-13** (breader at `c171fe4`: the ITF, QR and Code 39 rows rose since 2026-10-11, e.g. Balanced 6187 -> 6358 reads, QR Code 945 -> 1094, ITF 34 -> 48); **the rxing column predates the last label overrides** (it was run with 8585 expected symbols but before the overrides for `Special_0329`, `8886467105357` and `Special_0177` and before the Aztec and newline rules; it has no Aztec reader in any case) and was not re-run.
 
 Read rate (all symbologies) per source dataset, read rate / false positives, Balanced latency p50 / p95 ms:
 
 | Source | Images | Expected | Fast | Balanced | Exhaustive | rxing | zxing-cpp | Balanced ms |
 |---|---|---|---|---|---|---|---|---|
-| Artelab | 430 | 436 | 50.9 % / 0 | 68.3 % / 0 | 72.9 % / 0 | 48.4 % / 20 | 53.0 % / 6 | 21 / 107 |
-| Artelab Extended | 155 | 162 | 63.6 % / 0 | 75.3 % / 0 | 76.5 % / 0 | 64.2 % / 8 | 63.6 % / 0 | 7 / 16 |
-| Bodnar | 98 | 94 | 88.3 % / 0 | 94.7 % / 0 | 94.7 % / 0 | 89.4 % / 1 | 91.5 % / 0 | 33 / 74 |
-| Deal Kaist | 3308 | 2895 | 69.0 % / 0 | 83.5 % / 0 | 85.5 % / 0 | 72.1 % / 385 | 78.2 % / 38 | 19 / 108 |
-| Dubska | 810 | 802 | 56.1 % / 0 | 61.1 % / 0 | 61.3 % / 0 | 77.4 % / 77 | 86.9 % / 0 | 20 / 53 |
-| InventBar | 527 | 536 | 60.8 % / 0 | 76.9 % / 0 | 81.0 % / 0 | 69.6 % / 19 | 82.6 % / 0 | 7 / 13 |
-| Muenster | 1055 | 1064 | 79.3 % / 0 | 80.5 % / 0 | 82.0 % / 0 | 79.0 % / 95 | 88.0 % / 27 | 44 / 100 |
-| Open Food Facts | 185 | 149 | 69.1 % / 0 | 76.5 % / 0 | 80.5 % / 0 | 65.8 % / 29 | 73.8 % / 3 | 25 / 133 |
-| ParcelBar | 844 | 1136 | 21.0 % / 0 | 32.2 % / 0 | 37.3 % / 0 | 21.3 % / 59 | 20.4 % / 2 | 20 / 28 |
-| SKUU DSP Lab | 325 | 345 | 56.5 % / 0 | 68.4 % / 0 | 71.3 % / 0 | 56.5 % / 28 | 62.9 % / 9 | 34 / 50 |
-| Szentandrasi-Dubska QR | 90 | 227 | 80.2 % / 0 | 83.7 % / 0 | 84.6 % / 0 | 81.5 % / 6 | 85.0 % / 3 | 86 / 131 |
-| ZVZ-real | 921 | 739 | 70.8 % / 0 | 80.5 % / 0 | 82.3 % / 0 | 58.9 % / 101 | 82.3 % / 7 | 52 / 196 |
+| Artelab | 430 | 436 | 50.9 % / 0 | 68.3 % / 0 | 72.9 % / 0 | 48.4 % / 20 | 53.0 % / 6 | 21.9 / 63 |
+| Artelab Extended | 155 | 162 | 63.6 % / 0 | 75.3 % / 0 | 76.5 % / 0 | 64.2 % / 8 | 63.6 % / 0 | 7.0 / 16 |
+| Bodnar | 98 | 94 | 88.3 % / 0 | 94.7 % / 0 | 94.7 % / 0 | 89.4 % / 1 | 91.5 % / 0 | 18.0 / 32 |
+| Deal Kaist | 3308 | 2895 | 69.1 % / 0 | 83.6 % / 0 | 85.6 % / 0 | 72.1 % / 385 | 78.2 % / 38 | 19.4 / 108 |
+| Dubska | 810 | 802 | 70.0 % / 0 | 78.6 % / 0 | 79.1 % / 0 | 77.4 % / 77 | 86.9 % / 0 | 20.0 / 53 |
+| InventBar | 527 | 536 | 61.2 % / 0 | 78.4 % / 0 | 81.9 % / 0 | 69.6 % / 19 | 82.6 % / 0 | 7.5 / 14 |
+| Muenster | 1055 | 1064 | 79.4 % / 0 | 80.6 % / 0 | 82.0 % / 0 | 79.0 % / 95 | 88.0 % / 27 | 45.1 / 106 |
+| Open Food Facts | 185 | 149 | 69.1 % / 0 | 76.5 % / 0 | 80.5 % / 0 | 65.8 % / 29 | 73.8 % / 3 | 26.0 / 137 |
+| ParcelBar | 844 | 1136 | 21.0 % / 0 | 32.2 % / 0 | 37.3 % / 0 | 21.3 % / 59 | 20.4 % / 2 | 21.1 / 29 |
+| SKUU DSP Lab | 325 | 345 | 56.5 % / 0 | 68.7 % / 0 | 71.6 % / 0 | 56.5 % / 28 | 62.9 % / 9 | 34.7 / 54 |
+| Szentandrasi-Dubska QR | 90 | 227 | 82.4 % / 0 | 86.3 % / 0 | 87.7 % / 0 | 81.5 % / 6 | 86.3 % / 0 | 88.6 / 145 |
+| ZVZ-real | 921 | 739 | 72.4 % / 0 | 82.1 % / 0 | 83.9 % / 0 | 58.9 % / 101 | 82.4 % / 6 | 54.2 / 202 |
 
-(Dubska counts 23 images shared with Szentandrasi-Dubska QR, which therefore has 90 instead of 115.) breader trails zxing-cpp on QR (71 % against 87 %, mostly Dubska: small and blurred codes in 2560 px photos), ITF, Code 39 and PDF417, ties it on Aztec at Fast and leads at Balanced and Exhaustive, and is ahead on Code 128, UPC-A and EAN-13 from Balanced on. ParcelBar (Code 128 on postal parcels) is hard for all engines. At Balanced breader decodes a value on about 300 regions the dataset calls undecodable (masked reads, not false positives).
+(Dubska counts 23 images shared with Szentandrasi-Dubska QR, which therefore has 90 instead of 115. The rxing column is from 2026-10-11 and was not re-run.) breader trails zxing-cpp on QR Code (1094 against 1153 at Balanced; the gap is now concentrated in Dubska, 78.6 % against 86.9 %, and Muenster, 80.6 % against 88.0 %), Code 39, ITF and PDF417, leads on Aztec, and is ahead on Code 128, EAN-13, UPC-A and EAN-8 from Balanced on (at Fast it trails zxing-cpp on EAN-13, UPC-A and Code 128). By source, at Balanced it leads zxing-cpp in 7 of 12 sources, ties Szentandrasi-Dubska QR (86.3 %) and trails in Dubska, InventBar, Muenster and ZVZ-real (by 0.3 points there). ParcelBar (Code 128 on postal parcels) is hard for all engines. At Balanced breader decodes a value on about 300 regions the dataset calls undecodable (masked reads, not false positives).
 
 ### False-positive triage (breader)
 
@@ -414,6 +516,8 @@ First measurement of the DataBar decoders ([design](symbologies/linear.md#gs1-da
 
 ## Phase D latency (2026-10-12)
 
+*Superseded by [Status 2026-10-13](#status-2026-10-13).*
+
 What the Phase D readers (PDF417, Aztec, Codabar, Micro QR, rMQR, GS1 DataBar) and the UPC-E guard fix cost, against the [v1 targets](#v1-targets-confirmed-2026-10-07). Machine: AMD Ryzen 5 5500U (6 cores / 12 threads), idle (`uptime` and `ps` checked before each block: no cargo, rustc or bench process), release builds, the library single-threaded, decode call only.
 
 Method:
@@ -491,14 +595,16 @@ Quirks normalised, so that the comparison is on values and not on spelling (all 
 - Codabar comes with its start/stop characters (A to D): dropped from both sides, as for the other engines.
 - DataBar has no AIs: a bare 14-digit DataBar result gets the label's `01` prefix; parentheses of expanded output are dropped on both sides.
 
-Subsets only (not the full BarBeR set), the same day and machine as the zxing-cpp column (the machine was shared with other gates, so latency is indicative; the zxing-cpp numbers agree with Phase D above within 4 %). Reads / expected, false positives, latency p50 / p95 ms. breader Balanced is the committed baseline (`tools/bench/baselines/*-balanced.json`; latency from Phase D where one exists):
+Subsets only (not the full BarBeR set). Reads / expected, false positives, latency p50 / p95 ms. breader Balanced is the committed baseline (`tools/bench/baselines/*-balanced.json`):
 
 | Set | breader Balanced | zxing-cpp | zbar |
 |---|---|---|---|
-| challenging-images | 408 / 448, 0 FP, 19.6 / 126 | 388 / 448, 1 FP, 23.5 / 335 | 160 / 448, 5 FP, 47.4 / 595 |
-| zxing-samples | 676 / 794, 0 FP, not measured | 716 / 794, 69 FP, 1.5 / 8.3 | 450 / 794, 74 FP, 2.0 / 12.1 |
-| BarBeR 1/8 subset | 800 / 1093, 0 FP, 21.8 / 100 | 765 / 1093, 15 FP, 35.2 / 205 | 713 / 1093, 29 FP, 69.4 / 423 |
-| synth seed 1 | 482 / 487, 0 FP, 6.1 / 37 | 381 / 487, 11 FP, 13.3 / 41 | 201 / 487, 43 FP, 16.4 / 88 |
+| challenging-images | 411 / 448, 0 FP, 20.2 / 131 | 388 / 448, 1 FP, 22.2 / 323 | 160 / 448, 5 FP, 46.3 / 583 |
+| zxing-samples | 681 / 794, 0 FP, 4.1 / 23.8 | 716 / 794, 69 FP, 1.4 / 8.0 | 450 / 794, 74 FP, 1.9 / 12.2 |
+| BarBeR 1/8 subset | 803 / 1093, 0 FP, 22.4 / 104 | 765 / 1093, 15 FP, 33.0 / 192 | 713 / 1093, 29 FP, 65.9 / 394 |
+| synth seed 1 | 482 / 487, 0 FP, 6.1 / 40.0 | 381 / 487, 11 FP, 13.3 / 41 | 201 / 487, 43 FP, 16.4 / 88 |
+
+(Re-measured 2026-10-13 on an idle machine, see [Status 2026-10-13](#status-2026-10-13): breader from the Rust bench, zxing-cpp and zbar from `py_bench.py`; the synth seed 1 zxing-cpp and zbar cells are from the first run of this section, on the shared machine.)
 
 zbar is far behind on the Dynamsoft photos (QR 41 of 234, Code 128 30 of 60; UPC-A 68 of 74 and EAN-13 16 of 18 are close to the others) and on the synthetic sets (it has no Aztec, Data Matrix or Micro QR). On the BarBeR subset it is closer (65 % against 70 % for zxing-cpp and 73 % for breader) and does well on linear codes and the large-QR sources; its latency is the highest of the three on every set but zxing-samples.
 

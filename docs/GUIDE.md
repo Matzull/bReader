@@ -53,18 +53,23 @@ A scan is a list of passes. A pass is an image variant (original or a preprocess
 | `Balanced` | original and first preprocessor, first two binarizers, both polarities | Default |
 | `Exhaustive` | every preprocessor and binarizer, both polarities | Hard stills |
 
-Measured with the default pipeline on an AMD Ryzen 5 5500U (release build, single thread, one image at a time, decode call only), see [BASELINES.md](BASELINES.md). Fast and Balanced rows are re-measured with all Phase D readers on (2026-10-12, [Phase D latency](BASELINES.md#phase-d-latency-2026-10-12)); Exhaustive was not re-measured:
+Measured with the default pipeline on an AMD Ryzen 5 5500U (release build, single thread, one image at a time, decode call only), on an idle machine, 2026-10-13, see [Status 2026-10-13](BASELINES.md#status-2026-10-13). Latency is the median of 5 interleaved runs; the read rate is reads over expected symbols, and false positives are 0 everywhere:
 
 | Dataset | Effort | Read rate | False positives | Latency p50 / p95 (ms) |
 |---|---|---|---|---|
-| challenging-images (448 symbols) | Fast | 73.7 % | 0 | 5.4 / 36.3 |
-| challenging-images | Balanced | 91.1 % | 0 | 19.6 / 125.9 |
-| challenging-images | Exhaustive | 87.8 % (older run) | 0 | 22.2 / 246.0 (older run) |
-| synth (487 symbols) | Fast | 87.5 % | 0 | 1.75 / 8.2 |
-| synth | Balanced | 99.0 % | 0 | 6.1 / 37.0 |
-| synth | Exhaustive | 98.2 % (older run) | 0 | 8.1 / 59.9 (older run) |
+| challenging-images (448 symbols) | Fast | 74.3 % | 0 | 5.4 / 36.8 |
+| challenging-images | Balanced | 91.7 % | 0 | 20.2 / 130.5 |
+| challenging-images | Exhaustive | 94.6 % | 0 | 51.8 / 362.7 |
+| BarBeR 1/8 subset (1093 symbols) | Fast | 62.9 % | 0 | 6.0 / 24.9 |
+| BarBeR 1/8 subset | Balanced | 73.5 % | 0 | 22.4 / 103.9 |
+| BarBeR 1/8 subset | Exhaustive | 75.8 % | 0 | 58.5 / 277.6 |
+| synth (487 symbols) | Fast | 87.5 % | 0 | 1.7 / 8.3 |
+| synth | Balanced | 99.0 % | 0 | 6.1 / 40.0 |
+| synth | Exhaustive | 99.2 % | 0 | 14.0 / 100.3 |
 
-`Exhaustive` is not always better than `Balanced` on real photos: the extra passes cost time and sometimes read different symbols, so measure on your own images.
+For comparison, zxing-cpp at default options reads 86.6 % of challenging-images (p50 22.2 ms) and 70.0 % of the BarBeR subset (p50 33.0 ms); Balanced is faster on both and reads more.
+
+`Exhaustive` reads more than `Balanced` on every set above, at 2.5 to 3 times the median latency (and a long tail: p95 up to 360 ms on 3 MP photos). Measure on your own images.
 
 ## Escalation
 
