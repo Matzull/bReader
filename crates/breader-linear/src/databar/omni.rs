@@ -17,6 +17,7 @@ use crate::common::MIN_MODULE;
 use crate::decoder::LineHit;
 
 use super::Row;
+use crate::runs::Runs;
 
 /// Modules between the first and the last bar edge.
 const SPAN_MODULES: f32 = 95.0;
@@ -126,6 +127,52 @@ fn pair_matches(cs: u32, pair: u32) -> bool {
 
 fn finder_of(widths: &[u8; 5]) -> Option<u32> {
     FINDERS.iter().position(|f| f == widths).map(|p| p as u32)
+}
+
+/// Looser than the piece test of `decode` by this share of the expected
+/// width, so that float rounding between positions and summed widths cannot
+/// change a verdict.
+const SCREEN_SLACK: f32 = PIECE_SLACK + 0.02;
+
+/// Necessary condition of `decode` on the window of runs starting at `j`
+/// (all 45 runs inside the line): the pieces of the symbol measure their
+/// module counts. Evaluated on run positions, without building the row.
+pub(super) fn pieces_plausible(runs: &Runs, j: usize) -> bool {
+    if !super::opening_ok(runs, j, SPAN_MODULES, (QUIET, QUIET)) {
+        return false;
+    }
+    let at = |k: usize| runs.start(j + k);
+    let span = (runs.end(j + super::ROW_RUNS - 1) - at(0)).abs();
+    let module = span / SPAN_MODULES;
+    SEGMENTS[1..7].iter().all(|s| {
+        let sum = (at(s.at + s.len) - at(s.at)).abs();
+        let expected = f32::from(s.modules) * module;
+        (sum - expected).abs() <= SCREEN_SLACK * expected
+    })
+}
+
+/// Necessary condition for `decode` to find both finder patterns on the
+/// window at `j` (all 45 runs inside the line): five elements scaled to 15
+/// modules lie near one of the nine patterns. The tolerance covers the
+/// rounding limit of `quantize` (0.5 module), the print gain it removes
+/// (up to 0.3 module per element) and the rescaling that follows.
+pub(super) fn finders_plausible(runs: &Runs, j: usize) -> bool {
+    let w = runs.widths();
+    let fits = |e: [f32; 5]| {
+        let sum: f32 = e.iter().sum();
+        if !(sum.is_finite() && sum > 0.0) {
+            return false;
+        }
+        let scale = 15.0 / sum;
+        FINDERS.iter().any(|f| {
+            e.iter()
+                .zip(f)
+                .all(|(&x, &m)| (x * scale - f32::from(m)).abs() <= 1.0 + 0.12 * f32::from(m))
+        })
+    };
+    let left: [f32; 5] = std::array::from_fn(|i| w[j + 9 + i]);
+    let right: [f32; 5] = std::array::from_fn(|i| w[j + 34 - i]);
+    fits(left) && fits(right)
 }
 
 /// Reads an Omnidirectional symbol.
@@ -290,6 +337,31 @@ mod tests {
             };
             let got = read(&modules, render);
             assert!(got.contains(&element(body)), "{i} {body} at {px}: {got:?}");
+        }
+    }
+
+    #[test]
+    fn the_fast_screens_keep_every_symbol() {
+        let fast = line_options(|o| o.effort = breader_core::Effort::Fast);
+        let mut rng = Rng(0xfa57_5cee);
+        for i in 0..250 {
+            let body = rng.digits(13);
+            let modules = databar_omni_modules(&body);
+            let render = Render {
+                gain: rng.unit() * 0.25,
+                sigma: 0.5 + rng.unit() * 0.3,
+                ..Render::px(1.8 + rng.unit() * 3.0)
+            };
+            let profile = render.profile(&modules);
+            let turned = render.profile(&modules.iter().rev().copied().collect::<Vec<_>>());
+            for (name, p) in [("plain", profile), ("turned", turned)] {
+                let got: Vec<Vec<u8>> = decode_all(&DataBarDecoder, &p, &fast)
+                    .into_iter()
+                    .filter(|h| h.symbology == Symbology::DataBar)
+                    .map(|h| h.text)
+                    .collect();
+                assert!(got.contains(&element(&body)), "{i} {name} {body}: {got:?}");
+            }
         }
     }
 

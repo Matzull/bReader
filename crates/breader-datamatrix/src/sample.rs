@@ -574,12 +574,34 @@ fn l_corner(solid: &[f32; 4], small: &[f32; 4], solid_min: f32) -> Option<usize>
     best.map(|b| b.0)
 }
 
+/// `solid` and `small` of the four sides as `side_solidity` finds them for
+/// the precheck, probing the sides lazily: an L corner has one side along u
+/// and one along v that are solid, so when both sides along u (0 and 2) are
+/// not, no corner can pass and the other two are not probed. `None` then, as
+/// `l_corner` would answer.
+fn precheck_sides(plane: Plane<'_>, quad: &[Point; 4]) -> Option<([f32; 4], [f32; 4])> {
+    let h = Perspective::square_to_quad(*quad)?;
+    let len = [0, 1, 2, 3].map(|k| dist(quad[k], quad[(k + 1) % 4]));
+    let perp_u = (len[1] + len[3]) / 2.0;
+    let perp_v = (len[0] + len[2]) / 2.0;
+    let mut solid = [0.0f32; 4];
+    let mut small = [0.0f32; 4];
+    for k in [0, 2, 1, 3] {
+        if k == 1 && solid[0].max(solid[2]) < PRECHECK_SOLID_MIN {
+            return None;
+        }
+        let perp = if k % 2 == 0 { perp_u } else { perp_v };
+        (solid[k], small[k]) = solid_any(plane, &h, k, len[k], perp, PRECHECK_SOLID_MIN, true);
+    }
+    Some((solid, small))
+}
+
 /// Cheap test on the raw quad: a module size estimate and two solid sides
 /// meeting at a corner. Returns the module size.
 pub(crate) fn precheck(plane: Plane<'_>, quad: &[Point; 4], sc: &mut SampleScratch) -> Option<f32> {
     // The solid L test is the cheapest and rejects most quads; it does not
     // depend on the module size.
-    let Sides { solid, small, .. } = side_solidity(plane, quad, 1.0, PRECHECK_SOLID_MIN, true)?;
+    let (solid, small) = precheck_sides(plane, quad)?;
     l_corner(&solid, &small, PRECHECK_SOLID_MIN)?;
     let m = module_estimate(plane, quad, sc)?;
     let sides = [0, 1, 2, 3].map(|k| dist(quad[k], quad[(k + 1) % 4]));

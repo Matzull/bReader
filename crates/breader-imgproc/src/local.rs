@@ -71,19 +71,17 @@ impl LocalBinarizer {
             out.resize(w, h);
         }
 
-        self.tile_thresholds(src, block, tw, th, buffers);
-        summed_area(&buffers.thresholds, tw, th, &mut buffers.sat);
-        let sat_stride = tw + 1;
-
-        let grid = Grid {
-            sat: &buffers.sat,
-            stride: sat_stride,
-            tw,
-            th,
-        };
         #[cfg(feature = "rayon")]
         if crate::is_large(w, h) {
             use rayon::prelude::*;
+            self.tile_thresholds(src, block, tw, th, buffers);
+            summed_area(&buffers.thresholds, tw, th, &mut buffers.sat);
+            let grid = Grid {
+                sat: &buffers.sat,
+                stride: tw + 1,
+                tw,
+                th,
+            };
             let (words, wpr) = out.words_mut();
             words
                 .par_chunks_mut(wpr.max(1) * block)
@@ -96,12 +94,78 @@ impl LocalBinarizer {
                 );
             return;
         }
-        let pixel_thr = &mut buffers.pixel_thr;
+        self.binarize_rows(src, out, buffers);
+    }
+
+    /// Single-threaded binarization that walks the image once: the thresholds
+    /// of tile row `ty` need the statistics of the tile rows up to `window`
+    /// below it, so each tile row is packed as soon as those are known and
+    /// its pixels are still in cache. The result equals the two-pass one.
+    fn binarize_rows(&self, src: ImageView<'_>, out: &mut BitMatrix, buffers: &mut Buffers) {
+        let (w, h) = (src.width(), src.height());
+        let block = self.block.max(1);
+        let (tw, th) = (w.div_ceil(block), h.div_ceil(block));
+        let Buffers {
+            thresholds,
+            sat,
+            pixel_thr,
+            mins,
+            maxs,
+            sums,
+            stats,
+        } = buffers;
+        thresholds.clear();
+        thresholds.resize(tw * th, 0);
+        let stride = tw + 1;
+        sat.clear();
+        sat.resize(stride * (th + 1), 0);
+        stats.resize(w);
+        for v in [&mut *mins, &mut *maxs] {
+            v.clear();
+            v.resize(tw, 0);
+        }
+        sums.clear();
+        sums.resize(tw, 0);
         pixel_thr.clear();
         pixel_thr.resize(w, 0);
         let (words, wpr) = out.words_mut();
-        for (ty, chunk) in words.chunks_mut(wpr.max(1) * block).enumerate() {
-            self.pack_tile_row(src, block, ty, &grid, pixel_thr, chunk, wpr.max(1));
+        let wpr = wpr.max(1);
+        let mut pack = |ty: usize, sat: &[u64]| {
+            let grid = Grid {
+                sat,
+                stride,
+                tw,
+                th,
+            };
+            let start = ty * block * wpr;
+            let end = ((ty + 1) * block * wpr).min(words.len());
+            self.pack_tile_row(
+                src,
+                block,
+                ty,
+                &grid,
+                pixel_thr,
+                &mut words[start..end],
+                wpr,
+            );
+        };
+        for ty in 0..th {
+            stats.tiles(src, block, ty, mins, maxs, sums);
+            let (done, rest) = thresholds.split_at_mut(ty * tw);
+            let above = (ty > 0).then(|| &done[(ty - 1) * tw..]);
+            self.row_thresholds(src, block, ty, (mins, maxs, sums), above, &mut rest[..tw]);
+            // Row `ty + 1` of the summed-area table.
+            let mut run = 0u64;
+            for x in 0..tw {
+                run += u64::from(rest[x]);
+                sat[(ty + 1) * stride + x + 1] = sat[ty * stride + x + 1] + run;
+            }
+            if let Some(p) = ty.checked_sub(self.window) {
+                pack(p, sat);
+            }
+        }
+        for p in th.saturating_sub(self.window)..th {
+            pack(p, sat);
         }
     }
 }
@@ -192,6 +256,27 @@ impl RowStats {
         maxs.fill(0);
         sums.fill(0);
         let y_end = ((ty + 1) * block).min(h);
+        if block == 8 {
+            // Whole 16-column groups with SIMD, the right edge below.
+            let mut rows: [&[u8]; 8] = [&[]; 8];
+            let n = y_end - ty * block;
+            for (k, slot) in rows.iter_mut().take(n).enumerate() {
+                *slot = src.row(ty * block + k);
+            }
+            let done = crate::simd::tile_stats8(&rows[..n], mins, maxs, sums);
+            let w = src.width();
+            for tx in done..mins.len() {
+                let (x0, x1) = (tx * block, ((tx + 1) * block).min(w));
+                for row in &rows[..n] {
+                    for &v in &row[x0..x1] {
+                        mins[tx] = mins[tx].min(v);
+                        maxs[tx] = maxs[tx].max(v);
+                        sums[tx] += u64::from(v);
+                    }
+                }
+            }
+            return;
+        }
         // Bands of at most 256 rows keep the `u16` column sums exact.
         for band_start in (ty * block..y_end).step_by(256) {
             let band_end = (band_start + 256).min(y_end);
@@ -277,6 +362,7 @@ impl LocalBinarizer {
         }
     }
 
+    #[cfg(feature = "rayon")]
     fn tile_thresholds(
         &self,
         src: ImageView<'_>,
@@ -290,52 +376,34 @@ impl LocalBinarizer {
             mins,
             maxs,
             sums,
-            stats,
             ..
         } = buffers;
         thresholds.clear();
         thresholds.resize(tw * th, 0);
-        #[cfg(feature = "rayon")]
-        if crate::is_large(src.width(), src.height()) {
-            use rayon::prelude::*;
-            // Statistics of different tile rows are independent; only the
-            // fallback for flat tiles needs the previous row, so that part
-            // runs in order afterwards.
-            mins.clear();
-            mins.resize(tw * th, 0);
-            maxs.clear();
-            maxs.resize(tw * th, 0);
-            sums.clear();
-            sums.resize(tw * th, 0);
-            mins.par_chunks_mut(tw)
-                .zip(maxs.par_chunks_mut(tw))
-                .zip(sums.par_chunks_mut(tw))
-                .enumerate()
-                .for_each_init(
-                    || RowStats::new(src.width()),
-                    |scratch, (ty, ((mn, mx), sm))| scratch.tiles(src, block, ty, mn, mx, sm),
-                );
-            for ty in 0..th {
-                let (done, rest) = thresholds.split_at_mut(ty * tw);
-                let above = (ty > 0).then(|| &done[(ty - 1) * tw..]);
-                let r = ty * tw..(ty + 1) * tw;
-                let tile_stats = (&mins[r.clone()], &maxs[r.clone()], &sums[r]);
-                self.row_thresholds(src, block, ty, tile_stats, above, &mut rest[..tw]);
-            }
-            return;
-        }
-        stats.resize(src.width());
-        for v in [&mut *mins, &mut *maxs] {
-            v.clear();
-            v.resize(tw, 0);
-        }
+        use rayon::prelude::*;
+        // Statistics of different tile rows are independent; only the
+        // fallback for flat tiles needs the previous row, so that part
+        // runs in order afterwards.
+        mins.clear();
+        mins.resize(tw * th, 0);
+        maxs.clear();
+        maxs.resize(tw * th, 0);
         sums.clear();
-        sums.resize(tw, 0);
+        sums.resize(tw * th, 0);
+        mins.par_chunks_mut(tw)
+            .zip(maxs.par_chunks_mut(tw))
+            .zip(sums.par_chunks_mut(tw))
+            .enumerate()
+            .for_each_init(
+                || RowStats::new(src.width()),
+                |scratch, (ty, ((mn, mx), sm))| scratch.tiles(src, block, ty, mn, mx, sm),
+            );
         for ty in 0..th {
-            stats.tiles(src, block, ty, mins, maxs, sums);
             let (done, rest) = thresholds.split_at_mut(ty * tw);
             let above = (ty > 0).then(|| &done[(ty - 1) * tw..]);
-            self.row_thresholds(src, block, ty, (mins, maxs, sums), above, &mut rest[..tw]);
+            let r = ty * tw..(ty + 1) * tw;
+            let tile_stats = (&mins[r.clone()], &maxs[r.clone()], &sums[r]);
+            self.row_thresholds(src, block, ty, tile_stats, above, &mut rest[..tw]);
         }
     }
 }
@@ -360,6 +428,7 @@ fn reduce_columns(lo: &[u8], hi: &[u8], sum: &[u16]) -> (u8, u8, u64) {
     )
 }
 
+#[cfg(feature = "rayon")]
 fn summed_area(grid: &[u8], tw: usize, th: usize, sat: &mut Vec<u64>) {
     let stride = tw + 1;
     sat.clear();
@@ -376,6 +445,100 @@ fn summed_area(grid: &[u8], tw: usize, th: usize, sat: &mut Vec<u64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Plain statement of the algorithm: tile statistics, thresholds with the
+    /// flat-tile fallback, each tile's threshold averaged over the window of
+    /// tiles, and one comparison per pixel.
+    fn reference(b: &LocalBinarizer, pixels: &[u8], w: usize, h: usize) -> BitMatrix {
+        let block = b.block;
+        let (tw, th) = (w.div_ceil(block), h.div_ceil(block));
+        let mut thr = vec![0u8; tw * th];
+        for ty in 0..th {
+            let mut stats = RowStats::default();
+            stats.resize(w);
+            let (mut mins, mut maxs, mut sums) = (vec![0u8; tw], vec![0u8; tw], vec![0u64; tw]);
+            let view = ImageView::from_packed(pixels, w, h).unwrap();
+            mins.fill(u8::MAX);
+            for y in ty * block..((ty + 1) * block).min(h) {
+                for x in 0..w {
+                    let (t, v) = (x / block, view.get(x, y));
+                    mins[t] = mins[t].min(v);
+                    maxs[t] = maxs[t].max(v);
+                    sums[t] += u64::from(v);
+                }
+            }
+            let above = (ty > 0).then(|| thr[(ty - 1) * tw..ty * tw].to_vec());
+            b.row_thresholds(
+                view,
+                block,
+                ty,
+                (&mins, &maxs, &sums),
+                above.as_deref(),
+                &mut thr[ty * tw..(ty + 1) * tw],
+            );
+        }
+        let mut out = BitMatrix::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let (tx, ty) = (x / block, y / block);
+                let (x0, x1) = (tx.saturating_sub(b.window), (tx + b.window + 1).min(tw));
+                let (y0, y1) = (ty.saturating_sub(b.window), (ty + b.window + 1).min(th));
+                let mut sum = 0u64;
+                for yy in y0..y1 {
+                    for xx in x0..x1 {
+                        sum += u64::from(thr[yy * tw + xx]);
+                    }
+                }
+                let t = (sum / ((x1 - x0) * (y1 - y0)) as u64) as u8;
+                out.set(x, y, pixels[y * w + x] < t);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn single_pass_matches_the_plain_algorithm() {
+        let mut state = 0xC0FF_EE12_3456_789Au64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let b = LocalBinarizer::default();
+        for (w, h) in [
+            (40usize, 40usize),
+            (203, 131),
+            (64, 90),
+            (127, 41),
+            (33, 200),
+        ] {
+            for flat in [false, true] {
+                let pixels: Vec<u8> = (0..w * h)
+                    .map(|i| {
+                        let (x, y) = (i % w, i / w);
+                        let texture = if flat && (y / 24) % 2 == 0 {
+                            0
+                        } else {
+                            ((x / 5 + y / 3) % 2 * 90) as u8
+                        };
+                        (40 + texture as usize + x * 60 / w + (next() % 7) as usize) as u8
+                    })
+                    .collect();
+                let view = ImageView::from_packed(&pixels, w, h).unwrap();
+                let mut out = BitMatrix::default();
+                b.binarize(view, &mut out);
+                let want = reference(&b, &pixels, w, h);
+                for y in 0..h {
+                    assert_eq!(
+                        out.row_words(y),
+                        want.row_words(y),
+                        "{w}x{h} flat={flat} row {y}"
+                    );
+                }
+            }
+        }
+    }
 
     fn run<B: Binarizer>(b: &B, pixels: &[u8], w: usize, h: usize) -> BitMatrix {
         let view = ImageView::from_packed(pixels, w, h).unwrap();

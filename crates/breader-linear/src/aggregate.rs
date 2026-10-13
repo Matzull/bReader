@@ -211,6 +211,34 @@ impl Aggregator {
             .count()
     }
 
+    /// True when the hits that read the same physical symbol as `seed` (the
+    /// chain of adjacent hits from it) already meet the agreement `finish`
+    /// will require. Refinement lines beyond this point only widen the quad.
+    pub fn seed_met(&self, seed: &PlacedHit, settings: &Settings) -> bool {
+        let mut members: Vec<usize> = Vec::new();
+        let mut pending: Vec<usize> = (0..self.hits.len())
+            .filter(|&i| self.hits[i] == *seed)
+            .collect();
+        if pending.is_empty() {
+            return false;
+        }
+        let mut seen = vec![false; self.hits.len()];
+        for &i in &pending {
+            seen[i] = true;
+        }
+        while let Some(i) = pending.pop() {
+            members.push(i);
+            for (j, done) in seen.iter_mut().enumerate() {
+                if !*done && self.hits[i].adjacent(&self.hits[j]) {
+                    *done = true;
+                    pending.push(j);
+                }
+            }
+        }
+        let (lines, need) = self.agreement(&members, settings);
+        lines >= need
+    }
+
     /// One representative hit of every group that lacks the agreement
     /// required by `settings`.
     pub fn seeds(&mut self, settings: &Settings, out: &mut Vec<PlacedHit>) {

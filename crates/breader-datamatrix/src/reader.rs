@@ -46,7 +46,7 @@ impl Params {
                 max_candidates: 16,
                 hypotheses: 2,
                 max_decodes: 24,
-                levels: 3,
+                levels: 2,
                 components: 48,
                 max_misses: 48,
                 invert: false,

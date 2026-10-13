@@ -28,6 +28,29 @@ pub(crate) fn lt_mask64_scalar(v: &[u8; 64], t: &[u8; 64]) -> u64 {
     acc
 }
 
+/// Minimum, maximum and sum of every 8 x `rows.len()` tile of up to eight rows
+/// of equal length, for the tiles that lie in whole groups of 16 columns.
+/// Returns the number of tiles done (a multiple of 2); the rest is left to
+/// the caller. Results are written to `mins`, `maxs` and `sums` at the tile
+/// index.
+#[inline]
+pub(crate) fn tile_stats8(
+    rows: &[&[u8]],
+    mins: &mut [u8],
+    maxs: &mut [u8],
+    sums: &mut [u64],
+) -> usize {
+    #[cfg(target_arch = "x86_64")]
+    {
+        x86::tile_stats8(rows, mins, maxs, sums)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = (rows, mins, maxs, sums);
+        0
+    }
+}
+
 /// Luma of 4-byte pixels whose channel order is `[c0, G, c2, _]`;
 /// `w0` and `w2` are the weights of `c0` and `c2` (RGBA: 77, 29).
 /// `src.len() == 4 * dst.len()`.
@@ -52,10 +75,66 @@ pub(crate) fn luma4_row_scalar(src: &[u8], dst: &mut [u8], w0: u16, w2: u16) {
 #[cfg(target_arch = "x86_64")]
 mod x86 {
     use std::arch::x86_64::{
-        __m128i, _mm_add_epi32, _mm_and_si128, _mm_cmpeq_epi8, _mm_loadu_si128, _mm_madd_epi16,
-        _mm_movemask_epi8, _mm_packs_epi32, _mm_packus_epi16, _mm_set1_epi32, _mm_setzero_si128,
-        _mm_srli_epi16, _mm_srli_epi32, _mm_storeu_si128, _mm_subs_epu8,
+        __m128i, _mm_add_epi32, _mm_add_epi64, _mm_and_si128, _mm_cmpeq_epi8, _mm_cvtsi128_si32,
+        _mm_cvtsi128_si64, _mm_loadu_si128, _mm_madd_epi16, _mm_max_epu8, _mm_min_epu8,
+        _mm_movemask_epi8, _mm_packs_epi32, _mm_packus_epi16, _mm_sad_epu8, _mm_set1_epi32,
+        _mm_setzero_si128, _mm_srli_epi16, _mm_srli_epi32, _mm_srli_si128, _mm_storeu_si128,
+        _mm_subs_epu8,
     };
+
+    pub(super) fn tile_stats8(
+        rows: &[&[u8]],
+        mins: &mut [u8],
+        maxs: &mut [u8],
+        sums: &mut [u64],
+    ) -> usize {
+        let Some(first) = rows.first() else {
+            return 0;
+        };
+        let groups = first.len() / 16;
+        debug_assert!(rows.len() <= 8 && rows.iter().all(|r| r.len() == first.len()));
+        assert!(mins.len() >= 2 * groups && maxs.len() >= 2 * groups && sums.len() >= 2 * groups);
+        for g in 0..groups {
+            // SAFETY: SSE2 is part of the x86_64 baseline. Every row holds at
+            // least `16 * groups` bytes, so each 16-byte unaligned load at
+            // `16 * g` is in bounds; the stores target local arrays.
+            let (lo, hi, sad) = unsafe {
+                let mut lo = _mm_loadu_si128(rows[0].as_ptr().add(16 * g).cast());
+                let mut hi = lo;
+                let zero = _mm_setzero_si128();
+                let mut sad = _mm_sad_epu8(lo, zero);
+                for r in &rows[1..] {
+                    let v: __m128i = _mm_loadu_si128(r.as_ptr().add(16 * g).cast());
+                    lo = _mm_min_epu8(lo, v);
+                    hi = _mm_max_epu8(hi, v);
+                    sad = _mm_add_epi64(sad, _mm_sad_epu8(v, zero));
+                }
+                // Fold each 8-byte half to its first byte.
+                lo = _mm_min_epu8(lo, _mm_srli_si128::<4>(lo));
+                lo = _mm_min_epu8(lo, _mm_srli_si128::<2>(lo));
+                lo = _mm_min_epu8(lo, _mm_srli_si128::<1>(lo));
+                hi = _mm_max_epu8(hi, _mm_srli_si128::<4>(hi));
+                hi = _mm_max_epu8(hi, _mm_srli_si128::<2>(hi));
+                hi = _mm_max_epu8(hi, _mm_srli_si128::<1>(hi));
+                let pick = |x: __m128i| {
+                    (
+                        (_mm_cvtsi128_si32(x) & 0xFF) as u8,
+                        (_mm_cvtsi128_si64(_mm_srli_si128::<8>(x)) & 0xFF) as u8,
+                    )
+                };
+                let mut s = [0u64; 2];
+                _mm_storeu_si128(s.as_mut_ptr().cast(), sad);
+                (pick(lo), pick(hi), s)
+            };
+            mins[2 * g] = lo.0;
+            mins[2 * g + 1] = lo.1;
+            maxs[2 * g] = hi.0;
+            maxs[2 * g + 1] = hi.1;
+            sums[2 * g] = sad[0];
+            sums[2 * g + 1] = sad[1];
+        }
+        2 * groups
+    }
 
     #[inline]
     pub(super) fn lt_mask64(v: &[u8; 64], t: &[u8; 64]) -> u64 {
@@ -110,6 +189,50 @@ mod x86 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tile_stats_match_the_scalar_loops() {
+        let mut state = 0x1357_9BDF_2468_ACE1u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for width in [8usize, 15, 16, 17, 31, 32, 33, 100, 129] {
+            for height in 1..=8usize {
+                for fill in [None, Some(0u8), Some(255)] {
+                    let pixels: Vec<Vec<u8>> = (0..height)
+                        .map(|_| {
+                            (0..width)
+                                .map(|_| fill.unwrap_or_else(|| (next() >> 13) as u8))
+                                .collect()
+                        })
+                        .collect();
+                    let rows: Vec<&[u8]> = pixels.iter().map(Vec::as_slice).collect();
+                    let tiles = width.div_ceil(8);
+                    let (mut mins, mut maxs, mut sums) =
+                        (vec![7u8; tiles], vec![7u8; tiles], vec![7u64; tiles]);
+                    let done = tile_stats8(&rows, &mut mins, &mut maxs, &mut sums);
+                    assert_eq!(done, width / 16 * 2);
+                    for tx in 0..done {
+                        let cells = rows
+                            .iter()
+                            .flat_map(|r| r[tx * 8..tx * 8 + 8].iter().copied());
+                        assert_eq!(
+                            mins[tx],
+                            cells.clone().min().unwrap(),
+                            "w={width} h={height}"
+                        );
+                        assert_eq!(maxs[tx], cells.clone().max().unwrap());
+                        assert_eq!(sums[tx], cells.map(u64::from).sum::<u64>());
+                    }
+                    // Tiles past `done` are left alone.
+                    assert!(mins[done..].iter().all(|&v| v == 7));
+                }
+            }
+        }
+    }
 
     #[test]
     fn luma4_matches_scalar() {

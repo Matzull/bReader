@@ -138,26 +138,8 @@ fn in_bounds(m: Plane<'_>, x: i32, y: i32) -> bool {
 
 /// Length of the run of `dark` pixels from (x, y) along `d`, and whether the
 /// walk ended at the image border or at `limit`.
-fn count_run(
-    m: Plane<'_>,
-    mut x: i32,
-    mut y: i32,
-    d: (i32, i32),
-    dark: bool,
-    limit: u32,
-) -> (u32, bool) {
-    let mut n = 0;
-    loop {
-        if !in_bounds(m, x, y) || n >= limit {
-            return (n, true);
-        }
-        if m.get(x as usize, y as usize) != dark {
-            return (n, false);
-        }
-        n += 1;
-        x += d.0;
-        y += d.1;
-    }
+fn count_run(m: Plane<'_>, x: i32, y: i32, d: (i32, i32), dark: bool, limit: u32) -> (u32, bool) {
+    m.run_len(x, y, d, dark, limit)
 }
 
 /// The seven runs through the dark pixel (x, y) along `d`, and how far the
