@@ -30,6 +30,8 @@ struct Params {
     max_decodes: usize,
     /// Pooling levels of the candidate search (4, 8, 16, ...).
     levels: usize,
+    /// First level of the second stage, run only while no symbol is known.
+    late_level: usize,
     /// Consecutive candidates (best first) without a finder-like L after which
     /// a polarity is abandoned: the tail of the ranking is texture.
     max_misses: usize,
@@ -46,7 +48,8 @@ impl Params {
                 max_candidates: 16,
                 hypotheses: 2,
                 max_decodes: 24,
-                levels: 2,
+                levels: 3,
+                late_level: 2,
                 components: 48,
                 max_misses: 48,
                 invert: false,
@@ -56,6 +59,7 @@ impl Params {
                 hypotheses: 3,
                 max_decodes: 96,
                 levels: 3,
+                late_level: 3,
                 components: 128,
                 max_misses: 96,
                 invert: true,
@@ -65,6 +69,7 @@ impl Params {
                 hypotheses: 3,
                 max_decodes: 300,
                 levels: 5,
+                late_level: 5,
                 components: 512,
                 max_misses: 384,
                 invert: true,
@@ -226,50 +231,65 @@ fn scan_with(work: &mut Work, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>)
         if inverted && !params.invert {
             continue;
         }
-        work.detector.find(
-            raw,
-            inverted,
-            params.levels,
-            if inverted {
-                params.components / 3
+        // The coarsest level of Fast is a second stage: it costs a fit
+        // pass on every frame and finds only large symbols, so it runs
+        // when the finer levels left no symbol (D-046).
+        let late = params.late_level.min(params.levels);
+        for stage in 0..2 {
+            let (from, to) = if stage == 0 {
+                (0, late)
             } else {
-                params.components
-            },
-            params.max_candidates * 32,
-        );
-        let plane = Plane::new(raw, inverted);
-        let mut analyzed = 0usize;
-        let mut misses = 0usize;
-        for ci in 0..work.detector.candidates.len() {
-            if decodes >= params.max_decodes {
-                return;
-            }
-            let cand = work.detector.candidates[ci];
-            let c = Quad::new(cand.quad).center();
-            let center = Point::new(c.x * scale.0, c.y * scale.1);
-            if known.iter().any(|q| q.contains(center)) {
+                (late, params.levels)
+            };
+            if from >= to || (stage == 1 && !known.is_empty()) {
                 continue;
             }
-            let Some(module) = precheck(plane, &cand.quad, &mut work.scratch) else {
-                misses += 1;
-                if misses > params.max_misses {
+            work.detector.find(
+                raw,
+                inverted,
+                from,
+                to,
+                if inverted {
+                    params.components / 3
+                } else {
+                    params.components
+                },
+                params.max_candidates * 32,
+            );
+            let plane = Plane::new(raw, inverted);
+            let mut analyzed = 0usize;
+            let mut misses = 0usize;
+            for ci in 0..work.detector.candidates.len() {
+                if decodes >= params.max_decodes {
+                    return;
+                }
+                let cand = work.detector.candidates[ci];
+                let c = Quad::new(cand.quad).center();
+                let center = Point::new(c.x * scale.0, c.y * scale.1);
+                if known.iter().any(|q| q.contains(center)) {
+                    continue;
+                }
+                let Some(module) = precheck(plane, &cand.quad, &mut work.scratch) else {
+                    misses += 1;
+                    if misses > params.max_misses {
+                        break;
+                    }
+                    continue;
+                };
+                misses = 0;
+                if analyzed >= params.max_candidates {
                     break;
                 }
-                continue;
-            };
-            misses = 0;
-            if analyzed >= params.max_candidates {
-                break;
-            }
-            let Some(found) = work.read(plane, &cand, module, &params, &mut decodes) else {
-                if work.layout_ok {
-                    analyzed += 1;
+                let Some(found) = work.read(plane, &cand, module, &params, &mut decodes) else {
+                    if work.layout_ok {
+                        analyzed += 1;
+                    }
+                    continue;
+                };
+                if let Some(sym) = build_symbol(&found, scale) {
+                    known.push(sym.quad);
+                    out.push(sym);
                 }
-                continue;
-            };
-            if let Some(sym) = build_symbol(&found, scale) {
-                known.push(sym.quad);
-                out.push(sym);
             }
         }
     }

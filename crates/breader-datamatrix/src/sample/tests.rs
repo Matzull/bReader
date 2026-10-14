@@ -39,7 +39,7 @@ struct Outcome {
 
 fn run(bin: &BitMatrix, inverted: bool, truth: &[Point; 4], rows: usize, cols: usize) -> Outcome {
     let mut d = Detector::default();
-    d.find(bin, inverted, 4, 128, 32);
+    d.find(bin, inverted, 0, 4, 128, 32);
     let cand = closest(&d, truth).expect("candidate");
     let plane = Plane::new(bin, inverted);
     let mut sc = SampleScratch::default();
@@ -137,7 +137,7 @@ fn mirrored_symbol_is_reflected_across_the_bl_diagonal() {
         let m = encode_size(b"mirror me", size);
         let (bin, truth) = scene(&m, 5.0, 25.0, true, 0, false);
         let mut d = Detector::default();
-        d.find(&bin, false, 4, 128, 32);
+        d.find(&bin, false, 0, 4, 128, 32);
         let cand = closest(&d, &truth).unwrap();
         let plane = Plane::new(&bin, false);
         let mut sc = SampleScratch::default();
@@ -237,7 +237,7 @@ fn clean_sweep_succeeds_at_every_stage() {
                 let tag = format!("{}x{} deg {deg} px {px}", m.rows, m.cols);
                 let (bin, truth) = scene(&m, px, deg, false, 0, false);
                 let mut d = Detector::default();
-                d.find(&bin, false, 4, 128, 32);
+                d.find(&bin, false, 0, 4, 128, 32);
                 let Some(cand) = closest(&d, &truth) else {
                     fails.push(format!("{tag}: no candidate"));
                     continue;

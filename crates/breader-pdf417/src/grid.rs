@@ -314,6 +314,89 @@ fn decode_cells(cells: &[Cell], layout: Layout) -> Option<DecodedPdf417> {
     None
 }
 
+/// Lines whose indicators give a row number. Cheap and allocation-free:
+/// the dense pass asks it before it fits anything.
+pub(crate) fn lines_with_rows(obs: &[Obs]) -> usize {
+    obs.iter()
+        .filter(|o| indicators(&o.read).row.is_some())
+        .count()
+}
+
+/// Row pitch of densely sampled lines: the lines whose row number the
+/// indicators gave, fitted by least squares as row = `slope * t + offset`
+/// with outliers rejected, or `None` when they do not follow a line.
+pub(crate) fn pitch_fit(obs: &[Obs]) -> Option<(f32, f32)> {
+    let mut pts: Vec<(f32, f32)> = Vec::new();
+    for o in obs {
+        if let Some(r) = indicators(&o.read).row {
+            pts.push((o.t, r as f32));
+        }
+    }
+    let n = pts.len();
+    if n < 12 {
+        return None;
+    }
+    // Start from the slopes between points a fixed number of points apart.
+    let k = (n / 6).max(2);
+    let mut slopes: Vec<f32> = (0..n - k)
+        .filter(|&i| (pts[i + k].0 - pts[i].0).abs() > 1e-3)
+        .map(|i| (pts[i + k].1 - pts[i].1) / (pts[i + k].0 - pts[i].0))
+        .collect();
+    if slopes.is_empty() {
+        return None;
+    }
+    slopes.sort_by(f32::total_cmp);
+    let slope = slopes[slopes.len() / 2];
+    if slope.abs() < 1e-4 {
+        return None;
+    }
+    let mut offsets: Vec<f32> = pts.iter().map(|&(t, r)| r - slope * t).collect();
+    offsets.sort_by(f32::total_cmp);
+    let mut fit = (slope, offsets[offsets.len() / 2]);
+    for window in [1.5f32, 1.0, 0.8] {
+        let inl: Vec<&(f32, f32)> = pts
+            .iter()
+            .filter(|&&(t, r)| (r - (fit.0 * t + fit.1)).abs() <= window)
+            .collect();
+        if inl.len() < 8 {
+            return None;
+        }
+        let m = inl.len() as f32;
+        let (mt, mr) = (
+            inl.iter().map(|p| p.0).sum::<f32>() / m,
+            inl.iter().map(|p| p.1).sum::<f32>() / m,
+        );
+        let var: f32 = inl.iter().map(|p| (p.0 - mt) * (p.0 - mt)).sum();
+        if var < 1e-6 {
+            return None;
+        }
+        let cov: f32 = inl.iter().map(|p| (p.0 - mt) * (p.1 - mr)).sum();
+        let sl = cov / var;
+        fit = (sl, mr - sl * mt);
+    }
+    Some(fit)
+}
+
+/// The lines of a dense pass that belong to the row the fit puts them in:
+/// the cluster of the line must be that of the row at its position (the row
+/// pitch comes from the indicators). Lines between two rows, in rows only a
+/// couple of modules high, see the neighbouring row's pattern through the
+/// blur and would outvote the clean ones. `None` when the lines have no row
+/// pitch.
+pub(crate) fn central_lines(obs: &[Obs]) -> Option<Vec<Obs>> {
+    let (slope, offset) = pitch_fit(obs)?;
+    let kept: Vec<Obs> = obs
+        .iter()
+        .filter(|o| {
+            let est = slope * o.t + offset;
+            let r = est.round();
+            r >= 0.0 && (r as usize) % 3 == usize::from(o.read.cluster)
+        })
+        .cloned()
+        .collect();
+    (kept.len() >= 6).then_some(kept)
+}
+
 /// Solves the symbol from its lines, or `None`.
 pub(crate) fn solve(obs: &[Obs]) -> Option<Solved> {
     let ind: Vec<Indicators> = obs.iter().map(|o| indicators(&o.read)).collect();
@@ -415,6 +498,26 @@ mod tests {
         assert!(!s.compact);
         let (slope, _) = s.fit.unwrap();
         assert!((slope - 1.0 / 3.0).abs() < 0.02, "{slope}");
+    }
+
+    #[test]
+    fn dense_lines_give_the_row_pitch_and_drop_lines_in_the_wrong_row() {
+        let r = render(&text(60), EncodeOptions::default());
+        let per_row = 8;
+        let mut obs = lines(&r, per_row);
+        // The step between lines is 1.5, so a row spans `per_row * 1.5`.
+        let (slope, _) = pitch_fit(&obs).expect("pitch");
+        assert!(
+            (slope - 1.0 / (per_row as f32 * 1.5)).abs() < 0.003,
+            "{slope}"
+        );
+        // A line that reads a neighbouring row's cluster is dropped.
+        let n = obs.len();
+        obs[n / 2].read.cluster = (obs[n / 2].read.cluster + 1) % 3;
+        let kept = central_lines(&obs).expect("lines");
+        assert_eq!(kept.len(), n - 1);
+        let s = solve(&kept).expect("solved");
+        assert_eq!(s.decoded.data, text(60).as_bytes());
     }
 
     #[test]
