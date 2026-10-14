@@ -169,6 +169,7 @@ fn scan_profile<D: LinearDecoder>(
                 start_stop: hit.start_stop,
                 segments: hit.segments,
                 thin: hit.thin,
+                part: hit.part,
             });
         }
     }
@@ -1118,6 +1119,140 @@ mod tests {
                     assert_eq!(found.len(), 1, "{found:?}");
                 }
             }
+        }
+    }
+
+    fn stacked_picture(
+        kind: u8,
+        text: &str,
+        columns: usize,
+        module_px: f32,
+        data: f32,
+        angle_deg: f32,
+    ) -> ImageBuffer {
+        use crate::stack_testutil::*;
+        let grid = databar_stacked_grid(kind, text, columns);
+        let heights = stacked_row_heights(kind, grid.len(), data);
+        let mut img = blank(1000, 1000, 230);
+        let p = GridPlacement {
+            heights: &heights,
+            module_px,
+            center: (500.0, 500.0),
+            angle_deg,
+            dark: 30,
+        };
+        draw_grid(&mut img, &grid, p);
+        img
+    }
+
+    #[test]
+    fn databar_stacked_reads_in_every_orientation_with_its_meta() {
+        let cases = [
+            (0u8, "2001234567890", 1, 0u8, 2u8),
+            (1, "4412345678900", 1, 0, 2),
+            (1, "0000000000001", 1, 0, 2),
+        ];
+        for (kind, text, columns, segments, rows) in cases {
+            let data = format!("01{text}{}", check_digit(text)).into_bytes();
+            for angle in [0.0, 90.0, 180.0, 270.0, 23.0, 211.0, 337.0] {
+                for invert in [false, true] {
+                    let mut img = stacked_picture(kind, text, columns, 4.0, 24.0, angle);
+                    if invert {
+                        invert_image(&mut img);
+                    }
+                    let found = scan(&img, &ScanOptions::default());
+                    assert_eq!(found.len(), 1, "{kind} {angle} {invert}: {found:?}");
+                    assert_eq!(found[0].symbology, Symbology::DataBar);
+                    assert_eq!(found[0].data, data, "{kind} {angle} {invert}");
+                    assert_eq!(&found[0].aim_id, b"]e0");
+                    let meta = linear_meta(&found[0]);
+                    assert!(meta.checksum_verified && meta.lines_agreeing >= 2);
+                    assert_eq!(meta.databar_segments.unwrap_or(0), segments);
+                    assert_eq!(meta.databar_rows, Some(rows));
+                    let c = found[0].quad.center();
+                    assert!(c.distance(Point::new(500.0, 500.0)) < 40.0, "{c:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn databar_expanded_stacked_reads_every_row_layout() {
+        let texts = [
+            "0100012345678905",
+            "01900123456789083103001750",
+            "1012A",
+            "010001234567890510ABC123",
+            "011234567890123110UNIVERSITY-OF-DEUSTO",
+            "10123456A1234A\x1d15991231",
+            "1012345678901234567890123456789012345678901234567890",
+            "01988987654321061599123131030017501012A\x1d422123\x1d2123456\x1d423012345678901",
+        ];
+        for text in texts {
+            for columns in 1..=6 {
+                // Rows of three or more blocks are too long for a plan line to
+                // stay inside them when the symbol is turned off the plan's
+                // directions.
+                for angle in [0.0, 180.0, 90.0, 17.0] {
+                    if angle == 17.0 && columns > 2 {
+                        continue;
+                    }
+                    let img = stacked_picture(2, text, columns, 2.4, 34.0, angle);
+                    let found = scan(&img, &ScanOptions::default());
+                    let got: Vec<_> = found.iter().map(|s| s.data.clone()).collect();
+                    assert_eq!(
+                        got,
+                        [text.as_bytes().to_vec()],
+                        "{text:?} {columns} {angle}"
+                    );
+                    let meta = linear_meta(&found[0]);
+                    assert_eq!(found[0].symbology, Symbology::DataBarExpanded);
+                    assert!(meta.databar_segments.is_some());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn databar_stacked_cropped_to_its_modules_is_read() {
+        use crate::stack_testutil::*;
+        // The picture is the symbol and nothing else: the guard bars at the
+        // ends of the rows touch the border (the zxing-cpp samples are like
+        // this).
+        let cases: [(u8, &str, usize, f32); 4] = [
+            (0, "2001234567890", 1, 8.0),
+            (1, "4412345678900", 1, 4.0),
+            (2, "01900123456789083103001750", 2, 2.0),
+            (2, "010001234567890510ABC123", 3, 2.0),
+        ];
+        for (kind, text, columns, px) in cases {
+            let grid = databar_stacked_grid(kind, text, columns);
+            let heights = stacked_row_heights(kind, grid.len(), 20.0);
+            let (w, h) = (
+                (grid[0].len() as f32 * px) as usize,
+                (heights.iter().sum::<f32>() * px) as usize,
+            );
+            let mut img = blank(w, h, 230);
+            let mut y0 = 0.0;
+            for (row, &rh) in grid.iter().zip(&heights) {
+                for y in (y0 * px) as usize..(((y0 + rh) * px) as usize).min(h) {
+                    for x in 0..w {
+                        if row[(x as f32 / px) as usize] {
+                            img.row_mut(y)[x] = 30;
+                        }
+                    }
+                }
+                y0 += rh;
+            }
+            let found = scan(&img, &ScanOptions::default());
+            assert_eq!(found.len(), 1, "{kind} {text}: {found:?}");
+            let want = if kind == 2 {
+                text.as_bytes().to_vec()
+            } else {
+                format!("01{text}{}", check_digit(text)).into_bytes()
+            };
+            assert_eq!(found[0].data, want, "{kind} {text}");
+            assert!(linear_meta(&found[0]).databar_rows.is_some());
         }
     }
 

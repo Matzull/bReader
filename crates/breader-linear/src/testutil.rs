@@ -556,7 +556,19 @@ pub fn with_gs1_check(body: &str) -> String {
 
 /// Edge detection and decoding as the reader does it: both reading
 /// directions, both polarities. Hits of light-on-dark have `inverted` set.
+/// Rows of stacked symbols (`part`) are not symbols and are left out.
 pub fn decode_all<D: crate::decoder::LinearDecoder>(
+    decoder: &D,
+    profile: &[u8],
+    opts: &crate::decoder::LineOptions,
+) -> Vec<crate::decoder::LineHit> {
+    let mut hits = decode_all_parts(decoder, profile, opts);
+    hits.retain(|h| !h.part);
+    hits
+}
+
+/// [`decode_all`] with the rows of stacked symbols.
+pub fn decode_all_parts<D: crate::decoder::LinearDecoder>(
     decoder: &D,
     profile: &[u8],
     opts: &crate::decoder::LineOptions,

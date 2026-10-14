@@ -319,6 +319,7 @@ impl LinearDecoder for Code39Decoder {
                         start_stop: None,
                         segments: 0,
                         thin,
+                        part: false,
                     });
                 }
             }

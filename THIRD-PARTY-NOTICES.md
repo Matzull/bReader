@@ -30,9 +30,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## anyd (GS1 DataBar Limited check patterns, development oracle)
+## anyd (GS1 DataBar Limited check patterns, development oracle, stacked test symbols)
 
-`crates/breader-linear/src/databar/limited.rs` holds the 89 check patterns of GS1 DataBar Limited (one per checksum value mod 89), written down from the output of the `anyd` crate 0.2.0 (https://github.com/KarpelesLab/anydcode, MIT, Karpeles Lab Inc.; its DataBar encoder is derived from zint and its tests carry BWIPP reference vectors) and checked against BWIPP reference vectors and photographed samples. The crate is also a dev-dependency of `breader-linear` and `tools/synth` to produce test symbols; nothing of it is in the library.
+`crates/breader-linear/src/databar/limited.rs` holds the 89 check patterns of GS1 DataBar Limited (one per checksum value mod 89), written down from the output of the `anyd` crate 0.2.0 (https://github.com/KarpelesLab/anydcode, MIT, Karpeles Lab Inc.; its DataBar encoder is derived from zint and its tests carry BWIPP reference vectors) and checked against BWIPP reference vectors and photographed samples. The crate is also a dev-dependency of `breader-linear` and `tools/synth` to produce test symbols; nothing of it is in the library. D-048 (stacked DataBar) used its Stacked, Stacked Omnidirectional and Expanded Stacked encoders the same way, and its `stacked.rs` was read to learn the row layout of the Expanded Stacked symbols (row guards, mirrored rows, colour of the even rows); no code of it was copied. No zxing-cpp or zxing source was read for D-048.
 
 ```
 MIT License

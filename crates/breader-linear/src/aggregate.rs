@@ -2,6 +2,8 @@ use breader_core::{
     Content, EanAddonPolicy, LinearMeta, Point, Quad, Symbol, SymbolMeta, Symbology,
 };
 
+use crate::databar::stacked::{self, Assembly, Geom};
+
 /// A hit placed in pass-image coordinates.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PlacedHit {
@@ -30,6 +32,8 @@ pub(crate) struct PlacedHit {
     pub segments: u8,
     /// See `LineHit::thin`.
     pub thin: bool,
+    /// See `LineHit::part`.
+    pub part: bool,
 }
 
 impl PlacedHit {
@@ -47,6 +51,7 @@ impl PlacedHit {
             && self.text == other.text
             && self.start_stop == other.start_stop
             && self.segments == other.segments
+            && self.part == other.part
     }
 
     /// True when `other` can be another view of the same physical symbol:
@@ -139,6 +144,8 @@ struct Candidate {
     lines: u16,
     addon: Option<Vec<u8>>,
     frame: Frame,
+    /// A stacked GS1 DataBar symbol joined from the rows of its members.
+    stacked: Option<Assembly>,
 }
 
 /// Oriented bounding rectangle of a group's segments.
@@ -361,6 +368,8 @@ impl Aggregator {
         self.group();
         let min = settings.min_agreement.max(1);
         let mut candidates: Vec<Candidate> = Vec::new();
+        // Rows of stacked DataBar symbols: not symbols until joined.
+        let mut rows: Vec<Candidate> = Vec::new();
         for g in &self.groups {
             let (lines, need) = self.agreement(&g.members, settings);
             if lines < need {
@@ -370,24 +379,84 @@ impl Aggregator {
             if settings.addon == EanAddonPolicy::Required && addon.is_none() {
                 continue;
             }
-            candidates.push(Candidate {
+            let candidate = Candidate {
                 members: g.members.clone(),
                 lines,
                 addon,
                 frame: self.frame(&g.members, settings.across_pad),
-            });
+                stacked: None,
+            };
+            if self.hits[g.members[0]].part {
+                rows.push(candidate);
+            } else {
+                candidates.push(candidate);
+            }
+        }
+        if !rows.is_empty() {
+            self.join_rows(&rows, settings, &mut candidates);
         }
 
         for (i, c) in candidates.iter().enumerate() {
             let survives = candidates.iter().enumerate().all(|(j, o)| {
                 i == j
-                    || self.hits[c.members[0]].same_symbol(&self.hits[o.members[0]])
+                    || self.same_read(c, o)
                     || !self.overlap(c, o)
                     || u32::from(c.lines) >= 2 * u32::from(o.lines)
             });
             if survives {
                 out.push(self.symbol(c, settings));
             }
+        }
+    }
+
+    /// True when both candidates read the same symbol.
+    fn same_read(&self, a: &Candidate, b: &Candidate) -> bool {
+        match (&a.stacked, &b.stacked) {
+            (None, None) => self.hits[a.members[0]].same_symbol(&self.hits[b.members[0]]),
+            (Some(x), Some(y)) => x.symbology == y.symbology && x.text == y.text,
+            _ => false,
+        }
+    }
+
+    /// Joins the groups of rows into stacked symbols and appends them to
+    /// `candidates`.
+    fn join_rows(&self, rows: &[Candidate], settings: &Settings, candidates: &mut Vec<Candidate>) {
+        let geoms: Vec<Geom> = rows.iter().map(|r| self.geom(&r.members)).collect();
+        let parts: Vec<(&[u8], Geom)> = rows
+            .iter()
+            .zip(&geoms)
+            .map(|(r, &g)| (self.hits[r.members[0]].text.as_slice(), g))
+            .collect();
+        for a in stacked::assemble(&parts) {
+            // Rows seen on at least `need` lines each; the symbol has as
+            // many agreeing lines as its weakest row.
+            let used: Vec<&Candidate> = a.used.iter().map(|&i| &rows[i]).collect();
+            let members: Vec<usize> = used.iter().flat_map(|c| c.members.clone()).collect();
+            let lines = used.iter().map(|c| c.lines).min().unwrap_or(0);
+            candidates.push(Candidate {
+                frame: self.frame(&members, settings.across_pad),
+                members,
+                lines,
+                addon: None,
+                stacked: Some(a),
+            });
+        }
+    }
+
+    /// Mean ends of the lines of a group of rows, in reading order.
+    fn geom(&self, members: &[usize]) -> Geom {
+        let k = members.len().max(1) as f32;
+        let (mut f, mut t, mut m) = ((0.0f32, 0.0f32), (0.0f32, 0.0f32), 0.0f32);
+        for &i in members {
+            let h = &self.hits[i];
+            f = (f.0 + h.from.x, f.1 + h.from.y);
+            t = (t.0 + h.to.x, t.1 + h.to.y);
+            m += h.module;
+        }
+        Geom {
+            from: (f.0 / k, f.1 / k),
+            to: (t.0 / k, t.1 / k),
+            module: m / k,
         }
     }
 
@@ -448,11 +517,18 @@ impl Aggregator {
     fn frame(&self, members: &[usize], pad: f32) -> Frame {
         let (mut ux, mut uy) = (0.0f32, 0.0f32);
         let (mut cx, mut cy) = (0.0f32, 0.0f32);
+        let (rx, ry) = self.hits[members[0]].unit();
         for &m in members {
             let h = &self.hits[m];
             let len = h.length().max(1e-6);
-            ux += (h.to.x - h.from.x) / len;
-            uy += (h.to.y - h.from.y) / len;
+            // Rows of a stacked symbol may be read in opposite directions.
+            let sign = if (h.to.x - h.from.x) * rx + (h.to.y - h.from.y) * ry < 0.0 {
+                -1.0
+            } else {
+                1.0
+            };
+            ux += sign * (h.to.x - h.from.x) / len;
+            uy += sign * (h.to.y - h.from.y) / len;
             let c = h.center();
             cx += c.x;
             cy += c.y;
@@ -521,9 +597,13 @@ impl Aggregator {
         } else {
             first.aim
         };
+        let (symbology, data) = match &c.stacked {
+            Some(a) => (a.symbology, a.text.clone()),
+            None => (first.symbology, first.text.clone()),
+        };
         Symbol {
-            symbology: first.symbology,
-            data: first.text.clone(),
+            symbology,
+            data,
             text: None,
             segments: Vec::new(),
             content: Content::Unparsed,
@@ -535,10 +615,14 @@ impl Aggregator {
                     .addon
                     .as_ref()
                     .and_then(|a| String::from_utf8(a.clone()).ok()),
-                checksum_verified: first.checksum_verified,
+                checksum_verified: first.checksum_verified || c.stacked.is_some(),
                 lines_agreeing: c.lines,
                 codabar_start_stop: first.start_stop,
-                databar_segments: (first.segments > 0).then_some(first.segments),
+                databar_segments: match &c.stacked {
+                    Some(a) => (a.segments > 0).then_some(a.segments),
+                    None => (first.segments > 0).then_some(first.segments),
+                },
+                databar_rows: c.stacked.as_ref().map(|a| a.rows),
             }),
             quality: quality.clamp(0.0, 1.0),
         }
@@ -613,6 +697,7 @@ mod tests {
             start_stop: None,
             segments: 0,
             thin: false,
+            part: false,
         }
     }
 

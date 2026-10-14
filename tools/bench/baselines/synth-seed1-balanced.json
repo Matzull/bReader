@@ -39,13 +39,13 @@
         "false_positives": 0
       },
       "GS1 DataBar": {
-        "expected": 1,
-        "read": 1,
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "GS1 DataBar Expanded": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "GS1 DataBar Limited": {
@@ -121,13 +121,13 @@
         "false_positives": 0
       },
       "GS1 DataBar": {
-        "expected": 1,
-        "read": 1,
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "GS1 DataBar Expanded": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "GS1 DataBar Limited": {
@@ -210,13 +210,13 @@
         "false_positives": 0
       },
       "GS1 DataBar": {
-        "expected": 1,
-        "read": 1,
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "GS1 DataBar Expanded": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "GS1 DataBar Limited": {
@@ -292,13 +292,13 @@
         "false_positives": 0
       },
       "GS1 DataBar": {
-        "expected": 1,
-        "read": 1,
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "GS1 DataBar Expanded": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "GS1 DataBar Limited": {
@@ -374,13 +374,13 @@
         "false_positives": 0
       },
       "GS1 DataBar": {
-        "expected": 1,
-        "read": 1,
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "GS1 DataBar Expanded": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "GS1 DataBar Limited": {
@@ -539,13 +539,13 @@
         "false_positives": 0
       },
       "GS1 DataBar": {
-        "expected": 1,
-        "read": 1,
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "GS1 DataBar Expanded": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "GS1 DataBar Limited": {
@@ -621,12 +621,12 @@
         "false_positives": 0
       },
       "GS1 DataBar": {
-        "expected": 1,
-        "read": 1,
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "GS1 DataBar Expanded": {
-        "expected": 1,
+        "expected": 2,
         "read": 1,
         "false_positives": 0
       },
@@ -703,13 +703,13 @@
         "false_positives": 0
       },
       "GS1 DataBar": {
-        "expected": 1,
-        "read": 1,
+        "expected": 3,
+        "read": 3,
         "false_positives": 0
       },
       "GS1 DataBar Expanded": {
-        "expected": 1,
-        "read": 1,
+        "expected": 2,
+        "read": 2,
         "false_positives": 0
       },
       "GS1 DataBar Limited": {

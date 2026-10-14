@@ -67,7 +67,9 @@ fn decode_everything(runs: &Runs, opts: &LineOptions) -> usize {
     b.flip_roles();
     ALL.decode(&a, opts, &mut out);
     ALL.decode(&b, opts, &mut out);
-    out.len()
+    // Rows of stacked DataBar symbols are not symbols; they are only
+    // joined, with a checksum, by the aggregator.
+    out.iter().filter(|h| !h.part).count()
 }
 
 #[test]

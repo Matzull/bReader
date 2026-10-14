@@ -129,6 +129,24 @@ fn finder_of(widths: &[u8; 5]) -> Option<u32> {
     FINDERS.iter().position(|f| f == widths).map(|p| p as u32)
 }
 
+/// The GTIN body of four characters (specification order) and the pair of
+/// finder patterns: the pair must be the one the checksum selects, every
+/// character a member of its set.
+fn body_of(chars: &[[u8; 8]; 4], left: u32, right: u32) -> Option<u64> {
+    if !pair_matches(checksum(chars), 9 * left + right) {
+        return None;
+    }
+    let (d1, d2, d3, d4) = (
+        char_value(&chars[0], true)?,
+        char_value(&chars[1], false)?,
+        char_value(&chars[2], true)?,
+        char_value(&chars[3], false)?,
+    );
+    let half = |outside: u16, inside: u16| u64::from(outside) * INSIDE + u64::from(inside);
+    let body = half(d1, d2) * PAIR + half(d3, d4);
+    (body < BODY_LIMIT).then_some(body)
+}
+
 /// Looser than the piece test of `decode` by this share of the expected
 /// width, so that float rounding between positions and summed widths cannot
 /// change a verdict.
@@ -175,6 +193,305 @@ pub(super) fn finders_plausible(runs: &Runs, j: usize) -> bool {
     fits(left) && fits(right)
 }
 
+/// Runs from the first to the last bar of the top row of a Stacked symbol
+/// (left guard, character 1, finder, character 2, one bar) and of the bottom
+/// row (bar and space, character 4, finder, character 3, space and bar).
+pub(super) const TOP_RUNS: usize = 23;
+pub(super) const BOTTOM_RUNS: usize = 25;
+/// Modules from the first to the last bar edge of each row.
+const TOP_MODULES: f32 = 48.0;
+const BOTTOM_MODULES: f32 = 50.0;
+/// Tags of the part texts and the length of their payload: the elements of
+/// the two characters and the finder, in the row's own reading direction.
+pub(super) const PART_TOP: u8 = 1;
+pub(super) const PART_BOTTOM: u8 = 2;
+pub(super) const PART_LEN: usize = 21;
+
+const TOP_SEGMENTS: [Segment; 5] = [
+    Segment::new(0, 1, 1),
+    Segment::new(1, 8, 16),
+    Segment::new(9, 5, 15),
+    Segment::new(14, 8, 15),
+    Segment::new(22, 1, 1),
+];
+const BOTTOM_SEGMENTS: [Segment; 7] = [
+    Segment::new(0, 1, 1),
+    Segment::new(1, 1, 1),
+    Segment::new(2, 8, 15),
+    Segment::new(10, 5, 15),
+    Segment::new(15, 8, 16),
+    Segment::new(23, 1, 1),
+    Segment::new(24, 1, 1),
+];
+
+fn half_shape(top: bool) -> (usize, f32, &'static [Segment]) {
+    if top {
+        (TOP_RUNS, TOP_MODULES, &TOP_SEGMENTS)
+    } else {
+        (BOTTOM_RUNS, BOTTOM_MODULES, &BOTTOM_SEGMENTS)
+    }
+}
+
+/// Modules of the 21 interior runs (characters and finder) of a row.
+const INTERIOR_MODULES: f32 = 46.0;
+
+/// The module of the row at run `j` (-1 when the first bar is cut by the
+/// start of the profile) from its interior runs, which are never cut; `None`
+/// when a cut guard has no room or the window does not fit.
+fn half_module(runs: &Runs, j: isize, top: bool) -> Option<f32> {
+    let (len, _, _) = half_shape(top);
+    let n = runs.len() as isize;
+    if j < -1 || j + len as isize > n + 1 {
+        return None;
+    }
+    // Interior runs: after the guard bar (top) or after bar and space.
+    let from = (j + if top { 1 } else { 2 }) as usize;
+    let sum: f32 = runs.widths()[from..from + 21].iter().sum();
+    let module = sum / INTERIOR_MODULES;
+    // A guard bar cut by a border needs a margin and a space next to it.
+    let first_cut = j < 0;
+    let last_cut = j + len as isize > n;
+    if (first_cut && (runs.lead() < 1.0 || runs.is_bar(0)))
+        || (last_cut && (runs.trail() < 1.0 || runs.is_bar(runs.len() - 1)))
+    {
+        return None;
+    }
+    (module.is_finite() && module > 0.0).then_some(module)
+}
+
+/// [`half_plausible`] for a window of runs inside the profile (no guard bar
+/// cut by a border). Most windows of a busy line fail the first tests: the
+/// guards alike and the finder ends narrow, measured against the first
+/// guard; then the pieces, from run positions.
+fn half_plausible_inside(runs: &Runs, j: usize, top: bool) -> bool {
+    let (len, modules, segments) = half_shape(top);
+    let w = runs.widths();
+    let g = w[j];
+    let alike = |v: f32| (0.45 * g..=2.2 * g).contains(&v);
+    let narrow = |v: f32| (0.4 * g..=2.5 * g).contains(&v);
+    // The finder has two narrow elements at the inner end and a wide one in
+    // its first three.
+    let quick = if top {
+        w[j + 9].max(w[j + 10]).max(w[j + 11]) >= 3.2 * g
+            && narrow(w[j + 12])
+            && narrow(w[j + 13])
+            && alike(w[j + 22])
+    } else {
+        w[j + 12].max(w[j + 13]).max(w[j + 14]) >= 3.2 * g
+            && narrow(w[j + 10])
+            && narrow(w[j + 11])
+            && alike(w[j + 1])
+            && alike(w[j + 23])
+    };
+    if !quick {
+        return false;
+    }
+    let at = |k: usize| runs.start(j + k);
+    let module = (runs.end(j + len - 1) - at(0)).abs() / modules;
+    if !(module >= MIN_MODULE) {
+        return false;
+    }
+    let pieces = segments.iter().filter(|s| s.len > 1).all(|s| {
+        let sum = (at(s.at + s.len) - at(s.at)).abs();
+        let expected = f32::from(s.modules) * module;
+        (sum - expected).abs() <= SCREEN_SLACK * expected
+    });
+    if !pieces {
+        return false;
+    }
+    let before = j == 0 || crate::common::quiet_before_open(runs, j, 0.0) >= QUIET * module;
+    let after = crate::common::quiet_after_open(runs, j + len - 1, 0.0) >= QUIET * module;
+    if !(before && after) {
+        return false;
+    }
+    let e: [f32; 5] = if top {
+        std::array::from_fn(|i| w[j + 9 + i])
+    } else {
+        std::array::from_fn(|i| w[j + 14 - i])
+    };
+    finder_fits(e)
+}
+
+/// Cheap necessary conditions of [`decode_half`] on the window of runs at
+/// `j`: guards alike, light areas, the piece module counts measured on run
+/// positions, and the finder near one of the nine patterns (the left one as
+/// printed, the right one reversed).
+pub(super) fn half_plausible(runs: &Runs, j: isize, top: bool) -> bool {
+    let (len, _, segments) = half_shape(top);
+    let w = runs.widths();
+    if j >= 0 && j as usize + len <= w.len() {
+        return half_plausible_inside(runs, j as usize, top);
+    }
+    let Some(module0) = half_module(runs, j, top) else {
+        return false;
+    };
+    let at = |k: isize| -> f32 {
+        w.get(usize::try_from(k).unwrap_or(usize::MAX))
+            .copied()
+            .unwrap_or(module0)
+    };
+    // The finder ends (starts) with two narrow elements, the guards are
+    // alike.
+    let g = module0;
+    let alike = |v: f32| (0.45 * g..=2.2 * g).contains(&v);
+    let narrow = |v: f32| (0.4 * g..=2.5 * g).contains(&v);
+    let cheap = if top {
+        narrow(at(j + 12)) && narrow(at(j + 13)) && alike(at(j)) && alike(at(j + 22))
+    } else {
+        narrow(at(j + 10))
+            && narrow(at(j + 11))
+            && alike(at(j))
+            && alike(at(j + 1))
+            && alike(at(j + 23))
+            && alike(at(j + 24))
+    };
+    if !cheap {
+        return false;
+    }
+    // Light areas outside the guards (not at a cut).
+    if j > 0 && crate::common::quiet_before_open(runs, j as usize, 0.0) < QUIET * module0 {
+        return false;
+    }
+    let last = j + len as isize - 1;
+    if last < w.len() as isize
+        && crate::common::quiet_after_open(runs, last as usize, 0.0) < QUIET * module0
+    {
+        return false;
+    }
+    // Piece sums on the widths.
+    let pieces = segments.iter().filter(|s| s.len > 1).all(|s| {
+        let sum: f32 = (0..s.len).map(|i| at(j + (s.at + i) as isize)).sum();
+        let expected = f32::from(s.modules) * module0;
+        (sum - expected).abs() <= SCREEN_SLACK * expected
+    });
+    if !pieces {
+        return false;
+    }
+    let e: [f32; 5] = if top {
+        std::array::from_fn(|i| at(j + 9 + i as isize))
+    } else {
+        std::array::from_fn(|i| at(j + 14 - i as isize))
+    };
+    finder_fits(e)
+}
+
+/// Five elements scaled to 15 modules lie near one of the nine patterns.
+fn finder_fits(e: [f32; 5]) -> bool {
+    let sum: f32 = e.iter().sum();
+    if !(sum.is_finite() && sum > 0.0) {
+        return false;
+    }
+    let scale = 15.0 / sum;
+    FINDERS.iter().any(|f| {
+        e.iter()
+            .zip(f)
+            .all(|(&x, &m)| (x * scale - f32::from(m)).abs() <= 1.0 + 0.12 * f32::from(m))
+    })
+}
+
+/// Reads the top or the bottom row of a Stacked or Stacked Omnidirectional
+/// symbol at run `j` and pushes it as a part hit; the symbol is read when
+/// the aggregator joins both rows ([`combine`]). Every character must be a
+/// member of its set and the finder one of the nine patterns, as for a whole
+/// symbol, but there is no checksum yet. Returns true when the shape looked
+/// like a half, whether or not it decoded.
+pub(super) fn decode_half(runs: &Runs, j: isize, top: bool, out: &mut Vec<LineHit>) -> bool {
+    let (len, modules, segments) = half_shape(top);
+    let Some(module0) = half_module(runs, j, top) else {
+        return false;
+    };
+    let view = super::rows::View::new(runs, module0);
+    let last = j + len as isize - 1;
+    let (start, end) = (view.start(j), view.end(last));
+    let module = (end - start).abs() / modules;
+    if module < MIN_MODULE {
+        return false;
+    }
+    let quiet_before = if j <= 0 {
+        f32::INFINITY
+    } else {
+        crate::common::quiet_before_open(runs, j as usize, 0.0)
+    };
+    let quiet_after = if last >= runs.len() as isize {
+        f32::INFINITY
+    } else {
+        crate::common::quiet_after_open(runs, last as usize, 0.0)
+    };
+    if quiet_before < QUIET * module || quiet_after < QUIET * module {
+        return false;
+    }
+    let mut w = [0f32; BOTTOM_RUNS];
+    for (i, x) in w[..len].iter_mut().enumerate() {
+        *x = view.width(j + i as isize);
+    }
+    for s in segments.iter().filter(|s| s.len > 1) {
+        let sum: f32 = w[s.at..s.at + s.len].iter().sum();
+        let expected = f32::from(s.modules) * module;
+        if (sum - expected).abs() > PIECE_SLACK * expected {
+            return false;
+        }
+    }
+    let mut n = [0u8; BOTTOM_RUNS];
+    let Some(q) = quantize(&w[..len], true, segments, module, TOLERANCE, &mut n[..len]) else {
+        return false;
+    };
+    let (tag, body) = if top {
+        (PART_TOP, &n[1..22])
+    } else {
+        (PART_BOTTOM, &n[2..23])
+    };
+    let ok = if top {
+        finder_of(&super::array(&body[8..13])).is_some()
+            && char_value(&super::array(&body[0..8]), true).is_some()
+            && char_value(&super::reversed(&body[13..21]), false).is_some()
+    } else {
+        finder_of(&super::reversed(&body[8..13])).is_some()
+            && char_value(&super::array(&body[0..8]), false).is_some()
+            && char_value(&super::reversed(&body[13..21]), true).is_some()
+    };
+    if !ok {
+        return true;
+    }
+    let mut text = Vec::with_capacity(1 + PART_LEN);
+    text.push(tag);
+    text.extend_from_slice(body);
+    out.push(LineHit {
+        symbology: Symbology::DataBar,
+        text,
+        addon: None,
+        start,
+        end,
+        module,
+        quality: (1.0 - q.deviation / 0.5).clamp(0.0, 1.0),
+        aim: *b"]e0",
+        checksum_verified: false,
+        short_quiet: false,
+        inverted: false,
+        start_stop: None,
+        segments: 0,
+        thin: false,
+        part: true,
+    });
+    true
+}
+
+/// The GTIN body of a top and a bottom row read by [`decode_half`] (their
+/// payloads without the tag).
+pub(super) fn combine(top: &[u8], bottom: &[u8]) -> Option<u64> {
+    if top.len() != PART_LEN || bottom.len() != PART_LEN {
+        return None;
+    }
+    let chars: [[u8; 8]; 4] = [
+        super::array(&top[0..8]),
+        super::reversed(&top[13..21]),
+        super::reversed(&bottom[13..21]),
+        super::array(&bottom[0..8]),
+    ];
+    let left = finder_of(&super::array(&top[8..13]))?;
+    let right = finder_of(&super::reversed(&bottom[8..13]))?;
+    body_of(&chars, left, right)
+}
+
 /// Reads an Omnidirectional symbol.
 /// Returns true when the shape looked like one, whether or not it decoded.
 pub(super) fn decode(row: &Row, out: &mut Vec<LineHit>) -> bool {
@@ -209,22 +526,9 @@ pub(super) fn decode(row: &Row, out: &mut Vec<LineHit>) -> bool {
         super::reversed(&n[35..43]),
         super::array(&n[22..30]),
     ];
-    if !pair_matches(checksum(&chars), 9 * left + right) {
-        return true;
-    }
-    let (Some(d1), Some(d2), Some(d3), Some(d4)) = (
-        char_value(&chars[0], true),
-        char_value(&chars[1], false),
-        char_value(&chars[2], true),
-        char_value(&chars[3], false),
-    ) else {
+    let Some(body) = body_of(&chars, left, right) else {
         return true;
     };
-    let half = |outside: u16, inside: u16| u64::from(outside) * INSIDE + u64::from(inside);
-    let body = half(d1, d2) * PAIR + half(d3, d4);
-    if body >= BODY_LIMIT {
-        return true;
-    }
     out.push(LineHit {
         symbology: Symbology::DataBar,
         text: super::element_string(body),
@@ -240,6 +544,7 @@ pub(super) fn decode(row: &Row, out: &mut Vec<LineHit>) -> bool {
         start_stop: None,
         segments: 0,
         thin: false,
+        part: false,
     });
     true
 }

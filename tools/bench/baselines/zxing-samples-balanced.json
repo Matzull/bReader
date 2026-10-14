@@ -267,7 +267,7 @@
     "rss14-2": {
       "GS1 DataBar": {
         "expected": 7,
-        "read": 0,
+        "read": 6,
         "false_positives": 0
       }
     },
@@ -292,8 +292,20 @@
         "false_positives": 0
       }
     },
-    "rssexpandedstacked-1": {},
-    "rssexpandedstacked-2": {},
+    "rssexpandedstacked-1": {
+      "GS1 DataBar Expanded": {
+        "expected": 62,
+        "read": 62,
+        "false_positives": 0
+      }
+    },
+    "rssexpandedstacked-2": {
+      "GS1 DataBar Expanded": {
+        "expected": 2,
+        "read": 2,
+        "false_positives": 0
+      }
+    },
     "telepen-1": {},
     "upca-1": {
       "UPC-A": {

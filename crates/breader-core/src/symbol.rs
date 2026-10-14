@@ -243,4 +243,10 @@ pub struct LinearMeta {
     /// GS1 DataBar Expanded: symbol characters in the row, check character
     /// included (4 to 22). `None` for other symbologies.
     pub databar_segments: Option<u8>,
+    /// GS1 DataBar Stacked, Stacked Omnidirectional and Expanded Stacked:
+    /// rows of the symbol (2 for the first two, 2 to 11 for Expanded
+    /// Stacked), which are reported as `DataBar` and `DataBarExpanded`
+    /// ([D-048](../../docs/decisions.md#d-048)). `None` for one-row symbols
+    /// and other symbologies.
+    pub databar_rows: Option<u8>,
 }
