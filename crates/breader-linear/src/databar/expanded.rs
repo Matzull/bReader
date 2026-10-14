@@ -18,15 +18,15 @@ use crate::runs::Runs;
 
 use super::message::{Bits, element_string};
 
-const MIN_CHARS: usize = 4;
-const MAX_CHARS: usize = 22;
+pub(super) const MIN_CHARS: usize = 4;
+pub(super) const MAX_CHARS: usize = 22;
 const TOLERANCE: f32 = 0.5;
 const PIECE_SLACK: f32 = 0.25;
 const QUIET: f32 = 0.8;
 
 /// The six finder patterns; characters of even position use them as
 /// printed, the others reversed.
-const FINDERS: [[u8; 5]; 6] = [
+pub(super) const FINDERS: [[u8; 5]; 6] = [
     [1, 8, 4, 1, 1],
     [3, 6, 4, 1, 1],
     [3, 4, 6, 1, 1],
@@ -103,7 +103,7 @@ pub(super) fn char_value(c: &[u8; 8]) -> Option<u16> {
 }
 
 /// Elements of character `k` in specification order.
-fn spec_order(c: &[u8; 8], k: usize) -> [u8; 8] {
+pub(super) fn spec_order(c: &[u8; 8], k: usize) -> [u8; 8] {
     if k % 2 == 1 {
         let mut r = *c;
         r.reverse();
@@ -132,6 +132,41 @@ fn checksum(chars: &[[u8; 8]], n: usize) -> u32 {
         }
     }
     sum % 211
+}
+
+/// The element string of a symbol of `chars.len()` characters, as read (odd
+/// characters and finders still as printed), with the finder `finders[p]`
+/// after character `2 * p`. `None` unless the finder patterns are the ones
+/// the size fixes, the check character agrees with the others and every
+/// character is a member of its set; shared by the one-row reader and the
+/// stacked reader.
+pub(super) fn message_of(chars: &[[u8; 8]], finders: &[[u8; 5]]) -> Option<Vec<u8>> {
+    let n = chars.len();
+    if !(MIN_CHARS..=MAX_CHARS).contains(&n) || finders.len() != finder_count(n) {
+        return None;
+    }
+    let sequence = FINDER_SEQUENCES[group_size(n)];
+    for (p, f) in finders.iter().enumerate() {
+        let mut f = *f;
+        if p % 2 == 1 {
+            f.reverse();
+        }
+        if FINDERS[usize::from(sequence[p])] != f {
+            return None;
+        }
+    }
+    let check = char_value(&spec_order(&chars[0], 0))?;
+    if usize::from(check) != 211 * (n - MIN_CHARS) + checksum(chars, n) as usize {
+        return None;
+    }
+    let mut bits = [0u8; 12 * (MAX_CHARS - 1)];
+    for (k, c) in chars.iter().enumerate().skip(1) {
+        let v = char_value(&spec_order(c, k))?;
+        for b in 0..12 {
+            bits[12 * (k - 1) + b] = ((v >> (11 - b)) & 1) as u8;
+        }
+    }
+    element_string(&Bits(&bits[..12 * (n - 1)]), n)
 }
 
 /// Runs of the right guard: space and bar when the number of finders is
@@ -203,7 +238,7 @@ pub(super) fn decode(runs: &Runs, out: &mut Vec<LineHit>) -> bool {
 }
 
 /// The first character and finder have their module counts.
-fn head_matches(w: &[f32], module: f32) -> bool {
+pub(super) fn head_matches(w: &[f32], module: f32) -> bool {
     let sum = |a: usize, b: usize| -> f32 { w[a..b].iter().sum() };
     let within =
         |s: f32, modules: f32| (s - modules * module).abs() <= PIECE_SLACK * modules * module;
@@ -300,43 +335,19 @@ fn try_symbol(runs: &Runs, j: isize, n: usize, head_module: f32, out: &mut Vec<L
     let Some(q) = quantize(widths, true, &segments[..count], module, TOLERANCE, mods) else {
         return false;
     };
-    // Finder patterns.
-    let sequence = FINDER_SEQUENCES[group_size(n)];
+    // Characters and finders as read.
     let mut chars = [[0u8; 8]; MAX_CHARS];
+    let mut finders = [[0u8; 5]; MAX_CHARS / 2];
     let mut at = 1;
     for (k, slot) in chars.iter_mut().enumerate().take(n) {
         slot.copy_from_slice(&mods[at..at + 8]);
         at += 8;
         if k % 2 == 0 {
-            let p = k / 2;
-            let mut f = [0u8; 5];
-            f.copy_from_slice(&mods[at..at + 5]);
-            if p % 2 == 1 {
-                f.reverse();
-            }
-            if FINDERS[usize::from(sequence[p])] != f {
-                return true;
-            }
+            finders[k / 2].copy_from_slice(&mods[at..at + 5]);
             at += 5;
         }
     }
-    let chars = &chars[..n];
-    let Some(check) = char_value(&spec_order(&chars[0], 0)) else {
-        return true;
-    };
-    if usize::from(check) != 211 * (n - MIN_CHARS) + checksum(chars, n) as usize {
-        return true;
-    }
-    let mut bits = [0u8; 12 * (MAX_CHARS - 1)];
-    for (k, c) in chars.iter().enumerate().skip(1) {
-        let Some(v) = char_value(&spec_order(c, k)) else {
-            return true;
-        };
-        for b in 0..12 {
-            bits[12 * (k - 1) + b] = ((v >> (11 - b)) & 1) as u8;
-        }
-    }
-    let Some(text) = element_string(&Bits(&bits[..12 * (n - 1)]), n) else {
+    let Some(text) = message_of(&chars[..n], &finders[..finder_count(n)]) else {
         return true;
     };
     out.push(LineHit {
@@ -354,6 +365,7 @@ fn try_symbol(runs: &Runs, j: isize, n: usize, head_module: f32, out: &mut Vec<L
         start_stop: None,
         segments: n as u8,
         thin: false,
+        part: false,
     });
     true
 }

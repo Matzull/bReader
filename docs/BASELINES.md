@@ -635,3 +635,20 @@ False positives of zbar:
 - BarBeR subset: 25 EAN-13 (wrong digits of real symbols, e.g. `8083882032262` against `8083822038262`), 3 ITF, 1 Code 128.
 - zxing-samples: 50 DataBar Expanded (the stacked `rssexpandedstacked-*` labels are unsupported, so any read counts as a false positive, as for zxing-cpp's 64), 9 QR (Japanese samples such as `d-qr.net` whose bytes differ from the label), 11 EAN-13, 3 Code 39 (e.g. `12+A+B`), 1 Code 128.
 - synth: 38 ITF (fragments of ITF symbols on the rotated, perspective, noisy and low-resolution classes), 4 QR, 1 DataBar Expanded.
+
+## GS1 DataBar stacked (2026-10-14)
+
+[D-048](decisions.md#d-048): Stacked, Stacked Omnidirectional and Expanded Stacked, reported as `DataBar` / `DataBarExpanded`. Release build, 4 threads, synthetic sets generated into worktree-local directories (24 new images in seed 1, 56 in seed 2024, after the one-row DataBar ones; every earlier image byte-identical).
+
+| Set | Expected | breader Fast / Balanced / Exhaustive |
+|---|---|---|
+| zxing `rss14-2` (the 7 stacked Omnidirectional) | 7 | 5 / 6 / 6 (was 0) |
+| zxing `rssexpandedstacked-1`, `-2` (labels now supported) | 64 | 64 / 64 / 64 (Fast 222 of 226 Expanded in total) |
+| zxing DataBar / Limited / Expanded in total | 20 / 2 / 226 | 15 / 2 / 222, 16 / 2 / 226, 16 / 2 / 226 |
+| synth seed 1 DataBar / Expanded (Balanced) | 26 / 19 | 26 / 18 |
+| synth seed 2024 DataBar / Expanded | 8 / 4 per class | Balanced: 7-8 / 4 per class except perspective (5, 2); no read dropped |
+
+- **False positives: 0** in the gates of tier a (synth seed 1 and 2024, challenging-images, pdf417-small, zxing samples including the 46 `falsepositives-*` images and the negative synthetic class). Tiers b and c1 were not run in this change (another c1 held the machine); run c1 before merging, a new symbology is FP exposure.
+- **Misses.** `rss14-2/22` at every effort (blurred photograph, fewer than 23 runs per row) and `rss14-2/21` at Fast. Synthetic misses are tilted perspective images whose rows are too long for a plan line.
+- **Latency** (`video-bench --engines fast --filter 1080p`, 3 interleaved rounds against a build of the base commit, median of the per-video p50): median video 7.42 to 7.58 ms (+0.16 ms); per video +0.0 to +0.7 ms (`batch_code39` 12.98 to 13.65). A first version without the finder screens cost +3.9 ms on `batch_code39`; callgrind on 25 frames of it: DataBar decoders 112 M to about 240 M instructions, whole frame +4.5 %.
+- **Baselines.** `zxing-samples-*`, `synth-seed1-balanced`, `synth-seed2024-*` rewritten (additions only: no count went down).

@@ -496,6 +496,7 @@ impl EanDecoder {
             start_stop: None,
             segments: 0,
             thin: false,
+            part: false,
         }
     }
 

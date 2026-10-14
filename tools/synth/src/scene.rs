@@ -422,6 +422,31 @@ pub fn generate_rmqr(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Ve
     }
 }
 
+/// GS1 DataBar Stacked, Stacked Omnidirectional and Expanded Stacked images
+/// of a class (in turn), generated after the DataBar ones of one row so that
+/// every earlier image stays byte-identical.
+pub fn generate_databar_stacked(
+    class: Class,
+    j: usize,
+    seed: u64,
+) -> Option<(GrayImage, Vec<Annotation>)> {
+    let mut rng = image_rng(seed.wrapping_add(0x57AC_6ED0), class, j);
+    let rng = &mut rng;
+    match class {
+        Class::Negative | Class::Datamatrix | Class::Multi => None,
+        _ => {
+            let sym = [
+                Sym::DataBarStacked,
+                Sym::DataBarStackedOmni,
+                Sym::DataBarExpandedStacked,
+            ][j % 3];
+            let (mut img, anns) = single(class, sym, None, rng);
+            degrade(class, &mut img, rng);
+            Some((img, anns))
+        }
+    }
+}
+
 /// GS1 DataBar images of a class (Omnidirectional, Limited and Expanded in
 /// turn), generated after the Micro QR ones so that every earlier image
 /// stays byte-identical.

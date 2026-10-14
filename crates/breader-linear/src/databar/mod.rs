@@ -15,6 +15,10 @@ mod message;
 mod omni;
 mod quantize;
 mod rank;
+mod rows;
+pub(crate) mod stacked;
+#[cfg(test)]
+mod stacked_tests;
 
 use breader_core::Symbology;
 
@@ -44,6 +48,9 @@ impl LinearDecoder for DataBarDecoder {
         }
         let n = runs.len() as isize;
         let mut started = expanded && expanded::decode(runs, out);
+        // Rows of the stacked symbols; the aggregator joins them.
+        started |= expanded && rows::decode(runs, out);
+        started |= omni && halves(runs, out);
         // A bar guard cut by the start of the profile is a run of its own
         // that the edges do not show: window -1.
         let mut j: isize = if runs.is_bar(0) { 0 } else { -1 };
@@ -76,6 +83,23 @@ impl LinearDecoder for DataBarDecoder {
     }
 }
 
+/// Top and bottom rows of Stacked and Stacked Omnidirectional symbols. A
+/// bar guard cut by a border of the profile is run -1 or run `runs.len()`.
+fn halves(runs: &Runs, out: &mut Vec<crate::decoder::LineHit>) -> bool {
+    let n = runs.len() as isize;
+    let mut started = false;
+    let mut j: isize = if runs.is_bar(0) { 0 } else { -1 };
+    while j + omni::TOP_RUNS as isize <= n + 1 {
+        for top in [true, false] {
+            if omni::half_plausible(runs, j, top) {
+                started |= omni::decode_half(runs, j, top, out);
+            }
+        }
+        j += 2;
+    }
+    started
+}
+
 /// Cheap tests on the runs at `j` that reject most windows of a busy line:
 /// every finder of Omnidirectional ends, and the right one starts, with two
 /// narrow elements; the check pattern of Limited has no element wider than
@@ -96,7 +120,12 @@ fn screen(w: &[f32], j: isize) -> (bool, bool) {
 /// window of runs at `j` without building its [`Row`]: the module from the
 /// span, and the light areas before and after as `Row::at` measures them.
 fn opening_ok(runs: &Runs, j: usize, span_modules: f32, quiet: (f32, f32)) -> bool {
-    let last = j + ROW_RUNS - 1;
+    opening_ok_n(runs, j, ROW_RUNS, span_modules, quiet)
+}
+
+/// [`opening_ok`] for a window of `len` runs.
+fn opening_ok_n(runs: &Runs, j: usize, len: usize, span_modules: f32, quiet: (f32, f32)) -> bool {
+    let last = j + len - 1;
     let span = (runs.end(last) - runs.start(j)).abs();
     let module = span / span_modules;
     if module < crate::common::MIN_MODULE {

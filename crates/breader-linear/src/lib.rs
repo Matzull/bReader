@@ -22,6 +22,8 @@ mod reader;
 mod robustness;
 mod runs;
 #[cfg(test)]
+mod stack_testutil;
+#[cfg(test)]
 mod testutil;
 
 pub use reader::LinearReader;

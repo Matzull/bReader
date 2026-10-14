@@ -276,6 +276,7 @@ impl Symbol {
                         .map(|(a, b)| (char::from(a).to_string(), char::from(b).to_string())),
                 )?;
                 d.set_item("databar_segments", m.databar_segments)?;
+                d.set_item("databar_rows", m.databar_rows)?;
             }
             SymbolMeta::DataMatrix(m) => {
                 d.set_item("kind", "datamatrix")?;

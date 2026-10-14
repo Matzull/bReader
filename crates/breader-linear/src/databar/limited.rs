@@ -242,6 +242,7 @@ pub(super) fn decode(row: &Row, out: &mut Vec<LineHit>) -> bool {
         start_stop: None,
         segments: 0,
         thin: false,
+        part: false,
     });
     true
 }

@@ -210,7 +210,7 @@ Work items, in priority order. Each must keep read counts and 0 FP unchanged.
 
 ## 6. Planned extensions
 
-- **More symbologies**: Micro QR, DataBar Stacked variants and others as new `SymbologyReader` crates reusing the cached binarizations.
+- **More symbologies**: others as new `SymbologyReader` crates reusing the cached binarizations.
 
 ### Known technical debt
 

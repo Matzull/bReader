@@ -32,6 +32,10 @@ pub(crate) struct LineHit {
     pub segments: u8,
     /// Read with the relaxed element rules for small modules (Code 39).
     pub thin: bool,
+    /// Half or row of a stacked GS1 DataBar: `text` is then the quantized
+    /// elements (see `databar::stacked`), not a message, and the aggregator
+    /// joins the parts of one symbol instead of returning them.
+    pub part: bool,
 }
 
 /// The subset of [`ScanOptions`] the decoders consume, copied once per scan.
@@ -159,6 +163,7 @@ mod tests {
                 start_stop: None,
                 segments: 0,
                 thin: false,
+                part: false,
             });
             false
         }

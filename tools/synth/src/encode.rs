@@ -29,6 +29,9 @@ pub enum Sym {
     DataBar,
     DataBarLimited,
     DataBarExpanded,
+    DataBarStacked,
+    DataBarStackedOmni,
+    DataBarExpandedStacked,
 }
 
 impl Sym {
@@ -70,9 +73,9 @@ impl Sym {
             Sym::Codabar => "CODABAR",
             Sym::MicroQr => "MICRO_QR_CODE",
             Sym::Rmqr => "RMQR_CODE",
-            Sym::DataBar => "DATABAR",
+            Sym::DataBar | Sym::DataBarStacked | Sym::DataBarStackedOmni => "DATABAR",
             Sym::DataBarLimited => "DATABAR_LIMITED",
-            Sym::DataBarExpanded => "DATABAR_EXPANDED",
+            Sym::DataBarExpanded | Sym::DataBarExpandedStacked => "DATABAR_EXPANDED",
         }
     }
 }
@@ -260,7 +263,10 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
         | Sym::Rmqr
         | Sym::DataBar
         | Sym::DataBarLimited
-        | Sym::DataBarExpanded => unreachable!("not linear"),
+        | Sym::DataBarExpanded
+        | Sym::DataBarStacked
+        | Sym::DataBarStackedOmni
+        | Sym::DataBarExpandedStacked => unreachable!("not linear"),
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
@@ -737,8 +743,80 @@ fn encode_databar(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     Encoded::linear(text, sym.label(), &bars, height)
 }
 
+/// GS1 DataBar Stacked, Stacked Omnidirectional or Expanded Stacked from the
+/// independent `anyd` encoder. The encoder's rows are one module tall: every
+/// data row is repeated to a height drawn here (the separators stay one
+/// module), so the grid is `cols` by the sum of the row heights with
+/// square cells. Expanded Stacked takes two or three blocks per row, so that
+/// most payloads span several rows.
+fn encode_databar_stacked(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
+    use anyd::codes::databar::DataBarEncoder;
+    use anyd::output::Encoding;
+    use anyd::traits::Encode;
+    let enc = DataBarEncoder::new();
+    let fail = "encoder rejected generated payload";
+    let (text, symbol, data_rows) = match sym {
+        Sym::DataBarStacked => {
+            let b = gtin_body(rng, false);
+            (
+                format!("01{b}{}", body_check(&b)),
+                enc.build_stacked(b.as_bytes()),
+                [0, 2].to_vec(),
+            )
+        }
+        Sym::DataBarStackedOmni => {
+            let b = gtin_body(rng, false);
+            (
+                format!("01{b}{}", body_check(&b)),
+                enc.build_stacked_omni(b.as_bytes()),
+                [0, 4].to_vec(),
+            )
+        }
+        _ => {
+            let t = expanded_payload(rng);
+            let columns = rng.random_range(2..=3usize);
+            let symbol = enc.build_expanded_stacked(t.as_bytes(), columns);
+            (t, symbol, Vec::new())
+        }
+    };
+    let Encoding::Matrix(m) = enc.encode(&symbol.expect(fail)).expect(fail) else {
+        unreachable!("stacked DataBar is a matrix");
+    };
+    let is_data = |y: usize| {
+        if data_rows.is_empty() {
+            y.is_multiple_of(4)
+        } else {
+            data_rows.contains(&y)
+        }
+    };
+    let low = if sym == Sym::DataBarStacked { 8 } else { 20 };
+    let data_h = rng.random_range(low..=low + 14usize);
+    let mut modules = Vec::new();
+    let mut rows = 0;
+    for y in 0..m.height() {
+        let reps = if is_data(y) { data_h } else { 1 };
+        for _ in 0..reps {
+            modules.extend((0..m.width()).map(|x| m.get(x, y)));
+            rows += 1;
+        }
+    }
+    Encoded {
+        text,
+        format: sym.label(),
+        modules,
+        cols: m.width(),
+        rows,
+        cell_h: 1.0,
+        qz_x: 5.0,
+        qz_y: 5.0,
+    }
+}
+
 pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
     match sym {
+        Sym::DataBarStacked | Sym::DataBarStackedOmni | Sym::DataBarExpandedStacked => {
+            encode_databar_stacked(rng, sym)
+        }
         Sym::DataBar | Sym::DataBarLimited | Sym::DataBarExpanded => encode_databar(rng, sym),
         Sym::Rmqr => {
             let pick = rng.random_range(0..RMQR_VARIANTS);
@@ -862,6 +940,9 @@ mod tests {
                 Sym::DataBar,
                 Sym::DataBarLimited,
                 Sym::DataBarExpanded,
+                Sym::DataBarStacked,
+                Sym::DataBarStackedOmni,
+                Sym::DataBarExpandedStacked,
             ]) {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);

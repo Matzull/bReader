@@ -102,13 +102,22 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "CODE39" | "CODE39EXTENDED" => Some(Symbology::Code39),
         "ITF" | "INTERLEAVED2OF5" => Some(Symbology::Itf),
         "CODABAR" => Some(Symbology::Codabar),
-        "DATABAR" | "GS1DATABAR" | "RSS14" | "DATABAROMNIDIRECTIONAL" | "DATABARTRUNCATED" => {
-            Some(Symbology::DataBar)
-        }
+        // The stacked forms are reported as the one-row symbology (D-048), as zxing-cpp does.
+        "DATABAR"
+        | "GS1DATABAR"
+        | "RSS14"
+        | "DATABAROMNIDIRECTIONAL"
+        | "DATABARTRUNCATED"
+        | "DATABARSTACKED"
+        | "RSS14STACKED"
+        | "DATABARSTACKEDOMNIDIRECTIONAL"
+        | "RSS14STACKEDOMNIDIRECTIONAL" => Some(Symbology::DataBar),
         "DATABARLIMITED" | "GS1DATABARLIMITED" | "RSSLIMITED" => Some(Symbology::DataBarLimited),
-        "DATABAREXPANDED" | "GS1DATABAREXPANDED" | "RSSEXPANDED" => {
-            Some(Symbology::DataBarExpanded)
-        }
+        "DATABAREXPANDED"
+        | "GS1DATABAREXPANDED"
+        | "RSSEXPANDED"
+        | "DATABAREXPANDEDSTACKED"
+        | "RSSEXPANDEDSTACKED" => Some(Symbology::DataBarExpanded),
         "DATAMATRIX" => Some(Symbology::DataMatrix),
         "PDF417" => Some(Symbology::Pdf417),
         "AZTEC" | "AZTECCODE" => Some(Symbology::Aztec),
