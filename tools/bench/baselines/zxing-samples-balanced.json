@@ -202,7 +202,7 @@
     "pdf417-3": {
       "PDF417": {
         "expected": 16,
-        "read": 14,
+        "read": 15,
         "false_positives": 0
       }
     },

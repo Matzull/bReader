@@ -287,7 +287,7 @@
       },
       "PDF417": {
         "expected": 67,
-        "read": 24,
+        "read": 35,
         "false_positives": 0
       },
       "QR Code": {

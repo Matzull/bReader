@@ -20,6 +20,8 @@ pub(crate) struct Scanner {
     edges: Edges,
     pub runs: Runs,
     profile: Vec<u8>,
+    /// Sample sums of the lines of `load_mean`.
+    sum: Vec<u32>,
     /// Patterns found on the last loaded line.
     pub marks: Vec<RawMark>,
     /// Line parameter of profile sample 0.
@@ -60,41 +62,91 @@ impl Scanner {
         inverted: bool,
         params: &EdgeParams,
     ) -> bool {
+        self.load_mean(img, &[from], dir, range, inverted, params)
+    }
+
+    /// As [`load`](Self::load) for parallel lines that start at `froms`: the
+    /// profile is the mean of their samples, so that a row of the symbol
+    /// that is only a few pixels high is read without the noise of any one
+    /// line. A line that does not reach as far as the first is left out.
+    pub(crate) fn load_mean(
+        &mut self,
+        img: &ImageView<'_>,
+        froms: &[Point],
+        dir: Vec2,
+        range: (f32, f32),
+        inverted: bool,
+        params: &EdgeParams,
+    ) -> bool {
         self.marks.clear();
         // A line along the pixel grid is read on whole pixels: interpolating
         // between pixels would blur modules that are only a few pixels wide.
         let axis = (dir.0.abs() == 1.0 && dir.1 == 0.0) || (dir.0 == 0.0 && dir.1.abs() == 1.0);
-        let snapped = if axis {
-            Point::new(from.x.round(), from.y.round())
-        } else {
-            from
-        };
-        let shift = (snapped.x - from.x) * dir.0 + (snapped.y - from.y) * dir.1;
-        let range = (range.0 - shift, range.1 - shift);
-        let from = snapped;
-        let Some((lo, hi)) = clip(from, dir, range.0, range.1, img.width(), img.height()) else {
+        let mut layout: Option<(usize, usize)> = None;
+        let mut sum = std::mem::take(&mut self.sum);
+        let mut count = 0u32;
+        for &from in froms {
+            let snapped = if axis {
+                Point::new(from.x.round(), from.y.round())
+            } else {
+                from
+            };
+            let shift = (snapped.x - from.x) * dir.0 + (snapped.y - from.y) * dir.1;
+            let range = (range.0 - shift, range.1 - shift);
+            let from = snapped;
+            let Some((lo, hi)) = clip(from, dir, range.0, range.1, img.width(), img.height())
+            else {
+                continue;
+            };
+            let line = Scanline::new(at(from, dir, lo), at(from, dir, hi));
+            let oblique = Oblique::new(&line);
+            let pad_lo = (lo - range.0).clamp(0.0, BORDER_PAD).ceil() as usize;
+            let pad_hi = (range.1 - hi).clamp(0.0, BORDER_PAD).ceil() as usize;
+            match layout {
+                None => {
+                    layout = Some((pad_lo, pad_hi));
+                    sum.clear();
+                    sum.resize(oblique.len, 0);
+                    self.t0 = lo + shift - pad_lo as f32;
+                    self.profile.clear();
+                    self.profile.resize(oblique.len, 0);
+                }
+                Some(_) => {
+                    if oblique.len != sum.len()
+                        || (lo + shift - self.t0 - pad_lo as f32).abs() > 0.5
+                    {
+                        continue;
+                    }
+                }
+            }
+            oblique.sample(img, 0, inverted, &mut self.profile);
+            for (acc, &v) in sum.iter_mut().zip(&self.profile) {
+                *acc += u32::from(v);
+            }
+            count += 1;
+        }
+        let Some((pad_lo, pad_hi)) = layout else {
+            self.sum = sum;
             return false;
         };
-        let line = Scanline::new(at(from, dir, lo), at(from, dir, hi));
-        let oblique = Oblique::new(&line);
-        let pad_lo = (lo - range.0).clamp(0.0, BORDER_PAD).ceil() as usize;
-        let pad_hi = (range.1 - hi).clamp(0.0, BORDER_PAD).ceil() as usize;
+        let body = sum.len();
         self.profile.clear();
-        self.profile.resize(pad_lo + oblique.len + pad_hi, 255);
-        let body = pad_lo..pad_lo + oblique.len;
-        oblique.sample(img, 0, inverted, &mut self.profile[body.clone()]);
+        self.profile.resize(pad_lo + body + pad_hi, 255);
+        for (slot, &acc) in self.profile[pad_lo..pad_lo + body].iter_mut().zip(&sum) {
+            *slot = ((acc + count / 2) / count) as u8;
+        }
+        self.sum = sum;
         // Pad with the light level of the line, not a fixed white.
         if pad_lo + pad_hi > 0 {
-            let light = self.profile[body.clone()]
+            let light = self.profile[pad_lo..pad_lo + body]
                 .iter()
                 .copied()
                 .max()
                 .unwrap_or(255);
             self.profile[..pad_lo].fill(light);
             let n = self.profile.len();
-            self.profile[body.end..n].fill(light);
+            self.profile[pad_lo + body..n].fill(light);
         }
-        self.t0 = lo + shift - pad_lo as f32;
         self.detector.detect(&self.profile, params, &mut self.edges);
         Runs::from_edges(&self.edges, &mut self.runs);
         if self.runs.len() < 8 {
@@ -162,6 +214,27 @@ mod tests {
         let x = from.x + s.t_of(start.from);
         assert!((x - 19.5).abs() < 1.0, "{x}");
         assert!((s.pos_of(s.t_of(7.0)) - 7.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_mean_of_parallel_lines_equals_the_line_when_they_agree() {
+        let (data, w, h) = image_with_start(2);
+        let img = ImageView::from_packed(&data, w, h).unwrap();
+        let edge = EdgeParams::fine();
+        let range = (-5.0, 150.0);
+        let mut one = Scanner::default();
+        assert!(one.load(&img, Point::new(10.0, 4.0), (1.0, 0.0), range, false, &edge));
+        let froms = [
+            Point::new(10.0, 3.0),
+            Point::new(10.0, 4.0),
+            Point::new(10.0, 5.0),
+        ];
+        let mut mean = Scanner::default();
+        assert!(mean.load_mean(&img, &froms, (1.0, 0.0), range, false, &edge));
+        assert_eq!(one.marks.len(), mean.marks.len());
+        assert!((one.t_of(3.0) - mean.t_of(3.0)).abs() < 1e-6);
+        let start = mean.marks.iter().find(|m| m.kind == MarkKind::Start);
+        assert!(start.is_some());
     }
 
     #[test]

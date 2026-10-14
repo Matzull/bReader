@@ -11,7 +11,7 @@ use breader_linear::stacked::{EdgeParams, Mark, MarkKind, MarkSet, RawMark, scan
 
 use crate::detect::{Boundary, grow, grow_other, rank_seeds};
 use crate::geom::{Vec2, at, dot, perp, sub, unit};
-use crate::grid::{Obs, Solved, solve};
+use crate::grid::{Obs, Solved, central_lines, lines_with_rows, pitch_fit, solve};
 use crate::row::{Entry, RowRead, walk};
 use crate::scan::Scanner;
 
@@ -62,6 +62,15 @@ const MAX_MODULES: f32 = 17.0 * 33.0 + 18.0;
 const MAX_LINES: usize = 700;
 /// Row lines stay at most this far apart, in modules.
 const LINE_SPACING: f32 = 1.25;
+/// Line spacing of the dense pass for rows only a couple of modules high, in
+/// modules.
+const DENSE_SPACING: f32 = 0.15;
+/// Dense lines with a row number needed before the row pitch is fitted.
+const MIN_DENSE_ROWS: usize = 12;
+/// Lines averaged per row in the dense pass, and the half width of their
+/// spread in row pitches.
+const MEAN_LINES: usize = 5;
+const MEAN_HALF: f32 = 0.25;
 /// Clean codewords on the sampled lines that make a tilted reading worth a
 /// full pass.
 const MIN_TILT_SCORE: usize = 24;
@@ -168,8 +177,8 @@ impl Work {
         b: &Boundary,
         edge: &EdgeParams,
         snap: bool,
-        tilt: f32,
-        fan: f32,
+        (tilt, fan): (f32, f32),
+        dense: bool,
     ) -> Option<Found> {
         let m = b.module;
         let base = turn(b.rows, tilt);
@@ -180,14 +189,15 @@ impl Work {
         } else {
             None
         };
+        let spacing = if dense { DENSE_SPACING } else { LINE_SPACING };
         let step = if axis.is_some() {
             if m < 2.5 {
                 1.0
             } else {
-                (LINE_SPACING * m).round()
+                (spacing * m).round().max(1.0)
             }
         } else {
-            (LINE_SPACING * m).max(0.8)
+            (spacing * m).max(0.8)
         };
         let rows = axis.unwrap_or(base);
         let (lo, hi) = (b.lo - 0.5 * step, b.hi + 0.5 * step);
@@ -228,7 +238,20 @@ impl Work {
         if self.obs.len() < 3 {
             return None;
         }
-        let solved = solve(&self.obs)?;
+        let solved = if dense {
+            if lines_with_rows(&self.obs) < MIN_DENSE_ROWS {
+                return None;
+            }
+            let fit = pitch_fit(&self.obs)?;
+            // Mean profiles per row and the single lines that lie in a row
+            // vote together: neither reads every row alone.
+            let mut all = self.mean_rows(img, b, edge, (rows, fan), fit, reach);
+            all.extend(central_lines(&self.obs).unwrap_or_default());
+            all.sort_by(|a, c| a.t.total_cmp(&c.t));
+            solve(&all)?
+        } else {
+            solve(&self.obs)?
+        };
         if width == 0.0 {
             let mean_module: f32 =
                 self.obs.iter().map(|o| o.read.module).sum::<f32>() / self.obs.len() as f32;
@@ -245,6 +268,55 @@ impl Work {
             },
             span: (b.lo, b.hi),
         })
+    }
+
+    /// One observation per row of a dense pass whose row pitch is known:
+    /// the mean profile of a few lines around the row's centre.
+    fn mean_rows(
+        &mut self,
+        img: &ImageView<'_>,
+        b: &Boundary,
+        edge: &EdgeParams,
+        (rows, fan): (Vec2, f32),
+        (slope, offset): (f32, f32),
+        reach: f32,
+    ) -> Vec<Obs> {
+        let (t_lo, t_hi) = match (self.obs.first(), self.obs.last()) {
+            (Some(a), Some(c)) => (a.t, c.t),
+            _ => return Vec::new(),
+        };
+        let (r_a, r_b) = (slope * t_lo + offset, slope * t_hi + offset);
+        let (first, last) = (
+            r_a.min(r_b).ceil().max(0.0) as usize,
+            r_a.max(r_b).floor() as usize,
+        );
+        let pitch = 1.0 / slope.abs();
+        let n = MEAN_LINES;
+        let half = MEAN_HALF;
+        let mut out = Vec::new();
+        let mut origins = Vec::with_capacity(n);
+        for r in first..=last {
+            let t = (r as f32 - offset) / slope;
+            let q = b.line.point(t);
+            let spec = row_spec(b, fanned(rows, fan, b, t), q, reach);
+            origins.clear();
+            for j in 0..n {
+                let d = if n > 1 {
+                    (j as f32 / (n - 1) as f32 - 0.5) * 2.0 * half * pitch
+                } else {
+                    0.0
+                };
+                let p = b.line.point(t + d);
+                origins.push(Point::new(
+                    spec.origin.x + p.x - q.x,
+                    spec.origin.y + p.y - q.y,
+                ));
+            }
+            if let Some((read, _)) = self.read_mean(img, &spec, &origins, edge) {
+                out.push(Obs { t, read });
+            }
+        }
+        out
     }
 
     /// How well rows along `rows` read: the clean codewords on a few lines.
@@ -291,7 +363,7 @@ impl Work {
             }
         }
         (best.0 >= MIN_TILT_SCORE)
-            .then(|| self.read_straight(img, b, edge, false, best.1, best.2))
+            .then(|| self.read_straight(img, b, edge, false, (best.1, best.2), false))
             .flatten()
     }
 
@@ -361,16 +433,21 @@ impl Work {
         spec: &LineSpec,
         edge: &EdgeParams,
     ) -> Option<(RowRead, Option<Point>)> {
+        self.read_mean(img, spec, &[spec.origin], edge)
+    }
+
+    /// As `read_line` on the mean profile of parallel lines starting at
+    /// `origins`.
+    fn read_mean(
+        &mut self,
+        img: &ImageView<'_>,
+        spec: &LineSpec,
+        origins: &[Point],
+        edge: &EdgeParams,
+    ) -> Option<(RowRead, Option<Point>)> {
         let m = spec.module;
         let s = &mut self.scanner;
-        if !s.load(
-            img,
-            spec.origin,
-            spec.dir,
-            (0.0, spec.len),
-            spec.inverted,
-            edge,
-        ) {
+        if !s.load_mean(img, origins, spec.dir, (0.0, spec.len), spec.inverted, edge) {
             return None;
         }
         let ok =
@@ -446,13 +523,23 @@ impl Work {
         edge: &EdgeParams,
     ) -> Option<Found> {
         if axis_aligned(b.rows).is_some()
-            && let Some(f) = self.read_straight(img, b, edge, true, 0.0, 0.0)
+            && let Some(f) = self.read_straight(img, b, edge, true, (0.0, 0.0), false)
         {
             return Some(f);
         }
-        if let Some(f) = self.read_straight(img, b, edge, false, 0.0, 0.0) {
+        if let Some(f) = self.read_straight(img, b, edge, false, (0.0, 0.0), false) {
             return Some(f);
         }
+        self.read_far_side(img, b, edge)
+    }
+
+    /// The warped read from the far side the straight pass saw.
+    fn read_far_side(
+        &mut self,
+        img: &ImageView<'_>,
+        b: &Boundary,
+        edge: &EdgeParams,
+    ) -> Option<Found> {
         if self.far.len() < 4 {
             return None;
         }
@@ -677,6 +764,11 @@ fn scan_with(work: &mut Work, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>)
         let mut found = work.read_symbol(&img, &boundary, &fine);
         if found.is_none() && params.smooth_retry {
             found = work.read_symbol(&img, &boundary, &smooth);
+        }
+        // Rows only a couple of modules high (excise stamps): dense lines,
+        // voted at the row pitch. Not at Fast, where it would only cost.
+        if found.is_none() && params.smooth_retry {
+            found = work.read_straight(&img, &boundary, &smooth, false, (0.0, 0.0), true);
         }
         // The other end: grown from an earlier seed, or from a pattern that
         // lies where it should.

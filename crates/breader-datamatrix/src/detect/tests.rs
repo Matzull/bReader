@@ -16,7 +16,7 @@ pub(crate) fn quad_error(a: &[Point; 4], b: &[Point; 4]) -> f32 {
 
 fn best_candidate(bin: &BitMatrix, inverted: bool, truth: &[Point; 4]) -> Option<(f32, usize)> {
     let mut d = Detector::default();
-    d.find(bin, inverted, 3, 128, 32);
+    d.find(bin, inverted, 0, 3, 128, 32);
     d.candidates
         .iter()
         .enumerate()
@@ -92,7 +92,7 @@ fn no_panic_and_bounded_on_junk() {
     for img in &images {
         for inverted in [false, true] {
             let t = std::time::Instant::now();
-            d.find(img, inverted, 4, 128, 32);
+            d.find(img, inverted, 0, 4, 128, 32);
             assert!(t.elapsed().as_millis() < 500);
             assert!(d.candidates.len() <= 32);
         }

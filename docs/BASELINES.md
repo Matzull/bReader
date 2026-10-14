@@ -61,7 +61,7 @@ Balanced is below zxing-cpp's p50 on the three photo sets and above it on the zx
 
 ### Fast at 1080p (video-bench)
 
-`video-bench data/dynamsoft/video-based-testing --engines fast,balanced --filter 1080p`, 3 rounds, per-frame p50 in ms, median over the rounds (the method of [Phase D latency](#phase-d-latency-2026-10-12)). The target is 10 ms at Fast.
+`video-bench data/dynamsoft/video-based-testing --engines fast,balanced --filter 1080p`, 3 rounds, per-frame p50 in ms, median over the rounds (the method of [Phase D latency](#phase-d-latency-2026-10-12)). The target (since 2026-10-13) is p50 <= 10 ms on the median video and <= 13 ms on the worst; the original target was 10 ms on every video.
 
 | Video | Fast | Balanced |
 |---|---|---|
@@ -121,6 +121,21 @@ zxing-cpp samples (794 symbols; here the gaps are largest, mostly in classes wit
 challenging-images (448): Code 128 41 against 28 (+13), QR Code 229 / 0 against 220 / 1 (+9), Data Matrix 45 against 44 (+1), UPC-A 71 against 70 (+1); ITF 3 against 4 (-1); ties EAN-13 (17), EAN-8, Code 39 (1) and PDF417 (3).
 
 Ranked gaps where breader trails zxing-cpp (reads, Balanced; QR on BarBeR is closed, see [the QR update](#status-2026-10-14-qr-wide-aspect-tier)): Code 39 on BarBeR (-21), ITF on zxing-samples (-13), ITF on BarBeR (-11), PDF417 on BarBeR (-10), GS1 DataBar on zxing-samples (-7), Data Matrix (-6 on zxing-samples, -4 on BarBeR), EAN-13 on zxing-samples (-6), Code 39 on the BarBeR subset (-6). The v1 target "read rate >= zxing-cpp per class" is therefore still not met on real photos for QR Code, Code 39, ITF, PDF417 and Data Matrix; breader leads on Code 128, EAN-13, UPC-A and Aztec on BarBeR and on Code 128 and QR Code on challenging-images, with 0 false positives against zxing-cpp's 91 on BarBeR.
+
+
+## Status 2026-10-14: Data Matrix Fast level stage, PDF417 row pitch
+
+[D-046](decisions.md#d-046) and [D-047](decisions.md#d-047), on main `8d6115d` plus these changes. Tier c1 passed with 0 false positives on every set. Reads that moved (everything else is identical to the tables above):
+
+| Set / effort / class | Before | After |
+|---|---|---|
+| BarBeR full, Fast, Data Matrix (Deal Kaist) | 23 | 24 |
+| BarBeR full, Fast, Data Matrix (Open Food Facts) | 1 | 2 |
+| BarBeR full, Balanced, PDF417 (ZVZ-real) | 26 | 33 |
+| BarBeR full, Exhaustive, PDF417 (ZVZ-real) | 24 | 35 |
+| zxing samples, Balanced and Exhaustive, PDF417 (`pdf417-3`) | 14 | 15 |
+
+The BarBeR full Fast total is 5451 to 5453; PDF417 at Fast stays 25 of 67. Latency (interleaved old and new, 3 rounds): challenging-images Balanced p50 20.5 / 19.95 / 20.8 to 19.7 / 19.75 / 19.9 ms (no change within noise), `batch_datamatrix_1080p` Fast p50 11.2 to 11.1 ms. The Fast target is met under the revised definition (median video 7.65 ms, worst 12.4 ms; [v1 targets](#v1-targets-confirmed-2026-10-07)).
 
 ## Dynamsoft `challenging-images`
 
@@ -240,7 +255,7 @@ Each cell is before -> after edge relocation -> after both changes (video: befor
 | Read rate, challenging-images | ≥ 86 % (zxing-cpp level) |
 | Read rate, synth | ≥ 82 % overall, ≥ zxing-cpp in every class |
 | Latency, Balanced | p50 ≤ zxing-cpp on both datasets |
-| Latency, Fast, 1080p frame | p50 ≤ 10 ms |
+| Latency, Fast, 1080p frame | p50 ≤ 10 ms on the median video and ≤ 13 ms on the worst (owner decision 2026-10-13; revised from "p50 ≤ 10 ms" on every video). **Met** with the numbers of [Fast at 1080p](#fast-at-1080p-video-bench): median video 7.65 ms, worst `batch_code39` 12.4 ms |
 
 ## Data Matrix (2026-10-08)
 

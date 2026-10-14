@@ -51,7 +51,7 @@
       },
       "Data Matrix": {
         "expected": 33,
-        "read": 23,
+        "read": 24,
         "false_positives": 0
       },
       "EAN-13": {
@@ -159,7 +159,7 @@
     "Open Food Facts": {
       "Data Matrix": {
         "expected": 2,
-        "read": 1,
+        "read": 2,
         "false_positives": 0
       },
       "EAN-13": {

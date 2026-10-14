@@ -405,11 +405,14 @@ fn row_extent(plane: Plane<'_>, y: usize, x0: usize, x1: usize) -> Option<(usize
 
 impl Detector {
     /// Finds quad candidates of one polarity at the given pooling levels
-    /// (4 times a power of two), best first, at most `max` overall.
+    /// (4 times a power of two), best first, at most `max` overall. Levels
+    /// below `from` are pooled but not searched (a later stage of a search
+    /// that was split).
     pub fn find(
         &mut self,
         raw: &BitMatrix,
         inverted: bool,
+        from: usize,
         levels: usize,
         components: usize,
         max: usize,
@@ -426,6 +429,9 @@ impl Detector {
                 self.counts.halve(&mut self.counts_next);
                 std::mem::swap(&mut self.counts, &mut self.counts_next);
                 factor *= 2;
+            }
+            if level < from {
+                continue;
             }
             let area = (factor * factor) as u16;
             let min = ((POOL_SHARE[level.min(4)] * f32::from(area)).ceil() as u16).max(1);
