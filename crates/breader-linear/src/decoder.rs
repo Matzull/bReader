@@ -139,6 +139,7 @@ decoder_tuples!(A, B, C);
 decoder_tuples!(A, B, C, D);
 decoder_tuples!(A, B, C, D, E);
 decoder_tuples!(A, B, C, D, E, F);
+decoder_tuples!(A, B, C, D, E, F, G);
 
 #[cfg(test)]
 mod tests {

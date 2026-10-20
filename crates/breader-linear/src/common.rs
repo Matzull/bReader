@@ -1,4 +1,4 @@
-//! Helpers shared by the width-based decoders (Code 128, Code 39, ITF).
+//! Helpers shared by the width-based decoders (Code 128, Code 39, Code 93, ITF).
 
 use crate::runs::Runs;
 
@@ -98,6 +98,39 @@ pub(crate) fn quiet_after_open(runs: &Runs, i: usize, bias: f32) -> f32 {
 pub(crate) fn quiet_after(runs: &Runs, i: usize, bias: f32) -> f32 {
     let q = runs.space_after(i);
     if q > 0.0 { q + bias } else { 0.0 }
+}
+
+/// Full ASCII of Code 39 and Code 93: the character that `lead` (`$`, `%`,
+/// `/` or `+`, the shift character) and the capital `letter` after it stand
+/// for. `None` for a pair the specifications do not assign, including the
+/// aliases of DEL (`%X` to `%Z`) and the two pairs `/M` and `/N`, whose
+/// characters have their own code.
+pub(crate) fn full_ascii_pair(lead: u8, letter: u8) -> Option<u8> {
+    if !letter.is_ascii_uppercase() {
+        return None;
+    }
+    let k = letter - b'A';
+    match lead {
+        b'$' => Some(k + 1),
+        b'+' => Some(b'a' + k),
+        b'/' => match letter {
+            b'A'..=b'L' | b'O' => Some(33 + k),
+            b'Z' => Some(b':'),
+            _ => None,
+        },
+        b'%' => match letter {
+            b'A'..=b'E' => Some(27 + k),
+            b'F'..=b'J' => Some(59 + (k - 5)),
+            b'K'..=b'O' => Some(91 + (k - 10)),
+            b'P'..=b'S' => Some(123 + (k - 15)),
+            b'T' => Some(127),
+            b'U' => Some(0),
+            b'V' => Some(b'@'),
+            b'W' => Some(b'`'),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// Smallest module width, in profile samples, the decoders consider.

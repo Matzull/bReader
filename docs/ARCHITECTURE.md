@@ -9,7 +9,7 @@ crates/
   breader-core      types, traits, FrameContext, Pipeline. No dependencies.
   breader-imgproc   pixel conversion, preprocessors, binarizers
   breader-ecc       Reed-Solomon: GF(256), GF(929) (PDF417) and generic GF(2^m) (Aztec)
-  breader-linear    1D detection and decoders (EAN/UPC, Code 128, Code 39, ITF, Codabar, GS1 DataBar)
+  breader-linear    1D detection and decoders (EAN/UPC, Code 128, Code 39, Code 93, ITF, Codabar, GS1 DataBar)
   breader-qr        QR detection, sampling and decoding
   breader-datamatrix  Data Matrix ECC 200 detection, sampling and decoding
   breader-pdf417    PDF417 detection, row sampling, grid votes and decoding (GF(929) Reed-Solomon)
@@ -90,6 +90,7 @@ Validation is part of each decoder, not an optional post-step: a `SymbologyReade
 - **EAN/UPC**: check digit, guard patterns, quiet zones, module-width consistency, ≥ `min_line_agreement` agreeing scanlines.
 - **Code 128**: mod-103 checksum, stop pattern, quiet zones, scanline agreement.
 - **Code 39**: optional mod-43, inter-character gaps, minimum length, quiet zones, scanline agreement.
+- **Code 93**: start, stop and termination bar, every character quantized to the 9-module structure, both mod-47 check characters, valid shift sequences, 4-module quiet zones measured on both sides (never open at the profile border), scanline agreement as Code 39 ([D-049](decisions.md#d-049)).
 - **GS1 DataBar**: every character a member of its combination set, mod 79 / 89 / 211 checksum, finder pair or check pattern agreeing with it, pieces with their module counts ([D-037](decisions.md#d-037)).
 - **Codabar**: start and stop in A-D with none inside, minimum data length, clear wide/narrow classification of every element, bounded gaps, 10-module quiet zones, one scanline more than `min_line_agreement` ([D-036](decisions.md#d-036)).
 - **ITF**: accepted length list, quiet zones, bar-width ratio consistency, scanline agreement (ITF is the most false-positive-prone symbology and is gated hardest).
@@ -109,7 +110,7 @@ The per-family designs live in [symbologies/](symbologies/README.md) (one page p
 
 ### 3.1 Linear (`breader-linear`)
 
-EAN/UPC, Code 128, Code 39, ITF, Codabar and GS1 DataBar over gray scanline profiles: scan plan, edges, runs, per-symbology decoders, aggregation with conflict removal. Design: [symbologies/linear.md](symbologies/linear.md).
+EAN/UPC, Code 128, Code 39, Code 93, ITF, Codabar and GS1 DataBar over gray scanline profiles: scan plan, edges, runs, per-symbology decoders, aggregation with conflict removal. Design: [symbologies/linear.md](symbologies/linear.md).
 
 ### 3.2 QR (`breader-qr`)
 
@@ -129,7 +130,7 @@ Post-processors, in this order: `Dedup`, `TextDecoder`, `ContentClassifier`.
    - **Declared segments:** each segment is decoded with its charset and the results are concatenated. Any unknown ECI or invalid sequence leaves `text = None`; `data` is always kept.
    - **Defaults per symbology:**
      - Code 128: Latin-1.
-     - Code 39, ITF, Codabar, EAN/UPC: ASCII.
+     - Code 39, Code 93, ITF, Codabar, EAN/UPC: ASCII (Code 93 Full ASCII is expanded by the decoder).
      - QR without segments: same rule as `Undeclared`.
    - **`Undeclared` QR byte mode, in this order:**
      1. strict UTF-8;

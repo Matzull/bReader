@@ -7,6 +7,7 @@ use breader_core::{
 
 use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
+use crate::code93::Code93Decoder;
 use crate::code128::Code128Decoder;
 use crate::databar::DataBarDecoder;
 use crate::decoder::{LineOptions, LinearDecoder};
@@ -33,6 +34,7 @@ const ALL: (
     ItfDecoder,
     CodabarDecoder,
     DataBarDecoder,
+    Code93Decoder,
 ) = (
     EanDecoder,
     Code128Decoder,
@@ -40,6 +42,7 @@ const ALL: (
     ItfDecoder,
     CodabarDecoder,
     DataBarDecoder,
+    Code93Decoder,
 );
 
 /// The most permissive configuration: every length of ITF, Code 39 without a
@@ -251,10 +254,14 @@ fn to_runs(modules: &[bool], px: f32) -> Runs {
 /// was drawn, and random Code 128 characters rarely pass the checksum.
 #[test]
 fn structured_random_symbols_never_decode_to_something_else() {
-    use crate::testutil::{codabar_modules, code39_modules, code128_modules_raw, itf_modules};
+    use crate::testutil::{
+        codabar_modules, code39_modules, code93_modules, code93_modules_raw, code128_modules_raw,
+        itf_modules,
+    };
     let mut rng = Rng(0xfeed_f00d);
     let opts = options();
     let (mut c128_hits, mut c39_hits, mut itf_hits, mut cb_hits) = (0, 0, 0, 0);
+    let (mut c93_hits, mut c93_bad) = (0, 0);
     for _ in 0..3000 {
         let px = 1.5 + rng.unit() * 3.0;
         let n = 1 + rng.below(12) as usize;
@@ -317,7 +324,32 @@ fn structured_random_symbols_never_decode_to_something_else() {
             "{a}{body}{z}: {hits:?}"
         );
         cb_hits += hits.len();
+
+        let values: Vec<u8> = (0..2 + rng.below(12))
+            .map(|_| rng.below(47) as u8)
+            .collect();
+        let hits = run_decode(
+            &Code93Decoder,
+            &to_runs(&code93_modules(&values), px),
+            &opts,
+        );
+        for h in &hits {
+            assert_eq!(h.symbology, breader_core::Symbology::Code93);
+            assert_eq!(Some(h.text.clone()), crate::code93::symbol_runs(&values).0);
+        }
+        c93_hits += hits.len();
+        // Random check characters: one pair in 2209 passes.
+        let mut bad = values.clone();
+        bad.extend([rng.below(47) as u8, rng.below(47) as u8]);
+        c93_bad += run_decode(
+            &Code93Decoder,
+            &to_runs(&code93_modules_raw(&bad), px),
+            &opts,
+        )
+        .len();
     }
+    assert!(c93_hits > 800, "{c93_hits}");
+    assert!(c93_bad < 5, "{c93_bad}");
     // Random check characters pass one time in 103.
     assert!(c128_hits < 120, "{c128_hits}");
     assert!(c39_hits > 2000 && itf_hits > 2000, "{c39_hits} {itf_hits}");

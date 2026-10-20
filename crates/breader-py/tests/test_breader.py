@@ -11,7 +11,7 @@ import pytest
 import breader
 from breader import Reader, Symbol
 
-from conftest import render_codabar, render_qr
+from conftest import render_code93, render_codabar, render_qr
 
 URL = "https://example.com/breader?x=1"
 ROOT = Path(__file__).resolve().parents[3]
@@ -155,7 +155,7 @@ def test_bad_input_raises_value_error(image, kwargs):
 def test_default_options():
     o = Reader().options
     assert o["effort"] == "balanced" and o["escalation"] is None and o["upscale_max_side"] is None
-    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr", "rmqr", "databar", "databar-limited", "databar-expanded"]
+    assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr", "rmqr", "databar", "databar-limited", "databar-expanded", "code93"]
     assert o["itf_lengths"] == (14, 8, 10, 12, 16, 18) and o["min_line_agreement"] == 2
     o["effort"] = "x"
     assert Reader().options["effort"] == "balanced"
@@ -356,8 +356,8 @@ def test_synth_clean_matches_rust_bench():
                 read += 1
                 found.remove(w)
         fp += len(found)
-    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 44/44 (20 images plus 3 each with Data Matrix, PDF417, Aztec, Codabar, Micro QR, rMQR, GS1 DataBar and stacked GS1 DataBar), 0 false positives.
-    assert (read, expected, fp) == (44, 44, 0)
+    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 47/47 (20 images plus 3 each with Data Matrix, PDF417, Aztec, Codabar, Micro QR, rMQR, GS1 DataBar, stacked GS1 DataBar and Code 93), 0 false positives.
+    assert (read, expected, fp) == (47, 47, 0)
 
 
 def test_datamatrix_meta_on_synth():
@@ -555,3 +555,25 @@ def test_codabar_without_stop_is_not_read():
     full = render_codabar("A123456B")
     assert Reader().scan(full)
     assert Reader().scan(render_codabar("A123456", module=3)) == []
+
+
+def test_code93_strips_both_checks_and_decodes_full_ascii():
+    [s] = Reader().scan(render_code93("CODE 93"))
+    assert s.symbology == "code93" and s.text == "CODE 93" and s.data == b"CODE 93"
+    assert s.aim_id == "]G0"
+    assert s.meta["kind"] == "linear" and s.meta["checksum_verified"] is True
+    # Lower case and punctuation outside the basic set go through the shift characters.
+    [s] = Reader().scan(render_code93("Hello, World! @#"))
+    assert s.symbology == "code93" and s.text == "Hello, World! @#"
+    # Same symbol upside down.
+    [s] = Reader().scan(render_code93("Code 93")[::-1, ::-1])
+    assert s.text == "Code 93"
+    for name in ("code93", "Code-93", "CODE 93", "code_93"):
+        assert Reader(symbologies=[name]).options["symbologies"] == ["code93"]
+    assert Reader(symbologies=["code39"]).scan(render_code93("CODE 93")) == []
+
+
+def test_code93_with_a_wrong_check_character_is_not_read():
+    assert Reader().scan(render_code93("CHECKED"))
+    assert Reader().scan(render_code93("CHECKED", check_offset=(1, 0))) == []
+    assert Reader().scan(render_code93("CHECKED", check_offset=(0, 1))) == []

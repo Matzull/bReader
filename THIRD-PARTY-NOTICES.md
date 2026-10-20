@@ -61,3 +61,7 @@ SOFTWARE.
 ## zbar (comparison engine, not included)
 
 zbar (LGPL-2.1) is used only at bench time, as an external black-box library through pyzbar (`tools/bench/py_bench.py --engine zbar`). It is not linked into breader, not vendored and not part of any release artifact; no zbar code, table or structure is used in breader, and its sources were not read.
+
+## barcoders (Code 93 test oracle)
+
+The `barcoders` crate 2.0.0 (https://github.com/buntine/barcoders, MIT or Apache-2.0) is a dev-dependency of `breader-linear` and `tools/synth`. For Code 93 (D-049) its encoder is used only as an independent oracle: a unit test compares the module strings of the 43 basic characters, including the check characters, with those of the specification tables written down from AIM USS Code 93. No table, code or structure of it, and nothing of zxing or zbar, is in the library; its encoder source was not read.

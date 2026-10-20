@@ -37,6 +37,8 @@ pub enum Symbology {
     DataBarLimited,
     /// GS1 DataBar Expanded (one row).
     DataBarExpanded,
+    /// Code 93, with Full ASCII through the four shift characters.
+    Code93,
 }
 
 impl Symbology {
@@ -59,6 +61,7 @@ impl Symbology {
         Self::DataBar,
         Self::DataBarLimited,
         Self::DataBarExpanded,
+        Self::Code93,
     ];
 
     /// True for 1D symbologies.
@@ -89,6 +92,7 @@ impl Symbology {
             Self::DataBar => "GS1 DataBar",
             Self::DataBarLimited => "GS1 DataBar Limited",
             Self::DataBarExpanded => "GS1 DataBar Expanded",
+            Self::Code93 => "Code 93",
         }
     }
 }

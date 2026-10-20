@@ -18,6 +18,7 @@ fn map_rxing(format: &BarcodeFormat) -> Option<Symbology> {
         BarcodeFormat::CODE_39 => Some(Symbology::Code39),
         BarcodeFormat::ITF => Some(Symbology::Itf),
         BarcodeFormat::CODABAR => Some(Symbology::Codabar),
+        BarcodeFormat::CODE_93 => Some(Symbology::Code93),
         BarcodeFormat::RSS_14 => Some(Symbology::DataBar),
         BarcodeFormat::RSS_EXPANDED => Some(Symbology::DataBarExpanded),
         BarcodeFormat::DATA_MATRIX => Some(Symbology::DataMatrix),

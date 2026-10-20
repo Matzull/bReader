@@ -117,6 +117,13 @@ mod tests {
     }
 
     #[test]
+    fn code_93_labels_are_supported_in_either_spelling() {
+        let e = parse("Format,Value\nCODE_93,TEST93\nCode93,OTHER\n");
+        assert_eq!((e.codes.len(), e.unsupported), (2, 0));
+        assert!(e.codes.keys().all(|k| k.0 == "Code 93"));
+    }
+
+    #[test]
     fn repeated_values_count_copies() {
         let e = parse("Format,Value\nQR_CODE,a\nQR_CODE,a\n");
         assert_eq!(e.codes.values().copied().collect::<Vec<_>>(), vec![2]);

@@ -39,6 +39,7 @@ fn symbology_id(s: Symbology) -> &'static str {
         Symbology::DataBar => "databar",
         Symbology::DataBarLimited => "databar-limited",
         Symbology::DataBarExpanded => "databar-expanded",
+        Symbology::Code93 => "code93",
         _ => s.name(),
     }
 }
@@ -189,7 +190,7 @@ impl From<CoreSymbol> for Symbol {
 
 #[pymethods]
 impl Symbol {
-    /// Short symbology id: "qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec" or "codabar".
+    /// Short symbology id: "qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr", "rmqr", "databar", "databar-limited", "databar-expanded" or "code93".
     #[getter]
     fn symbology(&self) -> &str {
         self.symbology

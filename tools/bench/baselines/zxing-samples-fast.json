@@ -72,7 +72,13 @@
         "false_positives": 0
       }
     },
-    "code93-1": {},
+    "code93-1": {
+      "Code 93": {
+        "expected": 3,
+        "read": 1,
+        "false_positives": 0
+      }
+    },
     "databarltd-1": {
       "GS1 DataBar Limited": {
         "expected": 2,

@@ -102,6 +102,7 @@ pub fn map_symbology(name: &str) -> Option<Symbology> {
         "CODE39" | "CODE39EXTENDED" => Some(Symbology::Code39),
         "ITF" | "INTERLEAVED2OF5" => Some(Symbology::Itf),
         "CODABAR" => Some(Symbology::Codabar),
+        "CODE93" => Some(Symbology::Code93),
         // The stacked forms are reported as the one-row symbology (D-048), as zxing-cpp does.
         "DATABAR"
         | "GS1DATABAR"
@@ -464,6 +465,9 @@ mod tests {
         assert_eq!(map_symbology("CODE_39_EXTENDED"), Some(Symbology::Code39));
         assert_eq!(map_symbology("Code128"), Some(Symbology::Code128));
         assert_eq!(map_symbology("UPC_A"), Some(Symbology::UpcA));
+        for n in ["CODE_93", "Code93", "code-93"] {
+            assert_eq!(map_symbology(n), Some(Symbology::Code93), "{n}");
+        }
     }
 
     #[test]

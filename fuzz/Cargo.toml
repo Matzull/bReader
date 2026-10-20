@@ -142,3 +142,10 @@ path = "fuzz_targets/aztec_scan.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "code93_runs"
+path = "fuzz_targets/code93_runs.rs"
+test = false
+doc = false
+bench = false
