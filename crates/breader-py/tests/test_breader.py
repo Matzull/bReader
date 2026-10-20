@@ -356,8 +356,8 @@ def test_synth_clean_matches_rust_bench():
                 read += 1
                 found.remove(w)
         fp += len(found)
-    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 41/41 (20 images plus 3 each with Data Matrix, PDF417, Aztec, Codabar, Micro QR, rMQR and GS1 DataBar), 0 false positives.
-    assert (read, expected, fp) == (41, 41, 0)
+    # Rust bench (cargo run -r -p bench -- data/synth/clean, seed 1): 44/44 (20 images plus 3 each with Data Matrix, PDF417, Aztec, Codabar, Micro QR, rMQR, GS1 DataBar and stacked GS1 DataBar), 0 false positives.
+    assert (read, expected, fp) == (44, 44, 0)
 
 
 def test_datamatrix_meta_on_synth():
@@ -498,6 +498,32 @@ def test_rmqr_meta_on_synth():
         seen += 1
     if seen == 0:
         pytest.skip("synthetic dataset has no rMQR images (regenerate it)")
+
+
+def test_databar_rows_on_synth():
+    from PIL import Image
+
+    base = SYNTH_DIR / "clean"
+    if not (base / "annotations.json").exists():
+        pytest.skip("synthetic dataset not generated (set BREADER_SYNTH_DIR)")
+    ann = json.loads((base / "annotations.json").read_text())
+    r = Reader()
+    rows = []
+    for img in ann["images"]:
+        want = {b["text"] for b in img["barcodes"] if b["format"] in ("DATABAR", "DATABAR_EXPANDED")}
+        if not want:
+            continue
+        found = r.scan(np.asarray(Image.open(base / img["file"]).convert("L")))
+        assert [s.text for s in found] == list(want)
+        s = found[0]
+        assert s.symbology in ("databar", "databar-expanded")
+        rows.append(s.meta["databar_rows"])
+    # One-row symbols have no row count; Stacked has 2 rows, Expanded Stacked 2 to 11.
+    stacked = [n for n in rows if n is not None]
+    if not stacked:
+        pytest.skip("synthetic dataset has no stacked DataBar images (regenerate it)")
+    assert all(2 <= n <= 11 for n in stacked)
+    assert None in rows
 
 
 def test_rmqr_is_a_known_symbology():
