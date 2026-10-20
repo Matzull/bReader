@@ -182,7 +182,7 @@ Bullseye finder on the binary plane (both polarities through the shared `Plane` 
 
 ## 5. Performance plan (M7)
 
-Measured on 2026-10-07 on a Ryzen 5 5500U, single thread, in ms per image:
+Measured on 2026-10-07 on a Ryzen 5 5500U (a historical profile; the current reference machine is a Ryzen 7 3700X, see [BASELINES](BASELINES.md#status-2026-10-20-new-machine-ryzen-7-3700x)), single thread, in ms per image:
 
 | | challenging (3 MP) | synth (1.1 MP) |
 |---|---|---|

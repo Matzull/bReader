@@ -1,5 +1,7 @@
 # Test and gate study (2026-10-13)
 
+All timings in this study are from the Ryzen 5 5500U (shared with another agent); the project moved to a Ryzen 7 3700X on 2026-10-20.
+
 Recommendation report on the cost and overlap of the test suite and the regression gates. Nothing here is implemented; the ranked change list is at the end. Owner's position: end-to-end tests are necessary but overused; no redundant tests; nothing that takes about 40 minutes unless it is really important; coverage is not to be removed blindly; the zero-false-positive rule ([D-002](decisions.md#d-002)) is a hard constraint.
 
 ## 1. Method and caveats
