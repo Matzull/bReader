@@ -2,6 +2,8 @@ use breader_core::{
     Content, EanAddonPolicy, LinearMeta, Point, Quad, Symbol, SymbolMeta, Symbology,
 };
 
+use std::cell::RefCell;
+
 use crate::databar::stacked::{self, Assembly, Geom};
 
 /// A hit placed in pass-image coordinates.
@@ -179,18 +181,85 @@ impl Frame {
     }
 }
 
+/// Working vectors of the agreement rules, kept across calls (and scans) so
+/// that evaluating a group does not allocate.
+#[derive(Debug, Clone, Default)]
+struct Scratch {
+    /// Line indices seen by `distinct_lines`.
+    lines: Vec<u32>,
+    /// Members that are not thin hits, in a group that mixes both.
+    plain: Vec<usize>,
+    /// Module widths and (offset, step) pairs of `independent_lines`.
+    modules: Vec<f32>,
+    offsets: Vec<(f32, f32)>,
+    /// Chain of adjacent hits of `seed_met`.
+    members: Vec<usize>,
+    pending: Vec<usize>,
+    seen: Vec<bool>,
+}
+
+impl PlacedHit {
+    /// A copy whose text comes from the spare buffers.
+    pub fn clone_pooled(&self) -> Self {
+        let mut text = crate::pool::take(self.text.len());
+        text.extend_from_slice(&self.text);
+        Self {
+            text,
+            ..self.clone_without_text()
+        }
+    }
+
+    fn clone_without_text(&self) -> Self {
+        Self {
+            symbology: self.symbology,
+            text: Vec::new(),
+            addon: self.addon.clone(),
+            from: self.from,
+            to: self.to,
+            line: self.line,
+            step: self.step,
+            module: self.module,
+            quality: self.quality,
+            aim: self.aim,
+            checksum_verified: self.checksum_verified,
+            short_quiet: self.short_quiet,
+            inverted: self.inverted,
+            start_stop: self.start_stop,
+            segments: self.segments,
+            thin: self.thin,
+            part: self.part,
+        }
+    }
+
+    /// Hands the text buffer back to the spare buffers.
+    pub fn recycle(self) {
+        crate::pool::give(self.text);
+    }
+}
+
 /// Collects the hits of one pass and turns agreeing ones into symbols.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Aggregator {
     hits: Vec<PlacedHit>,
     groups: Vec<Group>,
+    /// Member vectors of dropped groups, reused by the next grouping.
+    spare_members: Vec<Vec<usize>>,
+    scratch: RefCell<Scratch>,
 }
 
 impl Aggregator {
     /// Forgets the hits of the previous pass; keeps the allocations.
     pub fn reset(&mut self) {
-        self.hits.clear();
-        self.groups.clear();
+        for hit in self.hits.drain(..) {
+            hit.recycle();
+        }
+        self.clear_groups();
+    }
+
+    fn clear_groups(&mut self) {
+        for g in self.groups.drain(..) {
+            self.spare_members.push(g.members);
+        }
     }
 
     pub fn push(&mut self, hit: PlacedHit) {
@@ -222,66 +291,80 @@ impl Aggregator {
     /// chain of adjacent hits from it) already meet the agreement `finish`
     /// will require. Refinement lines beyond this point only widen the quad.
     pub fn seed_met(&self, seed: &PlacedHit, settings: &Settings) -> bool {
-        let mut members: Vec<usize> = Vec::new();
-        let mut pending: Vec<usize> = (0..self.hits.len())
-            .filter(|&i| self.hits[i] == *seed)
-            .collect();
-        if pending.is_empty() {
-            return false;
-        }
-        let mut seen = vec![false; self.hits.len()];
-        for &i in &pending {
-            seen[i] = true;
-        }
-        while let Some(i) = pending.pop() {
-            members.push(i);
-            for (j, done) in seen.iter_mut().enumerate() {
-                if !*done && self.hits[i].adjacent(&self.hits[j]) {
-                    *done = true;
-                    pending.push(j);
+        let mut s = self.scratch.take();
+        let (mut members, mut pending, mut seen) = (
+            std::mem::take(&mut s.members),
+            std::mem::take(&mut s.pending),
+            std::mem::take(&mut s.seen),
+        );
+        members.clear();
+        pending.clear();
+        pending.extend((0..self.hits.len()).filter(|&i| self.hits[i] == *seed));
+        let met = if pending.is_empty() {
+            false
+        } else {
+            seen.clear();
+            seen.resize(self.hits.len(), false);
+            for &i in &pending {
+                seen[i] = true;
+            }
+            while let Some(i) = pending.pop() {
+                members.push(i);
+                for (j, done) in seen.iter_mut().enumerate() {
+                    if !*done && self.hits[i].adjacent(&self.hits[j]) {
+                        *done = true;
+                        pending.push(j);
+                    }
                 }
             }
-        }
-        let (lines, need) = self.agreement(&members, settings);
-        lines >= need
+            let (lines, need) = self.agreement(&members, settings, &mut s);
+            lines >= need
+        };
+        (s.members, s.pending, s.seen) = (members, pending, seen);
+        self.scratch.replace(s);
+        met
     }
 
     /// One representative hit of every group that lacks the agreement
     /// required by `settings`.
     pub fn seeds(&mut self, settings: &Settings, out: &mut Vec<PlacedHit>) {
-        out.clear();
+        for seed in out.drain(..) {
+            seed.recycle();
+        }
         self.group();
+        let mut s = self.scratch.take();
         for g in &self.groups {
-            let (lines, need) = self.agreement(&g.members, settings);
+            let (lines, need) = self.agreement(&g.members, settings, &mut s);
             if lines < need {
-                out.push(self.hits[g.members[0]].clone());
+                out.push(self.hits[g.members[0]].clone_pooled());
             }
         }
+        self.scratch.replace(s);
     }
 
     /// Agreeing lines of a group and the lines it needs. Thin hits count only
     /// in a group made of nothing else: next to ordinary hits they are
     /// ignored, so they can neither help nor hinder.
-    fn agreement(&self, members: &[usize], settings: &Settings) -> (u16, u16) {
+    fn agreement(&self, members: &[usize], settings: &Settings, s: &mut Scratch) -> (u16, u16) {
         if members.iter().any(|&m| self.hits[m].thin) && members.iter().any(|&m| !self.hits[m].thin)
         {
-            let plain: Vec<usize> = members
-                .iter()
-                .copied()
-                .filter(|&m| !self.hits[m].thin)
-                .collect();
-            return (
-                distinct_lines(&self.hits, &plain),
-                self.required(&plain, settings),
+            let mut plain = std::mem::take(&mut s.plain);
+            plain.clear();
+            plain.extend(members.iter().copied().filter(|&m| !self.hits[m].thin));
+            let result = (
+                distinct_lines(&self.hits, &plain, &mut s.lines, |_| true),
+                self.required(&plain, settings, s),
             );
+            s.plain = plain;
+            return result;
         }
         (
-            distinct_lines(&self.hits, members),
-            self.required(members, settings),
+            distinct_lines(&self.hits, members, &mut s.lines, |_| true),
+            self.required(members, settings, s),
         )
     }
 
-    fn required(&self, members: &[usize], settings: &Settings) -> u16 {
+    fn required(&self, members: &[usize], settings: &Settings, s: &mut Scratch) -> u16 {
         let mut min = settings.min_agreement.max(1);
         match self.hits[members[0]].symbology {
             Symbology::Itf => {
@@ -295,11 +378,6 @@ impl Aggregator {
             Symbology::Codabar => min += 1,
             _ => {}
         }
-        let sparse: Vec<usize> = members
-            .iter()
-            .copied()
-            .filter(|&m| self.hits[m].line < settings.plan_lines)
-            .collect();
         let thin = members.iter().any(|&m| self.hits[m].thin);
         if thin {
             min += THIN_EXTRA_LINES;
@@ -310,11 +388,16 @@ impl Aggregator {
         let guarded = matches!(
             self.hits[members[0]].symbology,
             Symbology::Code39 | Symbology::Code93 | Symbology::Itf
-        ) && self.independent_lines(members, min);
+        ) && self.independent_lines(members, min, s);
         if thin && !guarded {
             return u16::MAX;
         }
-        let mut need = if min >= 2 && !guarded && distinct_lines(&self.hits, &sparse) < 2 {
+        // Lines of the sparse plan, as opposed to the ones added around a hit.
+        let sparse = |h: &PlacedHit| h.line < settings.plan_lines;
+        let mut need = if min >= 2
+            && !guarded
+            && distinct_lines(&self.hits, members, &mut s.lines, sparse) < 2
+        {
             min + 1
         } else {
             min
@@ -333,27 +416,32 @@ impl Aggregator {
     /// True when at least `need` lines of the group are at least
     /// `INDEPENDENT_STEPS` of their steps apart across the symbol and their
     /// module estimates are within `MODULE_AGREEMENT` of the group median.
-    fn independent_lines(&self, members: &[usize], need: u16) -> bool {
-        let mut modules: Vec<f32> = members.iter().map(|&m| self.hits[m].module).collect();
+    fn independent_lines(&self, members: &[usize], need: u16, s: &mut Scratch) -> bool {
+        let modules = &mut s.modules;
+        modules.clear();
+        modules.extend(members.iter().map(|&m| self.hits[m].module));
         modules.sort_by(f32::total_cmp);
         let median = modules[modules.len() / 2];
         if median <= 0.0 {
             return false;
         }
         let (ux, uy) = self.hits[members[0]].unit();
-        let mut offsets: Vec<(f32, f32)> = members
-            .iter()
-            .map(|&m| &self.hits[m])
-            .filter(|h| (h.module / median - 1.0).abs() <= MODULE_AGREEMENT)
-            .map(|h| {
-                let c = h.center();
-                (c.x * -uy + c.y * ux, h.step)
-            })
-            .collect();
+        let offsets = &mut s.offsets;
+        offsets.clear();
+        offsets.extend(
+            members
+                .iter()
+                .map(|&m| &self.hits[m])
+                .filter(|h| (h.module / median - 1.0).abs() <= MODULE_AGREEMENT)
+                .map(|h| {
+                    let c = h.center();
+                    (c.x * -uy + c.y * ux, h.step)
+                }),
+        );
         offsets.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut count = 0u16;
         let mut last: Option<(f32, f32)> = None;
-        for &(off, step) in &offsets {
+        for &(off, step) in offsets.iter() {
             if last.is_none_or(|(o, s)| off - o >= INDEPENDENT_STEPS * step.min(s)) {
                 count += 1;
                 last = Some((off, step));
@@ -370,12 +458,13 @@ impl Aggregator {
         let mut candidates: Vec<Candidate> = Vec::new();
         // Rows of stacked DataBar symbols: not symbols until joined.
         let mut rows: Vec<Candidate> = Vec::new();
+        let mut s = self.scratch.take();
         for g in &self.groups {
-            let (lines, need) = self.agreement(&g.members, settings);
+            let (lines, need) = self.agreement(&g.members, settings, &mut s);
             if lines < need {
                 continue;
             }
-            let addon = self.choose_addon(&g.members, min);
+            let addon = self.choose_addon(&g.members, min, &mut s.lines);
             if settings.addon == EanAddonPolicy::Required && addon.is_none() {
                 continue;
             }
@@ -392,6 +481,7 @@ impl Aggregator {
                 candidates.push(candidate);
             }
         }
+        self.scratch.replace(s);
         if !rows.is_empty() {
             self.join_rows(&rows, settings, &mut candidates);
         }
@@ -461,7 +551,7 @@ impl Aggregator {
     }
 
     fn group(&mut self) {
-        self.groups.clear();
+        self.clear_groups();
         for i in 0..self.hits.len() {
             let mut joined: Option<usize> = None;
             let mut g = 0;
@@ -481,19 +571,24 @@ impl Aggregator {
                         g += 1;
                     }
                     Some(first) => {
-                        let moved = self.groups.remove(g).members;
-                        self.groups[first].members.extend(moved);
+                        let mut moved = self.groups.remove(g).members;
+                        self.groups[first].members.extend_from_slice(&moved);
+                        moved.clear();
+                        self.spare_members.push(moved);
                     }
                 }
             }
             if joined.is_none() {
-                self.groups.push(Group { members: vec![i] });
+                let mut members = self.spare_members.pop().unwrap_or_default();
+                members.clear();
+                members.push(i);
+                self.groups.push(Group { members });
             }
         }
     }
 
     /// The supplement read by at least `min` distinct lines, if exactly one.
-    fn choose_addon(&self, members: &[usize], min: u16) -> Option<Vec<u8>> {
+    fn choose_addon(&self, members: &[usize], min: u16, seen: &mut Vec<u32>) -> Option<Vec<u8>> {
         let mut found: Vec<&Vec<u8>> = Vec::new();
         for &m in members {
             if let Some(a) = &self.hits[m].addon
@@ -503,12 +598,8 @@ impl Aggregator {
             }
         }
         let mut agreed = found.into_iter().filter(|a| {
-            let lines: Vec<usize> = members
-                .iter()
-                .copied()
-                .filter(|&m| self.hits[m].addon.as_ref() == Some(*a))
-                .collect();
-            distinct_lines(&self.hits, &lines) >= min
+            let same = |h: &PlacedHit| h.addon.as_ref() == Some(*a);
+            distinct_lines(&self.hits, members, seen, same) >= min
         });
         let first = agreed.next()?;
         agreed.next().is_none().then(|| first.clone())
@@ -629,9 +720,18 @@ impl Aggregator {
     }
 }
 
-fn distinct_lines(hits: &[PlacedHit], members: &[usize]) -> u16 {
-    let mut seen: Vec<u32> = Vec::with_capacity(members.len());
+/// Distinct scanlines of the members that satisfy `keep`; `seen` is scratch.
+fn distinct_lines(
+    hits: &[PlacedHit],
+    members: &[usize],
+    seen: &mut Vec<u32>,
+    keep: impl Fn(&PlacedHit) -> bool,
+) -> u16 {
+    seen.clear();
     for &m in members {
+        if !keep(&hits[m]) {
+            continue;
+        }
         let line = hits[m].line;
         if !seen.contains(&line) {
             seen.push(line);
@@ -674,6 +774,18 @@ fn segment_distance(a: Point, b: Point, c: Point, d: Point) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pooled_clone_equals_clone_and_recycling_reuses_the_buffer() {
+        let mut h = hit(Symbology::Ean13, "5901234123457", 10.0, 0.0, 100.0, 3);
+        h.addon = Some(b"12".to_vec());
+        h.part = true;
+        let c = h.clone_pooled();
+        assert_eq!(c, h);
+        let ptr = c.text.as_ptr();
+        c.recycle();
+        assert_eq!(h.clone_pooled().text.as_ptr(), ptr);
+    }
 
     fn hit(sym: Symbology, text: &str, y: f32, x0: f32, x1: f32, line: u32) -> PlacedHit {
         PlacedHit {

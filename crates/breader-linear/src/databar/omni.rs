@@ -452,7 +452,7 @@ pub(super) fn decode_half(runs: &Runs, j: isize, top: bool, out: &mut Vec<LineHi
     if !ok {
         return true;
     }
-    let mut text = Vec::with_capacity(1 + PART_LEN);
+    let mut text = crate::pool::take(1 + PART_LEN);
     text.push(tag);
     text.extend_from_slice(body);
     out.push(LineHit {
