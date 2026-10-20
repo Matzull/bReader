@@ -309,7 +309,7 @@ impl Aggregator {
         // are apart from each other and agree on the module width are.
         let guarded = matches!(
             self.hits[members[0]].symbology,
-            Symbology::Code39 | Symbology::Itf
+            Symbology::Code39 | Symbology::Code93 | Symbology::Itf
         ) && self.independent_lines(members, min);
         if thin && !guarded {
             return u16::MAX;
@@ -799,6 +799,40 @@ mod tests {
         same.push(c(10.0, 0, 3.0));
         same.remove(1);
         assert!(run(same, &sparse(1, 2)).is_empty());
+    }
+
+    #[test]
+    fn code93_follows_the_agreement_rules_of_code_39() {
+        let sparse = |plan_lines, min| Settings {
+            plan_lines,
+            ..settings(min)
+        };
+        let c = |y: f32, line: u32, module: f32| {
+            let mut h = hit(Symbology::Code93, "CODE 93", y, 0.0, 100.0, line);
+            h.module = module;
+            h.checksum_verified = true;
+            h
+        };
+        // `min_line_agreement` lines, no more, when they are independent plan lines.
+        assert!(run(vec![c(10.0, 0, 3.0)], &settings(2)).is_empty());
+        assert_eq!(
+            run(vec![c(10.0, 0, 3.0), c(22.0, 1, 3.0)], &settings(2)).len(),
+            1
+        );
+        // Retry lines next to one plan line: apart and on one module, or one more line.
+        let apart = vec![c(10.0, 0, 3.0), c(22.0, 5, 3.0)];
+        assert_eq!(run(apart, &sparse(1, 2)).len(), 1);
+        let touching = vec![c(10.0, 0, 3.0), c(16.0, 5, 3.0)];
+        assert!(run(touching.clone(), &sparse(1, 2)).is_empty());
+        let mut three = touching;
+        three.push(c(22.0, 6, 3.0));
+        assert_eq!(run(three, &sparse(1, 2)).len(), 1);
+        assert!(run(vec![c(10.0, 0, 3.0), c(22.0, 5, 3.6)], &sparse(1, 2)).is_empty());
+        let out = run(vec![c(10.0, 0, 3.0), c(22.0, 1, 3.0)], &settings(2));
+        let SymbolMeta::Linear(meta) = &out[0].meta else {
+            panic!("linear meta");
+        };
+        assert!(meta.checksum_verified && meta.codabar_start_stop.is_none());
     }
 
     #[test]

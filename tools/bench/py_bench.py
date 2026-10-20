@@ -33,7 +33,7 @@ try:
 except ImportError:
     breader = None
 
-SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code", "rMQR Code", "GS1 DataBar", "GS1 DataBar Limited", "GS1 DataBar Expanded"]
+SYMBOLOGIES = ["QR Code", "EAN-13", "EAN-8", "UPC-A", "UPC-E", "Code 128", "Code 39", "ITF", "Data Matrix", "PDF417", "Aztec", "Codabar", "Micro QR Code", "rMQR Code", "GS1 DataBar", "GS1 DataBar Limited", "GS1 DataBar Expanded", "Code 93"]
 
 ALIASES = {
     "QRCODE": "QR Code",
@@ -45,6 +45,7 @@ ALIASES = {
     "CODE128": "Code 128",
     "CODE39": "Code 39",
     "CODE39EXTENDED": "Code 39",
+    "CODE93": "Code 93",
     "ITF": "ITF",
     "INTERLEAVED2OF5": "ITF",
     "CODABAR": "Codabar",
@@ -77,6 +78,7 @@ BR_FORMATS = {
     "upce": "UPC-E",
     "code128": "Code 128",
     "code39": "Code 39",
+    "code93": "Code 93",
     "itf": "ITF",
     "codabar": "Codabar",
     "datamatrix": "Data Matrix",
@@ -107,6 +109,7 @@ class ZxingEngine:
             bf.Code39: "Code 39",
             bf.Code39Ext: "Code 39",
             bf.Code39Std: "Code 39",
+            bf.Code93: "Code 93",
             bf.ITF: "ITF",
             bf.ITF14: "ITF",
             bf.Codabar: "Codabar",
@@ -139,7 +142,7 @@ class ZbarEngine:
     """zbar through pyzbar, used only as a black box (public API, outputs only).
 
     Normalisations applied so that the comparison is fair (each is also listed in docs/BASELINES.md):
-    - symbology names are mapped to breader's; ISBN-13 is an EAN-13; Code 93, EAN2, EAN5, ISBN-10, COMPOSITE
+    - symbology names are mapped to breader's; ISBN-13 is an EAN-13; EAN2, EAN5, ISBN-10, COMPOSITE
       and SQCODE have no breader counterpart and their reads are dropped (like unmapped zxing formats);
     - UPC-A / UPC-E arrive as UPCA, UPCE or EAN13 with a leading 0; `canonical` folds all of them to
       EAN-13 on both sides;
@@ -158,7 +161,7 @@ class ZbarEngine:
             sys.exit("pyzbar or libzbar is not available (pip install pyzbar; apt install libzbar0)")
         self.formats = {
             "EAN13": "EAN-13", "ISBN13": "EAN-13", "EAN8": "EAN-8", "UPCA": "UPC-A", "UPCE": "UPC-E",
-            "CODE128": "Code 128", "CODE39": "Code 39", "I25": "ITF",
+            "CODE128": "Code 128", "CODE39": "Code 39", "CODE93": "Code 93", "I25": "ITF",
             "CODABAR": "Codabar", "DATABAR": "GS1 DataBar", "DATABAR_EXP": "GS1 DataBar Expanded",
             "QRCODE": "QR Code", "PDF417": "PDF417",
         }

@@ -5,7 +5,10 @@ __version__: str
 
 class Symbol:
     @property
-    def symbology(self) -> str: ...
+    def symbology(self) -> str:
+        """One of "qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix",
+        "pdf417", "aztec", "codabar", "micro-qr", "rmqr", "databar", "databar-limited",
+        "databar-expanded" or "code93"."""
     @property
     def data(self) -> bytes: ...
     @property

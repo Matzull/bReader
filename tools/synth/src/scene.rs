@@ -198,6 +198,7 @@ enum Mix {
     MicroQr,
     Rmqr,
     DataBar,
+    Code93,
 }
 
 fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
@@ -226,6 +227,7 @@ fn multi(rng: &mut ChaCha8Rng, mix: Mix) -> (GrayImage, Vec<Annotation>) {
             Mix::Codabar => Sym::Codabar,
             Mix::MicroQr => Sym::MicroQr,
             Mix::Rmqr => Sym::Rmqr,
+            Mix::Code93 => Sym::Code93,
             Mix::DataBar => {
                 [Sym::DataBar, Sym::DataBarLimited, Sym::DataBarExpanded][rng.random_range(0..3)]
             }
@@ -459,6 +461,24 @@ pub fn generate_databar(class: Class, j: usize, seed: u64) -> Option<(GrayImage,
         _ => {
             let sym = [Sym::DataBar, Sym::DataBarLimited, Sym::DataBarExpanded][j % 3];
             let (mut img, anns) = single(class, sym, None, rng);
+            degrade(class, &mut img, rng);
+            Some((img, anns))
+        }
+    }
+}
+
+/// Code 93 images of a class, generated after the stacked DataBar ones so
+/// that every earlier image stays byte-identical: the symbols alternate
+/// between the basic character set and Full ASCII with shift characters.
+pub fn generate_code93(class: Class, j: usize, seed: u64) -> Option<(GrayImage, Vec<Annotation>)> {
+    let mut rng = image_rng(seed.wrapping_add(0xC093_0093), class, j);
+    let rng = &mut rng;
+    match class {
+        Class::Negative | Class::Datamatrix => None,
+        Class::Multi => Some(multi(rng, Mix::Code93)),
+        _ => {
+            let enc = encode::encode_code93(rng, (j + class.index() as usize) % 2 == 1);
+            let (mut img, anns) = single_with(class, Sym::Code93, enc, rng);
             degrade(class, &mut img, rng);
             Some((img, anns))
         }

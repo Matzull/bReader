@@ -288,7 +288,7 @@ fn half_plausible_inside(runs: &Runs, j: usize, top: bool) -> bool {
     }
     let at = |k: usize| runs.start(j + k);
     let module = (runs.end(j + len - 1) - at(0)).abs() / modules;
-    if !(module >= MIN_MODULE) {
+    if module.is_nan() || module < MIN_MODULE {
         return false;
     }
     let pieces = segments.iter().filter(|s| s.len > 1).all(|s| {

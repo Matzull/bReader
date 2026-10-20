@@ -61,6 +61,71 @@ def render_codabar(text, module=3, wide=3, height=80, quiet=12):
     return np.pad(img, 20, constant_values=255)
 
 
+_CODE93 = [
+    "100010100", "101001000", "101000100", "101000010", "100101000", "100100100", "100100010",
+    "101010000", "100010010", "100001010", "110101000", "110100100", "110100010", "110010100",
+    "110010010", "110001010", "101101000", "101100100", "101100010", "100110100", "100011010",
+    "101011000", "101001100", "101000110", "100101100", "100010110", "110110100", "110110010",
+    "110101100", "110100110", "110010110", "110011010", "101101100", "101100110", "100110110",
+    "100111010", "100101110", "111010100", "111010010", "111001010", "101101110", "101110110",
+    "110101110", "100100110", "111011010", "111010110", "100110010", "101011110",
+]
+_CODE93_BASIC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%"
+
+
+def _code93_values(text):
+    """Character values of `text`: basic characters, or a shift ($ % / +) and a letter."""
+    out = []
+    for ch in text:
+        c = ord(ch)
+        if ch in _CODE93_BASIC:
+            out.append(_CODE93_BASIC.index(ch))
+            continue
+        if c == 0:
+            shift, letter = "%", "U"
+        elif c <= 26:
+            shift, letter = "$", chr(64 + c)
+        elif c <= 31:
+            shift, letter = "%", chr(ord("A") + c - 27)
+        elif c <= 44:
+            shift, letter = "/", chr(ord("A") + c - 33)
+        elif c == 58:
+            shift, letter = "/", "Z"
+        elif c <= 63:
+            shift, letter = "%", chr(ord("F") + c - 59)
+        elif c == 64:
+            shift, letter = "%", "V"
+        elif 91 <= c <= 95:
+            shift, letter = "%", chr(ord("K") + c - 91)
+        elif c == 96:
+            shift, letter = "%", "W"
+        elif 97 <= c <= 122:
+            shift, letter = "+", chr(ord("A") + c - 97)
+        elif c <= 126:
+            shift, letter = "%", chr(ord("P") + c - 123)
+        else:
+            shift, letter = "%", "T"
+        out += [43 + "$%/+".index(shift), _CODE93_BASIC.index(letter)]
+    return out
+
+
+def _code93_check(values, period):
+    return sum(v * (i % period + 1) for i, v in enumerate(reversed(values))) % 47
+
+
+def render_code93(text, module=3, height=80, quiet=12, check_offset=(0, 0)):
+    """Code 93 symbol of `text` (Full ASCII through the shift characters). `check_offset`
+    is added to C and K, to draw a symbol with wrong check characters."""
+    values = _code93_values(text)
+    c = (_code93_check(values, 20) + check_offset[0]) % 47
+    k = (_code93_check(values + [c], 15) + check_offset[1]) % 47
+    bits = "".join(_CODE93[v] for v in [47] + values + [c, k, 47]) + "1"
+    row = np.array([0 if b == "1" else 255 for b in bits], dtype=np.uint8)
+    row = np.pad(np.repeat(row, module), quiet * module, constant_values=255)
+    img = np.tile(row, (height, 1))
+    return np.pad(img, 20, constant_values=255)
+
+
 @pytest.fixture(scope="session")
 def qr_image():
     return render_qr("https://example.com/breader?x=1", error="m")

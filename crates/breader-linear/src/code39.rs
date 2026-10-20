@@ -4,8 +4,8 @@
 use breader_core::Symbology;
 
 use crate::common::{
-    MIN_MODULE, adjusted_width, adjusted_widths, quiet_after, quiet_after_open, quiet_before,
-    quiet_before_open, split_wide,
+    MIN_MODULE, adjusted_width, adjusted_widths, full_ascii_pair, quiet_after, quiet_after_open,
+    quiet_before, quiet_before_open, split_wide,
 };
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
 use crate::runs::Runs;
@@ -235,31 +235,7 @@ fn expand_full_ascii(chars: &[u8]) -> Option<Vec<u8>> {
             out.push(c);
             continue;
         }
-        let x = it.next()?;
-        if !x.is_ascii_uppercase() {
-            return None;
-        }
-        let k = x - b'A';
-        out.push(match c {
-            b'$' => k + 1,
-            b'+' => b'a' + k,
-            b'/' => match x {
-                b'A'..=b'L' | b'O' => 33 + k,
-                b'Z' => b':',
-                _ => return None,
-            },
-            _ => match x {
-                b'A'..=b'E' => 27 + k,
-                b'F'..=b'J' => 59 + (k - 5),
-                b'K'..=b'O' => 91 + (k - 10),
-                b'P'..=b'S' => 123 + (k - 15),
-                b'T' => 127,
-                b'U' => 0,
-                b'V' => b'@',
-                b'W' => b'`',
-                _ => return None,
-            },
-        });
+        out.push(full_ascii_pair(c, it.next()?)?);
     }
     Some(out)
 }

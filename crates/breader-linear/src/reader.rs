@@ -7,6 +7,7 @@ use breader_core::{
 use crate::aggregate::{Aggregator, PlacedHit, Settings};
 use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
+use crate::code93::Code93Decoder;
 use crate::code128::Code128Decoder;
 use crate::databar::DataBarDecoder;
 use crate::decoder::{LineHit, LineOptions, LinearDecoder};
@@ -26,6 +27,7 @@ type Decoders = (
     ItfDecoder,
     CodabarDecoder,
     DataBarDecoder,
+    Code93Decoder,
 );
 
 const DECODERS: Decoders = (
@@ -35,6 +37,7 @@ const DECODERS: Decoders = (
     ItfDecoder,
     CodabarDecoder,
     DataBarDecoder,
+    Code93Decoder,
 );
 
 /// Decode state shared by all scanlines of one `scan` call.
@@ -442,6 +445,7 @@ impl SymbologyReader for LinearReader {
             Symbology::DataBar,
             Symbology::DataBarLimited,
             Symbology::DataBarExpanded,
+            Symbology::Code93,
         ]
         .into_iter()
         .collect()
@@ -1303,6 +1307,65 @@ mod tests {
         let m = codabar_modules('B', "40129/5", 'D', 3, 1);
         let img = wide_picture(&m[..m.len() - 11], 2.6, 7.0);
         assert!(scan(&img, &ScanOptions::default()).is_empty());
+    }
+
+    #[test]
+    fn code93_reads_in_every_orientation_effort_and_polarity() {
+        let text = b"Code 93!";
+        let modules = code93_modules(&code93_ascii_values(text));
+        for angle in [0.0, 90.0, 180.0, 270.0, 17.0, 133.0, 241.0] {
+            for invert in [false, true] {
+                let mut img = wide_picture(&modules, 2.6, angle);
+                if invert {
+                    invert_image(&mut img);
+                }
+                for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+                    if effort == Effort::Fast && angle % 90.0 != 0.0 {
+                        continue; // Fast scans only horizontal and vertical lines
+                    }
+                    let found = scan(&img, &ScanOptions::with_effort(effort));
+                    assert_eq!(found.len(), 1, "angle {angle} invert {invert} {effort:?}");
+                    let s = &found[0];
+                    assert_eq!(s.symbology, Symbology::Code93);
+                    assert_eq!(s.data, text);
+                    assert_eq!(&s.aim_id, b"]G0");
+                    let meta = linear_meta(s);
+                    assert!(meta.checksum_verified && meta.lines_agreeing >= 2);
+                    assert!(s.quad.contains(Point::new(450.0, 300.0)));
+                }
+            }
+        }
+        // Switched off, nothing is read; a wrong check character reads nothing.
+        let img = wide_picture(&modules, 2.6, 0.0);
+        let off = ScanOptions {
+            symbologies: SymbologySet::all()
+                .iter()
+                .filter(|s| *s != Symbology::Code93)
+                .collect(),
+            ..ScanOptions::default()
+        };
+        assert!(scan(&img, &off).is_empty());
+        let mut values = code93_ascii_values(text);
+        let (c, k) = code93_checks(&values);
+        values.extend([(c + 1) % 47, k]);
+        let img = wide_picture(&code93_modules_raw(&values), 2.6, 0.0);
+        assert!(scan(&img, &ScanOptions::default()).is_empty());
+    }
+
+    #[test]
+    fn other_symbologies_never_come_out_as_code93() {
+        for modules in [
+            code39_modules("ABC-1234", 3, 1),
+            itf_modules(&with_gs1_check("0614141999996"), 3),
+            ean13_modules(TEXT),
+            codabar_modules('B', "40129/5", 'D', 3, 1),
+            code128_modules(&[104, b('9'), b('3')]),
+        ] {
+            let img = wide_picture(&modules, 2.6, 7.0);
+            for s in scan(&img, &ScanOptions::default()) {
+                assert_ne!(s.symbology, Symbology::Code93, "{s:?}");
+            }
+        }
     }
 
     #[test]

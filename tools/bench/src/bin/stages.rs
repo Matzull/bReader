@@ -67,6 +67,7 @@ fn main() {
         Symbology::DataBar,
         Symbology::DataBarLimited,
         Symbology::DataBarExpanded,
+        Symbology::Code93,
     ]);
     let qr = only(&[Symbology::Qr]);
     let cases: Vec<(&str, ScanOptions)> = vec![

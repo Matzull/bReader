@@ -109,7 +109,10 @@ fn generate_class(
     let rmqr = pdf417;
     let databar = pdf417;
     let stacked = if class == Class::Multi { 0 } else { databar };
-    for i in 0..count + extra + pdf417 + aztec + codabar + microqr + rmqr + databar + stacked {
+    let code93 = pdf417;
+    for i in
+        0..count + extra + pdf417 + aztec + codabar + microqr + rmqr + databar + stacked + code93
+    {
         let (img, annotations) = if i < count {
             scene::generate(class, i, seed)
         } else if i < count + extra {
@@ -150,9 +153,17 @@ fn generate_class(
                 Some(g) => g,
                 None => break,
             }
-        } else {
+        } else if i < count + extra + pdf417 + aztec + codabar + microqr + rmqr + databar + stacked
+        {
             let first = count + extra + pdf417 + aztec + codabar + microqr + rmqr + databar;
             match scene::generate_databar_stacked(class, i - first, seed) {
+                Some(g) => g,
+                None => break,
+            }
+        } else {
+            let first =
+                count + extra + pdf417 + aztec + codabar + microqr + rmqr + databar + stacked;
+            match scene::generate_code93(class, i - first, seed) {
                 Some(g) => g,
                 None => break,
             }

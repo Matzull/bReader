@@ -495,6 +495,132 @@ pub fn codabar_modules(start: char, body: &str, stop: char, wide: usize, gap: us
     runs_to_modules(&widths)
 }
 
+/// Code 93 characters as module strings (1 = bar), by value 0 to 46 (the 43
+/// basic characters in check order, then the shift characters ($), (%), (/)
+/// and (+)) and the start/stop character `*` last, as printed in the
+/// specification (independent of the width table the decoder builds).
+pub const CODE93_BITS: [&str; 48] = [
+    "100010100",
+    "101001000",
+    "101000100",
+    "101000010",
+    "100101000",
+    "100100100",
+    "100100010",
+    "101010000",
+    "100010010",
+    "100001010",
+    "110101000",
+    "110100100",
+    "110100010",
+    "110010100",
+    "110010010",
+    "110001010",
+    "101101000",
+    "101100100",
+    "101100010",
+    "100110100",
+    "100011010",
+    "101011000",
+    "101001100",
+    "101000110",
+    "100101100",
+    "100010110",
+    "110110100",
+    "110110010",
+    "110101100",
+    "110100110",
+    "110010110",
+    "110011010",
+    "101101100",
+    "101100110",
+    "100110110",
+    "100111010",
+    "100101110",
+    "111010100",
+    "111010010",
+    "111001010",
+    "101101110",
+    "101110110",
+    "110101110",
+    "100100110",
+    "111011010",
+    "111010110",
+    "100110010",
+    "101011110",
+];
+
+/// The check characters C and K of the data `values` (modulo 47, weights
+/// from the left written out for the length at hand).
+pub fn code93_checks(values: &[u8]) -> (u8, u8) {
+    let weighted = |v: &[u8], period: usize| -> u8 {
+        let n = v.len();
+        let sum: usize = v
+            .iter()
+            .enumerate()
+            .map(|(i, &x)| usize::from(x) * ((n - 1 - i) % period + 1))
+            .sum();
+        (sum % 47) as u8
+    };
+    let c = weighted(values, 20);
+    let mut with_c = values.to_vec();
+    with_c.push(c);
+    (c, weighted(&with_c, 15))
+}
+
+/// Code 93 symbol of exactly `values` between start and stop, with the
+/// termination bar and no check characters added.
+pub fn code93_modules_raw(values: &[u8]) -> Vec<bool> {
+    let mut m = Vec::new();
+    for &v in std::iter::once(&47u8).chain(values).chain(&[47u8]) {
+        m.extend(CODE93_BITS[usize::from(v)].bytes().map(|b| b == b'1'));
+    }
+    m.push(true);
+    m
+}
+
+/// Code 93 symbol of the data `values` with C and K appended.
+pub fn code93_modules(values: &[u8]) -> Vec<bool> {
+    let (c, k) = code93_checks(values);
+    let mut all = values.to_vec();
+    all.extend([c, k]);
+    code93_modules_raw(&all)
+}
+
+/// Values of the Full ASCII text `text`: the 43 basic characters stay
+/// themselves (also `$ % + /`), the others become a shift character and a letter, as in the
+/// specification's table of the 128 characters.
+pub fn code93_ascii_values(text: &[u8]) -> Vec<u8> {
+    const BASIC: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+    let value = |c: u8| BASIC.iter().position(|&b| b == c).unwrap() as u8;
+    let (dollar, percent, slash, plus) = (43u8, 44u8, 45u8, 46u8);
+    let mut out = Vec::new();
+    for &c in text {
+        let (shift, letter): (Option<u8>, u8) = match c {
+            _ if BASIC.contains(&c) => (None, c),
+            0 => (Some(percent), b'U'),
+            1..=26 => (Some(dollar), b'A' + c - 1),
+            27..=31 => (Some(percent), b'A' + c - 27),
+            33..=44 => (Some(slash), b'A' + c - 33),
+            47 => (Some(slash), b'O'),
+            58 => (Some(slash), b'Z'),
+            59..=63 => (Some(percent), b'F' + c - 59),
+            64 => (Some(percent), b'V'),
+            91..=95 => (Some(percent), b'K' + c - 91),
+            96 => (Some(percent), b'W'),
+            97..=122 => (Some(plus), b'A' + c - 97),
+            123..=126 => (Some(percent), b'P' + c - 123),
+            127 => (Some(percent), b'T'),
+            _ => (None, c),
+        };
+        if let Some(s) = shift {
+            out.push(s);
+        }
+        out.push(value(letter));
+    }
+    out
+}
+
 const ITF_DIGITS: [&str; 10] = [
     "nnwwn", "wnnnw", "nwnnw", "wwnnn", "nnwnw", "wnwnn", "nwwnn", "nnnww", "wnnwn", "nwnwn",
 ];
@@ -642,4 +768,19 @@ pub fn databar_limited_modules(body: &str) -> Vec<bool> {
         enc.encode(&enc.build_limited(body.as_bytes()).unwrap())
             .unwrap(),
     )
+}
+
+/// Code 93 symbol from the independent encoder `anyd`: start, `text` (Full
+/// ASCII through the shift characters when `full_ascii`), C, K, stop and the
+/// termination bar.
+pub fn code93_oracle_modules(text: &[u8], full_ascii: bool) -> Vec<bool> {
+    use anyd::codes::code93::Code93Encoder;
+    use anyd::output::Encoding;
+    use anyd::traits::Encode;
+    let enc = Code93Encoder::new();
+    let symbol = enc.build(text, full_ascii).expect("encodable");
+    match enc.encode(&symbol).expect("encoded") {
+        Encoding::Linear(p) => p.modules,
+        _ => panic!("linear pattern expected"),
+    }
 }

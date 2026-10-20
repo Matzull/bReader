@@ -25,6 +25,7 @@ The library is built as a pipeline of pluggable modules so symbologies and proce
 | | ITF (Interleaved 2 of 5) | ITF-14, configurable accepted lengths |
 | | GS1 DataBar Omnidirectional/Truncated, Limited, Expanded (one row) | ISO/IEC 24724, element string with AIM `]e0` and mandatory mod 79/89/211 checksum ([D-037](decisions.md#d-037)) |
 | | Codabar | ANSI/AIM BC3 / EN 798, start and stop A-D, no check character, minimum 4 data characters ([D-036](decisions.md#d-036)) |
+| | Code 93 | AIM USS Code 93 (ANSI/AIM BC5-1995), both check characters verified and stripped, Full ASCII through the shift characters, AIM `]G0` ([D-049](decisions.md#d-049)) |
 
 ### 2.2 Out of scope (v1)
 
@@ -32,7 +33,7 @@ The library is built as a pipeline of pluggable modules so symbologies and proce
 - WebAssembly and mobile (Android/iOS) targets.
 - Dynamically loaded plugins (`.so`/`.dll`).
 - QR Structured Append, Model 1 QR. Micro QR (M1 to M4) and rMQR (all 32 sizes) are implemented.
-- MaxiCode, MicroPDF417, other 1D symbologies (planned later; the architecture must accommodate them). Data Matrix, PDF417, Aztec, Codabar and GS1 DataBar (one row) are implemented.
+- MaxiCode, MicroPDF417, other 1D symbologies (planned later; the architecture must accommodate them). Data Matrix, PDF417, Aztec, Codabar, Code 93 and GS1 DataBar are implemented.
 
 ## 3. Functional requirements
 
@@ -115,6 +116,7 @@ ZXing (Apache-2.0) and zbar (LGPL-2.1) may be studied for ideas and approaches; 
 - ISO/IEC 15420 — EAN/UPC
 - ISO/IEC 15417 — Code 128
 - ISO/IEC 16388 — Code 39
+- AIM USS Code 93 (ANSI/AIM BC5-1995) — Code 93
 - ISO/IEC 16390 — Interleaved 2 of 5
 - ISO/IEC 15424 — symbology identifiers
 - GS1 General Specifications — Application Identifiers

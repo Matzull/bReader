@@ -132,7 +132,7 @@ fn layouts(votes: &Votes) -> Vec<Layout> {
             }
         }
     }
-    all.sort_by(|x, y| y.0.cmp(&x.0));
+    all.sort_by_key(|x| std::cmp::Reverse(x.0));
     all.into_iter().map(|x| x.1).take(MAX_LAYOUTS).collect()
 }
 
@@ -162,7 +162,7 @@ impl Cell {
     /// Candidates, best first, with weights.
     fn ranked(&self) -> [(u16, u16); 4] {
         let mut r = [0, 1, 2, 3].map(|i| (self.v[i], self.w[i]));
-        r.sort_by(|a, b| b.1.cmp(&a.1));
+        r.sort_by_key(|a| std::cmp::Reverse(a.1));
         r
     }
 

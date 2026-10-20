@@ -32,6 +32,7 @@ pub enum Sym {
     DataBarStacked,
     DataBarStackedOmni,
     DataBarExpandedStacked,
+    Code93,
 }
 
 impl Sym {
@@ -76,6 +77,7 @@ impl Sym {
             Sym::DataBar | Sym::DataBarStacked | Sym::DataBarStackedOmni => "DATABAR",
             Sym::DataBarLimited => "DATABAR_LIMITED",
             Sym::DataBarExpanded | Sym::DataBarExpandedStacked => "DATABAR_EXPANDED",
+            Sym::Code93 => "CODE_93",
         }
     }
 }
@@ -266,7 +268,8 @@ fn encode_linear(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
         | Sym::DataBarExpanded
         | Sym::DataBarStacked
         | Sym::DataBarStackedOmni
-        | Sym::DataBarExpandedStacked => unreachable!("not linear"),
+        | Sym::DataBarExpandedStacked
+        | Sym::Code93 => unreachable!("not linear"),
     };
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, sym.label(), &bars, height)
@@ -499,6 +502,141 @@ fn encode_codabar(rng: &mut ChaCha8Rng) -> Encoded {
     }
     let height = linear_height(rng, bars.len());
     Encoded::linear(text, Sym::Codabar.label(), &bars, height)
+}
+
+/// Code 93 characters as module strings (1 = bar), by value: the 43 basic
+/// characters in check order, the shift characters ($), (%), (/), (+) and
+/// the start/stop character, as in the specification table.
+const CODE93: [&str; 48] = [
+    "100010100",
+    "101001000",
+    "101000100",
+    "101000010",
+    "100101000",
+    "100100100",
+    "100100010",
+    "101010000",
+    "100010010",
+    "100001010",
+    "110101000",
+    "110100100",
+    "110100010",
+    "110010100",
+    "110010010",
+    "110001010",
+    "101101000",
+    "101100100",
+    "101100010",
+    "100110100",
+    "100011010",
+    "101011000",
+    "101001100",
+    "101000110",
+    "100101100",
+    "100010110",
+    "110110100",
+    "110110010",
+    "110101100",
+    "110100110",
+    "110010110",
+    "110011010",
+    "101101100",
+    "101100110",
+    "100110110",
+    "100111010",
+    "100101110",
+    "111010100",
+    "111010010",
+    "111001010",
+    "101101110",
+    "101110110",
+    "110101110",
+    "100100110",
+    "111011010",
+    "111010110",
+    "100110010",
+    "101011110",
+];
+const CODE93_BASIC: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+
+/// Values of one ASCII character: itself when it is in the basic set, else
+/// a shift character ($ = 43, % = 44, / = 45, + = 46) and a letter.
+fn code93_values(c: u8) -> Vec<u8> {
+    let basic = |ch: u8| CODE93_BASIC.bytes().position(|b| b == ch).expect("basic") as u8;
+    if CODE93_BASIC.as_bytes().contains(&c) {
+        return vec![basic(c)];
+    }
+    let (shift, letter) = match c {
+        0 => (44u8, b'U'),
+        1..=26 => (43, b'A' + c - 1),
+        27..=31 => (44, b'A' + c - 27),
+        33..=44 => (45, b'A' + c - 33),
+        47 => (45, b'O'),
+        58 => (45, b'Z'),
+        59..=63 => (44, b'F' + c - 59),
+        64 => (44, b'V'),
+        91..=95 => (44, b'K' + c - 91),
+        96 => (44, b'W'),
+        97..=122 => (46, b'A' + c - 97),
+        123..=126 => (44, b'P' + c - 123),
+        127 => (44, b'T'),
+        _ => unreachable!("ASCII only"),
+    };
+    vec![shift, basic(letter)]
+}
+
+/// Check character over `values`: weights 1 to `period` from the right.
+fn code93_check(values: &[u8], period: usize) -> u8 {
+    let sum: usize = values
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(k, &v)| usize::from(v) * (k % period + 1))
+        .sum();
+    (sum % 47) as u8
+}
+
+/// Modules of a Code 93 symbol: start, the characters of `text` (Full ASCII
+/// through the shift characters), C, K, stop and the termination bar.
+fn code93_bars(text: &str) -> Vec<u8> {
+    let mut values: Vec<u8> = text.bytes().flat_map(code93_values).collect();
+    let c = code93_check(&values, 20);
+    values.push(c);
+    let k = code93_check(&values, 15);
+    values.push(k);
+    let mut bars = Vec::new();
+    for v in std::iter::once(47u8).chain(values).chain([47]) {
+        bars.extend(CODE93[usize::from(v)].bytes().map(|b| b - b'0'));
+    }
+    bars.push(1);
+    bars
+}
+
+/// Code 93 of 4 to 12 characters. With `full_ascii` the text is printable
+/// ASCII with at least one character that needs a shift (lower case or
+/// punctuation outside the basic set); without it, the basic set only.
+pub fn encode_code93(rng: &mut ChaCha8Rng, full_ascii: bool) -> Encoded {
+    let len = rng.random_range(4..=12);
+    let mut text = if full_ascii {
+        let printable: String = (0x20u8..0x7f).map(char::from).collect();
+        pick_string(rng, &pool(&printable), len)
+    } else {
+        pick_string(rng, &pool(CODE93_BASIC), len)
+    };
+    // Labels are compared trimmed; keep the ends visible.
+    let mut chars: Vec<char> = text.chars().collect();
+    for i in [0, len - 1] {
+        if chars[i] == ' ' {
+            chars[i] = 'Q';
+        }
+    }
+    if full_ascii && chars.iter().all(|c| CODE93_BASIC.contains(*c)) {
+        chars[len / 2] = char::from(b'a' + rng.random_range(0..26u8));
+    }
+    text = chars.into_iter().collect();
+    let bars = code93_bars(&text);
+    let height = linear_height(rng, bars.len());
+    Encoded::linear(text, Sym::Code93.label(), &bars, height)
 }
 
 /// Micro QR versions and levels of the images. M3-L is left out: the
@@ -823,6 +961,10 @@ pub fn encode(rng: &mut ChaCha8Rng, sym: Sym) -> Encoded {
             encode_rmqr(rng, pick, false)
         }
         Sym::Codabar => encode_codabar(rng),
+        Sym::Code93 => {
+            let full_ascii = rng.random_bool(0.5);
+            encode_code93(rng, full_ascii)
+        }
         Sym::MicroQr => {
             let pick = rng.random_range(0..MICRO_QR_VARIANTS.len());
             encode_microqr(rng, pick, false)
@@ -893,6 +1035,53 @@ mod tests {
     }
 
     #[test]
+    fn code93_matches_the_independent_encoder_and_covers_full_ascii() {
+        use anyd::codes::code93::Code93Encoder;
+        use anyd::output::Encoding;
+        use anyd::traits::Encode;
+        let oracle = |text: &str| {
+            let enc = Code93Encoder::new();
+            let symbol = enc.build(text.as_bytes(), true).unwrap();
+            match enc.encode(&symbol).unwrap() {
+                Encoding::Linear(p) => p.modules.iter().map(|&b| u8::from(b)).collect::<Vec<u8>>(),
+                _ => panic!("linear"),
+            }
+        };
+        for text in [
+            "CODE 93",
+            "0123456789",
+            "A-B.C D",
+            "Z",
+            "VV",
+            "Hello, World! @#~",
+            "a\tb\x7f",
+        ] {
+            assert_eq!(oracle(text), code93_bars(text), "{text:?}");
+        }
+        // Every ASCII character is a basic one or a shift and a letter, and
+        // no two characters share the values.
+        let mut seen = std::collections::HashSet::new();
+        for c in 0u8..128 {
+            let v = code93_values(c);
+            assert!(
+                v.len() == 1 || (v[0] >= 43 && (10..36).contains(&v[1])),
+                "{c}"
+            );
+            assert!(seen.insert(v), "{c}");
+        }
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        let mut shifted = 0;
+        for i in 0..100 {
+            let e = encode_code93(&mut rng, i % 2 == 1);
+            assert_eq!(e.format, "CODE_93");
+            assert!(e.modules[0] && e.modules[e.cols - 1]);
+            assert_eq!(e.text.trim(), e.text);
+            shifted += usize::from(e.text.chars().any(|c| !CODE93_BASIC.contains(c)));
+        }
+        assert_eq!(shifted, 50, "every second symbol needs shift characters");
+    }
+
+    #[test]
     fn microqr_covers_the_variants_and_mirrors() {
         let mut rng = ChaCha8Rng::seed_from_u64(4);
         for (pick, &(v, _)) in MICRO_QR_VARIANTS.iter().enumerate() {
@@ -943,6 +1132,7 @@ mod tests {
                 Sym::DataBarStacked,
                 Sym::DataBarStackedOmni,
                 Sym::DataBarExpandedStacked,
+                Sym::Code93,
             ]) {
                 let e = encode(&mut rng, s);
                 assert_eq!(e.modules.len(), e.cols * e.rows);
