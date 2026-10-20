@@ -1,6 +1,6 @@
 # Baselines
 
-First measurement, 2026-10-06. AMD Ryzen 5 5500U, release build, single image at a time. Latency = decode call only (image already loaded as luma8), in ms per image.
+First measurement, 2026-10-06, on the AMD Ryzen 5 5500U (the project moved to a Ryzen 7 3700X on 2026-10-20, see [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x); latency numbers below this section are 5500U numbers unless a section says otherwise), release build, single image at a time. Latency = decode call only (image already loaded as luma8), in ms per image.
 
 Reproduce:
 
@@ -15,7 +15,96 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-20: new machine (Ryzen 7 3700X)
+
+[D-050](decisions.md#d-050). The project moved from the Ryzen 5 5500U (14 GB) to an AMD Ryzen 7 3700X (8 cores / 16 threads, 31 GB RAM, `schedutil` governor, boost up to about 4.2 GHz). Every latency number in the sections below was measured on the 5500U; this section re-measures all of it on the 3700X and the absolute v1 targets apply to these numbers (owner decision 2026-10-20). Read counts do not depend on the machine.
+
+Method (the documented one): release builds, `RAYON_NUM_THREADS=4` (the default build has no rayon feature, so the library scans on one thread and the setting does not change the decode call), decode call only, one process at a time under the shared lock, `uptime` load average below 2 before each block. Video: `video-bench data/dynamsoft/video-based-testing --engines fast,balanced --filter 1080p`, 3 rounds, per-frame p50, median over the rounds (the frames are 720x1280 in this file set). Stills: the Rust `bench` (challenging-images, `data/barber --subset 8`, synth seed 1 generated with the current `tools/synth`, 511 expected symbols), median of 5 interleaved runs (rounds over the nine dataset and effort pairs); zxing-cpp 3.1.1 and zbar 0.23 from one run of `py_bench.py` each (includes the Python call). All numbers in this section were measured here.
+
+### Latency, main at `d5755cf` (before the change below)
+
+Stills, p50 / p95 in ms (spread of the breader p50 over the 5 runs: 0.1 to 1.1 ms, largest at Exhaustive):
+
+| Dataset | breader Fast | breader Balanced | breader Exhaustive | zxing-cpp | zbar |
+|---|---|---|---|---|---|
+| challenging-images | 5.00 / 40.5 | 20.80 / 146.9 | 53.92 / 409.3 | 21.03 / 281.4 | 47.03 / 545.8 |
+| BarBeR 1/8 subset | 5.83 / 23.3 | 23.03 / 112.1 | 59.72 / 301.8 | 29.54 / 163.5 | 63.15 / 383.7 |
+| synth seed 1 | 1.56 / 9.4 | 5.74 / 48.9 | 13.28 / 122.2 | 11.66 / 35.2 | 15.79 / 81.2 |
+| zxing-cpp samples (single run) | 0.99 / 4.5 | 4.97 / 28.4 | 10.55 / 56.5 | 1.34 / 7.8 | 1.75 / 11.0 |
+
+Reads on the same runs (reads / expected, false positives): breader challenging-images 333 / 411 / 424 of 448, BarBeR subset 695 / 810 / 835 of 1093, synth 446 / 505 / 506 of 511, zxing samples 636 / 752 / 760 of 858, all with 0 false positives; zxing-cpp 389 of 448 (0 FP), 767 of 1093 (17 FP), 395 of 511 (11 FP), 713 of 794 (69 FP); zbar 170 of 448 (5 FP), 715 of 1093 (27 FP), 215 of 511 (43 FP), 450 of 794 (74 FP). Balanced p50 is below zxing-cpp's on challenging-images (20.80 against 21.03 ms, 1 %, inside the run-to-run spread of 0.85 ms), the BarBeR subset and synth, and above it on the zxing-cpp samples (small clean images, as before).
+
+Fast at 1080p, per-frame p50 in ms, median of 3 rounds:
+
+| Video | Fast | Balanced |
+|---|---|---|
+| batch_EAN13 | 4.43 | 13.95 |
+| batch_code39 | 12.49 | 83.33 |
+| batch_dark_environment_1d | 4.53 | 12.85 |
+| batch_datamatrix | 10.38 | 65.64 |
+| batch_inverted_datamatrix | 8.71 | 48.96 |
+| batch_rotated_small_pdf417 | **14.71** | 61.57 |
+| damaged_qrcode | 8.68 | 19.56 |
+| reflective_surface_qrcode | 4.84 | 17.88 |
+| rotated_vertical_ITF | 4.78 | 14.28 |
+| wide_to_close_datamatrix | 3.22 | 15.12 |
+
+Median video 6.76 ms at Fast (18.72 at Balanced); worst 14.71 ms. **The Fast worst-video target (13 ms) was missed**, by `batch_rotated_small_pdf417`, not by `batch_code39` (12.49 ms).
+
+**Cause: [D-045](decisions.md#d-045), the QR wide-aspect finder tier**, whose latency was only measured on still images. Interleaved runs of builds before and after it on this video (Fast p50, two runs each): `c6e0690` (D-044, before D-045) 10.8 and 10.9 ms, `287ce3a` (D-045 to D-047) 14.3 and 14.3 ms, +3.5 ms. The PDF417 labels of that video are stripes that give about 200 finder-like hits per frame (59 of them wide); the wide tier adds about 5000 timing-pattern link tests per frame and about 8 failing triplet verifications. Disabling the tier (a temporary experiment, not a candidate: it loses QR reads) brings the frame from 14.3 to 11.1 ms. The "worst 12.4 ms" of the 2026-10-14 sections was the D-044 value of `batch_code39` and missed this.
+
+### D-048 cost on video
+
+`287ce3a` (before D-048) against `d5755cf` (after), Fast, interleaved, 3 rounds, median p50 in ms:
+
+| Video | 287ce3a | d5755cf | Change |
+|---|---|---|---|
+| batch_EAN13 | 4.46 | 4.57 | +0.11 |
+| batch_code39 | 11.92 | 12.51 | +0.60 |
+| batch_dark_environment_1d | 4.59 | 4.68 | +0.09 |
+| batch_datamatrix | 9.83 | 10.35 | +0.53 |
+| batch_inverted_datamatrix | 8.45 | 8.74 | +0.28 |
+| batch_rotated_small_pdf417 | 14.25 | 14.70 | +0.45 |
+| damaged_qrcode | 8.80 | 8.85 | +0.05 |
+| reflective_surface_qrcode | 4.92 | 5.00 | +0.07 |
+| rotated_vertical_ITF | 4.94 | 5.00 | +0.06 |
+| wide_to_close_datamatrix | 3.28 | 3.28 | 0.00 |
+
+Median video 6.70 to 6.87 ms (+0.17, +2.5 %); `batch_code39` +5 % (it was 12.4 to about 13.65 ms on the 5500U). D-048 is not the reason for the miss: it is 0.45 ms of the 14.7 ms on the pdf417 video.
+
+### Fast after the exact QR link and refinement changes
+
+Lossless changes in `breader-qr` ([D-050](decisions.md#d-050)): every one returns the same values as the code it replaces (unit tests compare `link` and `refine_finder` against copies of the old code on generated images, bit for bit). Fast at 1080p, `d5755cf` against the working tree, interleaved, 3 rounds, median p50 in ms:
+
+| Video | Before | After |
+|---|---|---|
+| batch_EAN13 | 4.52 | 4.48 |
+| batch_code39 | 12.54 | **12.35** |
+| batch_dark_environment_1d | 4.62 | 4.65 |
+| batch_datamatrix | 10.51 | 10.48 |
+| batch_inverted_datamatrix | 8.92 | 8.85 |
+| batch_rotated_small_pdf417 | 14.74 | **12.27** |
+| damaged_qrcode | 8.94 | 8.76 |
+| reflective_surface_qrcode | 5.10 | 5.00 |
+| rotated_vertical_ITF | 5.11 | 5.03 |
+| wide_to_close_datamatrix | 3.36 | 3.35 |
+
+Median video 7.01 to 6.89 ms, worst 14.74 to 12.35 ms (`batch_code39`, then `batch_rotated_small_pdf417` 12.27). Stills, interleaved old/new, 3 runs, p50 / p95 per run: challenging-images Fast 4.86 / 4.98 / 5.07 to 4.74 / 5.02 / 5.09, Balanced 20.65 / 20.24 / 20.92 to 20.42 / 20.75 / 21.36; BarBeR subset Fast 5.57 / 5.75 / 6.01 to 5.52 / 5.63 / 5.80, Balanced 22.44 / 23.07 / 22.91 to 23.51 / 23.05 / 23.24 (no change within noise).
+
+### Target status on this machine
+
+| Target | Result |
+|---|---|
+| Fast 1080p p50, median video <= 10 ms | **Met**: 6.89 ms (6.76 before the change) |
+| Fast 1080p p50, worst video <= 13 ms | Missed before the change (14.71 ms, `batch_rotated_small_pdf417`); **met** after it: 12.35 ms (`batch_code39`), 12.27 ms the pdf417 video |
+| Balanced p50 <= zxing-cpp on the photo sets | **Met**: challenging-images 20.80 against 21.03 ms (close), BarBeR subset 23.03 against 29.54 ms, synth 5.74 against 11.66 ms |
+| 0 false positives | 0 in every run above, tier b and the BarBeR full check at all three efforts |
+
+Gates of the change (all under the lock): tier b passed except the video tracker `batch_datamatrix_1080p` 95 to 94 of 100, which main reads the same way (flicker; pre-existing); BarBeR full `--check` at Fast, Balanced and Exhaustive passed (no read below its baseline, 0 FP). `cargo test --workspace` passes; `steady_state_scans_do_not_allocate` and `cargo clippy` fail on main itself (linear texture 20 / 40 allocations at Balanced / Exhaustive; two lints of the 1.96 toolchain in `breader-linear` and `breader-pdf417`); the allocation table is identical with and without the change (QR rows included).
+
 ## Status 2026-10-13
+
+*Latency in this section was measured on the Ryzen 5 5500U; the 3700X numbers are in [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x).*
 
 Measurement-only refresh on main at `c171fe4` (no reader change), on an idle AMD Ryzen 5 5500U (no other process; `uptime`, `free` and `pgrep` checked before each block), release builds, `RAYON_NUM_THREADS=4`, the library single-threaded, decode call only. This section supersedes the numbers of the older sections below (they stay as history, each marked); the next refresh replaces it.
 
@@ -24,6 +113,8 @@ Measurement-only refresh on main at `c171fe4` (no reader change), on an idle AMD
 - **Engines.** breader columns are the Rust `bench` (the committed baselines); zxing-cpp 3.1.1 and zbar 0.23 (pyzbar) come from `tools/bench/py_bench.py` at default options, with `breader-py` rebuilt from main. Until 2026-10-13 the Python breader gave different counts and false positives from the Rust bench on the same images (challenging-images Balanced 411 reads, 2 FP, against 411 reads, 0 FP in Rust; zxing-samples 662 reads, 19 FP, against 681 and 0; BarBeR subset 802, 0 FP, against 803, 0). The cause was the harness, not the binding (both build the same `ScanOptions`): `py_bench.py` did not offer the alternative forms of a read that the Rust bench offers (the charset-decoded text of the symbol, a Shift JIS reading of non-UTF-8 bytes), so a correct read of a label written in another charset counted as a false positive and a miss; it also converted to gray with PIL's Rec. 601 weights instead of the `image` crate's 2126/7152/722, and did not repair the double-encoded UTF-8 of some labels. Fixed in `py_bench.py` ([FAILURES-BARBER-2D](FAILURES-BARBER-2D.md#0-the-python-bench-disagreement)): challenging-images 412 / 0 FP, zxing-samples 682 / 0 FP, BarBeR subset 807 / 0 FP; the remaining 1 to 4 reads are marginal reads that flip with the JPEG decoder (PIL against the Rust `image` crate: 11 of 1104 subset images read differently). zxing-cpp and zbar columns above were measured before the fix and shift by at most a few reads. rxing was not re-run.
 
 ## Status 2026-10-14: QR wide-aspect tier
+
+*Latency in this section was measured on the Ryzen 5 5500U; the 3700X numbers are in [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x).*
 
 [D-045](decisions.md#d-045), on main `c6e0690`. Tier c1 passed with 0 false positives on every set (gate details in the decision). Reads that moved (everything else is identical to the table above): BarBeR full QR Code Fast 975 to 1028 (+53; Dubska 561 to 613, Szentandrasi-Dubska 187 to 188), Balanced 1094 to 1156 (+62; Dubska 630 to 683, Szentandrasi-Dubska 196 to 205) against zxing-cpp 1153, Exhaustive 1101 to 1161 (+60; Dubska 634 to 685, Szentandrasi-Dubska 199 to 208); BarBeR 1/8 subset 688 / 803 / 828 to 695 / 809 / 834 (all classes); zxing-cpp samples Fast 568 to 569 (QR `qrcode-2` 44 to 45). The Fast full-set total is 5400 to 5451: the QR gain is +53, and two Data Matrix reads (Deal Kaist 24 to 23 and one in another source) that the committed Fast baseline still held are lost on main itself (not from this change: the main build reads the same 23), so the baseline now records them. Latency, interleaved old/new, 5 runs, Balanced p50: challenging-images 19.49 to 19.61 ms (+0.6 %), BarBeR subset 21.74 to 22.03 (+1.3 %); Fast: 4.77 to 4.81 (+0.8 %), 5.32 to 5.39 (+1.3 %); Fast p95 on challenging-images 35.0 to 40.8 ms.
 
@@ -124,6 +215,8 @@ Ranked gaps where breader trails zxing-cpp (reads, Balanced; QR on BarBeR is clo
 
 
 ## Status 2026-10-14: Data Matrix Fast level stage, PDF417 row pitch
+
+*Latency in this section was measured on the Ryzen 5 5500U; the 3700X numbers are in [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x).*
 
 [D-046](decisions.md#d-046) and [D-047](decisions.md#d-047), on main `8d6115d` plus these changes. Tier c1 passed with 0 false positives on every set. Reads that moved (everything else is identical to the tables above):
 
@@ -255,7 +348,7 @@ Each cell is before -> after edge relocation -> after both changes (video: befor
 | Read rate, challenging-images | ≥ 86 % (zxing-cpp level) |
 | Read rate, synth | ≥ 82 % overall, ≥ zxing-cpp in every class |
 | Latency, Balanced | p50 ≤ zxing-cpp on both datasets |
-| Latency, Fast, 1080p frame | p50 ≤ 10 ms on the median video and ≤ 13 ms on the worst (owner decision 2026-10-13; revised from "p50 ≤ 10 ms" on every video). **Met** with the numbers of [Fast at 1080p](#fast-at-1080p-video-bench): median video 7.65 ms, worst `batch_code39` 12.4 ms |
+| Latency, Fast, 1080p frame | p50 <= 10 ms on the median video and <= 13 ms on the worst (owner decision 2026-10-13; revised from "p50 <= 10 ms" on every video; the same absolute numbers apply on the Ryzen 7 3700X since 2026-10-20, [D-050](decisions.md#d-050)). **Met** on the 3700X, [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x): median video 6.89 ms, worst 12.35 ms (`batch_code39`). On the 5500U the 2026-10-14 numbers (7.65 and 12.4 ms) did not include D-045's cost on the pdf417 video |
 
 ## Data Matrix (2026-10-08)
 
@@ -552,6 +645,8 @@ First measurement of the DataBar decoders ([design](symbologies/linear.md#gs1-da
 
 ## Phase D latency (2026-10-12)
 
+*Latency in this section was measured on the Ryzen 5 5500U; the 3700X numbers are in [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x).*
+
 *Superseded by [Status 2026-10-13](#status-2026-10-13).*
 
 What the Phase D readers (PDF417, Aztec, Codabar, Micro QR, rMQR, GS1 DataBar) and the UPC-E guard fix cost, against the [v1 targets](#v1-targets-confirmed-2026-10-07). Machine: AMD Ryzen 5 5500U (6 cores / 12 threads), idle (`uptime` and `ps` checked before each block: no cargo, rustc or bench process), release builds, the library single-threaded, decode call only.
@@ -621,6 +716,8 @@ Note: the Python package in the shared `pyvenv` is an older build of `breader-py
 
 ## zbar (2026-10-13)
 
+*Latency in this section was measured on the Ryzen 5 5500U; the 3700X numbers are in [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x).*
+
 zbar is a comparison engine in `tools/bench/py_bench.py` (`--engine zbar`, or `--engine all` for breader, zxing-cpp and zbar). It is used as a black box through its public C API via pyzbar 0.1.9 (`pip install pyzbar`; needs the system library, `apt install libzbar0`; libzbar 0.23). Default settings; `--zbar-all` passes every symbology explicitly, which changed nothing on challenging-images (160 reads, 5 false positives both ways). zbar's own sources were not read. It reads Code 93, EAN-2/5, SQ code and composite codes too; those have no breader counterpart, so labels in them are unsupported and zbar's reads of them are dropped. zbar has no Data Matrix, Aztec, Micro QR, rMQR or DataBar Limited reader, so those labels count as misses for it, as for any engine.
 
 Quirks normalised, so that the comparison is on values and not on spelling (all in `ZbarEngine` and the shared `canonical`):
@@ -652,6 +749,8 @@ False positives of zbar:
 - synth: 38 ITF (fragments of ITF symbols on the rotated, perspective, noisy and low-resolution classes), 4 QR, 1 DataBar Expanded.
 
 ## GS1 DataBar stacked (2026-10-14)
+
+*Latency in this section was measured on the Ryzen 5 5500U; the 3700X numbers are in [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x).*
 
 [D-048](decisions.md#d-048): Stacked, Stacked Omnidirectional and Expanded Stacked, reported as `DataBar` / `DataBarExpanded`. Release build, 4 threads, synthetic sets generated into worktree-local directories (24 new images in seed 1, 56 in seed 2024, after the one-row DataBar ones; every earlier image byte-identical).
 

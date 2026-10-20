@@ -53,21 +53,21 @@ A scan is a list of passes. A pass is an image variant (original or a preprocess
 | `Balanced` | original and first preprocessor, first two binarizers, both polarities | Default |
 | `Exhaustive` | every preprocessor and binarizer, both polarities | Hard stills |
 
-Measured with the default pipeline on an AMD Ryzen 5 5500U (release build, single thread, one image at a time, decode call only), on an idle machine, 2026-10-13, see [Status 2026-10-13](BASELINES.md#status-2026-10-13). Latency is the median of 5 interleaved runs; the read rate is reads over expected symbols, and false positives are 0 everywhere:
+Measured with the default pipeline on an AMD Ryzen 7 3700X (release build, single thread, one image at a time, decode call only), on an idle machine, 2026-10-20, see [Status 2026-10-20](BASELINES.md#status-2026-10-20-new-machine-ryzen-7-3700x) (earlier numbers were from a Ryzen 5 5500U). Latency is the median of 5 interleaved runs; the read rate is reads over expected symbols, and false positives are 0 everywhere:
 
 | Dataset | Effort | Read rate | False positives | Latency p50 / p95 (ms) |
 |---|---|---|---|---|
-| challenging-images (448 symbols) | Fast | 74.3 % | 0 | 4.8 / 35.2 |
-| challenging-images | Balanced | 91.7 % | 0 | 20.2 / 130.5 |
-| challenging-images | Exhaustive | 94.6 % | 0 | 51.8 / 362.7 |
-| BarBeR 1/8 subset (1093 symbols) | Fast | 62.9 % | 0 | 5.4 / 21.8 |
-| BarBeR 1/8 subset | Balanced | 73.5 % | 0 | 22.4 / 103.9 |
-| BarBeR 1/8 subset | Exhaustive | 75.8 % | 0 | 58.5 / 277.6 |
-| synth (487 symbols) | Fast | 87.5 % | 0 | 1.4 / 8.3 |
-| synth | Balanced | 99.0 % | 0 | 6.1 / 40.0 |
-| synth | Exhaustive | 99.2 % | 0 | 14.0 / 100.3 |
+| challenging-images (448 symbols) | Fast | 74.3 % | 0 | 5.0 / 40.5 |
+| challenging-images | Balanced | 91.7 % | 0 | 20.8 / 146.9 |
+| challenging-images | Exhaustive | 94.6 % | 0 | 53.9 / 409.3 |
+| BarBeR 1/8 subset (1093 symbols) | Fast | 63.6 % | 0 | 5.8 / 23.3 |
+| BarBeR 1/8 subset | Balanced | 74.1 % | 0 | 23.0 / 112.1 |
+| BarBeR 1/8 subset | Exhaustive | 76.4 % | 0 | 59.7 / 301.8 |
+| synth (511 symbols) | Fast | 87.3 % | 0 | 1.6 / 9.4 |
+| synth | Balanced | 98.8 % | 0 | 5.7 / 48.9 |
+| synth | Exhaustive | 99.0 % | 0 | 13.3 / 122.2 |
 
-For comparison, zxing-cpp at default options reads 86.6 % of challenging-images (p50 22.2 ms) and 70.0 % of the BarBeR subset (p50 33.0 ms); Balanced is faster on both and reads more.
+For comparison, zxing-cpp at default options reads 86.8 % of challenging-images (p50 21.0 ms) and 70.2 % of the BarBeR subset (p50 29.5 ms, through Python); Balanced is faster on both and reads more.
 
 `Exhaustive` reads more than `Balanced` on every set above, at 2.5 to 3 times the median latency (and a long tail: p95 up to 360 ms on 3 MP photos). Measure on your own images.
 

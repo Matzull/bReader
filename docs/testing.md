@@ -26,7 +26,7 @@ How much to run depends on the change; the measurements and the reasoning are in
 | **c1** | changes that raise false-positive exposure (list below) | b without the subset, with the full BarBeR set at Balanced and Exhaustive | about 35 min |
 | **c2** | phase end, before a release; weekly in CI (without BarBeR, which is local) | every set at every effort, the full BarBeR set (Fast too) and the video gate with all engines (tracker, fast, balanced); `--all` is an alias | about 42 min |
 
-Fuzzing is separate (nightly in CI). CI runs tier a on pull requests and tier b on pushes to main, restricted to the synthetic sets (`--synthetic-only`, because the real datasets are only fetched by the weekly job); the weekly job runs c2 ([CI](CI.md)). The numbers above are from a shared machine with 4 threads; a full BarBeR run takes 297 s (Fast), 549 s (Balanced) and 1071 s (Exhaustive) there.
+Fuzzing is separate (nightly in CI). CI runs tier a on pull requests and tier b on pushes to main, restricted to the synthetic sets (`--synthetic-only`, because the real datasets are only fetched by the weekly job); the weekly job runs c2 ([CI](CI.md)). The numbers above are from a shared Ryzen 5 5500U with 4 threads (before 2026-10-20; the Ryzen 7 3700X is faster); a full BarBeR run took 297 s (Fast), 549 s (Balanced) and 1071 s (Exhaustive) there.
 
 ### When to run c1
 
@@ -70,7 +70,7 @@ Higher read counts and entries not yet in the baseline are only notices. Latency
 
 ### The BarBeR gate
 
-BarBeR has no redistributable license, so it is never run in CI. A full run takes about 5, 9 and 18 minutes at Fast, Balanced and Exhaustive (297, 549 and 1071 s on a shared machine with 4 threads; 8748 photos, some of 20 megapixels), too long for every local check, so there are two gates over the same ground truth ([datasets](datasets.md#barber)):
+BarBeR has no redistributable license, so it is never run in CI. A full run takes about 5, 9 and 18 minutes at Fast, Balanced and Exhaustive (297, 549 and 1071 s on a shared Ryzen 5 5500U with 4 threads; 8748 photos, some of 20 megapixels), too long for every local check, so there are two gates over the same ground truth ([datasets](datasets.md#barber)):
 
 - `--barber` (tier b, Balanced and Exhaustive): a deterministic 1/8 subset (`bench data/barber --subset 8`: the images whose FNV-1a hash of the file name is divisible by 8, about 1100 images, all twelve sources represented), baselines `barber-subset-<effort>.json`, about 4 minutes for the three efforts.
 - `--barber-full` (tier c1 at Balanced and Exhaustive, c2 at all three): the whole set, baselines `barber-<effort>.json`.

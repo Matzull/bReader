@@ -71,6 +71,7 @@ pub(crate) struct FinderSearch {
     recent: Vec<usize>,
     max_module: f32,
     links: Vec<Link>,
+    link_buf: LinkBuf,
     incident: Vec<(usize, f32, u16)>,
     /// Finders with a wide chord aspect are collected too.
     wide: bool,
@@ -481,8 +482,15 @@ impl FinderSearch {
                 } else {
                     n_strict
                 };
-                if let Some(l) = link(m, a, b, i, j, count <= RELAXED_MAX_FINDERS)
-                    && (l.score >= 0.75 || count <= UNVERIFIED_LINK_MAX_FINDERS)
+                if let Some(l) = link(
+                    m,
+                    &mut self.link_buf,
+                    a,
+                    b,
+                    i,
+                    j,
+                    count <= RELAXED_MAX_FINDERS,
+                ) && (l.score >= 0.75 || count <= UNVERIFIED_LINK_MAX_FINDERS)
                 {
                     self.links.push(l);
                 }
@@ -666,12 +674,39 @@ fn timing_end_ok(m: Plane<'_>, from: Point, u: Point, perp: Point, module: f32) 
     true
 }
 
+/// Sample buffers of [`link`], kept between calls so that a pair that gets
+/// as far as a walk does not zero-fill them.
+#[derive(Debug, Default)]
+struct LinkBuf {
+    colors: Vec<bool>,
+    raw: Vec<bool>,
+    widths: Vec<f32>,
+}
+
+impl LinkBuf {
+    fn prepare(&mut self, steps: usize) {
+        if self.colors.len() < steps {
+            self.colors.resize(steps, false);
+            self.raw.resize(steps, false);
+            self.widths.resize(256, 0.0);
+        }
+    }
+}
+
 /// Verifies the timing pattern between two finders by walking the line along
 /// it (three modules inside the symbol edge) and checking the run structure:
 /// finder edge, separator, alternating unit modules, separator, finder edge.
 /// The unit run count gives the dimension independently of the module size
 /// estimate, and tolerates the foreshortening of perspective.
-fn link(m: Plane<'_>, a: &Finder, b: &Finder, ia: usize, ib: usize, relaxed: bool) -> Option<Link> {
+fn link(
+    m: Plane<'_>,
+    buf: &mut LinkBuf,
+    a: &Finder,
+    b: &Finder,
+    ia: usize,
+    ib: usize,
+    relaxed: bool,
+) -> Option<Link> {
     let dist = a.pos.distance(b.pos);
     if dist <= 0.0 {
         return None;
@@ -705,25 +740,47 @@ fn link(m: Plane<'_>, a: &Finder, b: &Finder, ia: usize, ib: usize, relaxed: boo
         ..unchecked
     };
     let step_px = dist / steps as f32;
-    let mut colors = [false; MAX_STEPS];
-    let mut widths = [0.0f32; 256];
+    buf.prepare(MAX_STEPS);
+    let LinkBuf {
+        colors,
+        raw,
+        widths,
+    } = buf;
     for side in [-1.0f32, 1.0] {
         let perp = Point::new(-u.y * side, u.x * side);
-        if !timing_end_ok(m, a.pos, u, perp, ma)
-            || !timing_end_ok(m, b.pos, Point::new(-u.x, -u.y), perp, mb)
-        {
-            continue;
-        }
         let p0 = Point::new(a.pos.x + perp.x * 3.0 * ma, a.pos.y + perp.y * 3.0 * ma);
         let p1 = Point::new(b.pos.x + perp.x * 3.0 * mb, b.pos.y + perp.y * 3.0 * mb);
         let inside = |p: Point| {
             p.x >= 0.0 && p.y >= 0.0 && p.x < m.width() as f32 && p.y < m.height() as f32
         };
         let (dx, dy) = ((p1.x - p0.x) / steps as f32, (p1.y - p0.y) / steps as f32);
-        if inside(p0) && inside(p1) {
-            // Both ends inside: so is every sample between them (the clamp
-            // only absorbs rounding at the far end).
-            let (xmax, ymax) = (m.width() - 1, m.height() - 1);
+        let both_inside = inside(p0) && inside(p1);
+        let (xmax, ymax) = (m.width() - 1, m.height() - 1);
+        // Sample `k` of the line; with both ends inside, so is every sample
+        // between them (the clamp only absorbs rounding at the far end).
+        let sample = |kf: f32| {
+            if both_inside {
+                m.get(
+                    ((p0.x + dx * kf) as usize).min(xmax),
+                    ((p0.y + dy * kf) as usize).min(ymax),
+                )
+            } else {
+                pixel_dark(m, Point::new(p0.x + dx * kf, p0.y + dy * kf))
+            }
+        };
+        // The run scan below needs the line to start and end on a dark run
+        // (the finder edges), and the majority filter leaves both end samples
+        // alone: a light end sample rejects the side, so it is tested before
+        // the dearer checks.
+        if !sample(0.0) || !sample(steps as f32) {
+            continue;
+        }
+        if !timing_end_ok(m, a.pos, u, perp, ma)
+            || !timing_end_ok(m, b.pos, Point::new(-u.x, -u.y), perp, mb)
+        {
+            continue;
+        }
+        if both_inside {
             for (k, c) in colors[..=steps].iter_mut().enumerate() {
                 let kf = k as f32;
                 *c = m.get(
@@ -738,7 +795,7 @@ fn link(m: Plane<'_>, a: &Finder, b: &Finder, ia: usize, ib: usize, relaxed: boo
             }
         }
         // Majority filter against single-sample glitches.
-        let raw = colors;
+        raw[..=steps].copy_from_slice(&colors[..=steps]);
         for k in 1..steps {
             colors[k] =
                 usize::from(raw[k - 1]) + usize::from(raw[k]) + usize::from(raw[k + 1]) >= 2;
@@ -784,8 +841,8 @@ fn link(m: Plane<'_>, a: &Finder, b: &Finder, ia: usize, ib: usize, relaxed: boo
         }
         let interior = &mut widths[..n_int - 1];
         let n_unit = interior.len();
-        interior.sort_unstable_by(f32::total_cmp);
-        let median = interior[n_unit / 2];
+        // The median only: the count below does not depend on the order.
+        let (_, &mut median, _) = interior.select_nth_unstable_by(n_unit / 2, f32::total_cmp);
         let ok = interior
             .iter()
             .filter(|w| **w >= 0.5 * median && **w <= 1.9 * median)
@@ -1128,4 +1185,258 @@ pub(crate) fn find_alignment(
         }
     }
     best.map(|b| b.1)
+}
+
+#[cfg(test)]
+mod tests {
+    use breader_core::{BitMatrix, Plane, Point};
+
+    use super::*;
+    use crate::testrender::{Render, make_modules, similarity_quad, threshold};
+
+    /// The walk of `link` as it was before the sample buffers were kept
+    /// between calls and the end samples were tested first.
+    fn link_reference(
+        m: Plane<'_>,
+        a: &Finder,
+        b: &Finder,
+        ia: usize,
+        ib: usize,
+        relaxed: bool,
+    ) -> Option<Link> {
+        let dist = a.pos.distance(b.pos);
+        if dist <= 0.0 {
+            return None;
+        }
+        // The line between two finders of one symbol is a symbol axis.
+        let (ux, uy) = ((b.pos.x - a.pos.x) / dist, (b.pos.y - a.pos.y) / dist);
+        let (ma, mb) = (module_along(a, ux, uy), module_along(b, ux, uy));
+        if ma <= 0.0 || mb <= 0.0 || ma.max(mb) / ma.min(mb) > if relaxed { 3.2 } else { 1.9 } {
+            return None;
+        }
+        let module = (ma + mb) / 2.0;
+        let est = dist / module + 7.0;
+        if !(19.0..=185.0).contains(&est) {
+            return None;
+        }
+        let unchecked = Link {
+            a: ia,
+            b: ib,
+            score: 0.5,
+            dim: 0,
+            side: 0,
+        };
+        if module < 1.3 {
+            return None;
+        }
+        const MAX_STEPS: usize = 1024;
+        let u = Point::new(ux, uy);
+        let steps = ((dist / (0.25 * module).max(0.6)).ceil() as usize).clamp(8, MAX_STEPS - 1);
+        let mut best = Link {
+            score: 0.0,
+            ..unchecked
+        };
+        let step_px = dist / steps as f32;
+        let mut colors = [false; MAX_STEPS];
+        let mut widths = [0.0f32; 256];
+        for side in [-1.0f32, 1.0] {
+            let perp = Point::new(-u.y * side, u.x * side);
+            if !timing_end_ok(m, a.pos, u, perp, ma)
+                || !timing_end_ok(m, b.pos, Point::new(-u.x, -u.y), perp, mb)
+            {
+                continue;
+            }
+            let p0 = Point::new(a.pos.x + perp.x * 3.0 * ma, a.pos.y + perp.y * 3.0 * ma);
+            let p1 = Point::new(b.pos.x + perp.x * 3.0 * mb, b.pos.y + perp.y * 3.0 * mb);
+            let inside = |p: Point| {
+                p.x >= 0.0 && p.y >= 0.0 && p.x < m.width() as f32 && p.y < m.height() as f32
+            };
+            let (dx, dy) = ((p1.x - p0.x) / steps as f32, (p1.y - p0.y) / steps as f32);
+            if inside(p0) && inside(p1) {
+                // Both ends inside: so is every sample between them (the clamp
+                // only absorbs rounding at the far end).
+                let (xmax, ymax) = (m.width() - 1, m.height() - 1);
+                for (k, c) in colors[..=steps].iter_mut().enumerate() {
+                    let kf = k as f32;
+                    *c = m.get(
+                        ((p0.x + dx * kf) as usize).min(xmax),
+                        ((p0.y + dy * kf) as usize).min(ymax),
+                    );
+                }
+            } else {
+                for (k, c) in colors[..=steps].iter_mut().enumerate() {
+                    let kf = k as f32;
+                    *c = pixel_dark(m, Point::new(p0.x + dx * kf, p0.y + dy * kf));
+                }
+            }
+            // Majority filter against single-sample glitches.
+            let raw = colors;
+            for k in 1..steps {
+                colors[k] =
+                    usize::from(raw[k - 1]) + usize::from(raw[k]) + usize::from(raw[k + 1]) >= 2;
+            }
+            // Run lengths between the first and last dark runs.
+            let mut n_int = 0usize;
+            let mut len = 1usize;
+            let mut seen_first = false;
+            let mut overflow = false;
+            for k in 1..=steps {
+                if colors[k] == colors[k - 1] && k < steps {
+                    len += 1;
+                    continue;
+                }
+                if colors[k] == colors[k - 1] {
+                    len += 1;
+                }
+                // A run ended at k (or the line ended).
+                let run_dark = colors[k - 1];
+                if !seen_first {
+                    if !run_dark {
+                        // Must start inside the finder edge.
+                        overflow = true;
+                        break;
+                    }
+                    seen_first = true;
+                } else if n_int < widths.len() {
+                    // Width relative to the module size expected at this spot
+                    // (interpolated between the two ends: perspective).
+                    let mid = (k as f32 - len as f32 / 2.0) / steps as f32;
+                    let expected = (ma + (mb - ma) * mid) / step_px;
+                    widths[n_int] = len as f32 / expected.max(0.1);
+                    n_int += 1;
+                } else {
+                    overflow = true;
+                    break;
+                }
+                len = 1;
+            }
+            // The final run is the last finder edge (dark): drop it again.
+            if overflow || n_int < 6 || !colors[steps] {
+                continue;
+            }
+            let interior = &mut widths[..n_int - 1];
+            let n_unit = interior.len();
+            interior.sort_unstable_by(f32::total_cmp);
+            let median = interior[n_unit / 2];
+            let ok = interior
+                .iter()
+                .filter(|w| **w >= 0.5 * median && **w <= 1.9 * median)
+                .count();
+            let d_run = n_unit + 14;
+            let valid = d_run % 4 == 1 && (21..=177).contains(&d_run);
+            let slack = if relaxed {
+                0.5 * est + 6.0
+            } else {
+                0.25 * est + 4.0
+            };
+            let consistent = (d_run as f32 - est).abs() <= slack;
+            let mut score = ok as f32 / n_unit as f32;
+            if !consistent {
+                score *= 0.5;
+            }
+            if !valid {
+                score *= 0.85;
+            }
+            if score > best.score {
+                best = Link {
+                    score,
+                    dim: if valid && consistent { d_run as u16 } else { 0 },
+                    side: side as i8,
+                    ..unchecked
+                };
+            }
+        }
+        Some(best)
+    }
+
+    fn xorshift(state: &mut u64) -> u64 {
+        *state ^= *state << 13;
+        *state ^= *state >> 7;
+        *state ^= *state << 17;
+        *state
+    }
+
+    /// A page with QR symbols of several sizes and angles plus speckle, so
+    /// that finder pairs fail at every stage of `link` (module ratio, end
+    /// checks, light end samples, run structure) and some succeed.
+    fn page(seed: u64, wide: bool) -> BitMatrix {
+        let mut st = seed;
+        let (w, h) = (360usize, 300usize);
+        let mut luma = vec![255u8; w * h];
+        for (version, cx, cy, px, deg) in [
+            (2i16, 90.0f32, 80.0f32, 3.0f32, 0.0f32),
+            (5, 250.0, 90.0, 2.5, 23.0),
+            (3, 100.0, 215.0, 3.0, 71.0),
+            (7, 260.0, 215.0, 2.0, 140.0),
+        ] {
+            let payload: Vec<u8> = (0..20).map(|i| b'A' + (i % 26) as u8).collect();
+            let m = make_modules(version, &payload);
+            let quad = similarity_quad(m.dim, Point::new(cx, cy), px, deg);
+            let r = Render {
+                w,
+                h,
+                quad,
+                mirrored: false,
+                blur: 0,
+                invert: false,
+            };
+            let img = r.draw(&m);
+            for (d, s) in luma.iter_mut().zip(img) {
+                *d = (*d).min(s);
+            }
+        }
+        // Speckle and stripes: fake finder candidates in every direction.
+        for _ in 0..(w * h / 12) {
+            let i = (xorshift(&mut st) % (w * h) as u64) as usize;
+            luma[i] = 0;
+        }
+        if wide {
+            for y in (0..h).step_by(5) {
+                for x in 0..w {
+                    if (x / 3 + y / 5) % 2 == 0 && !xorshift(&mut st).is_multiple_of(3) {
+                        luma[y * w + x] = 0;
+                    }
+                }
+            }
+        }
+        threshold(&luma, w, h)
+    }
+
+    #[test]
+    fn link_matches_reference() {
+        let mut pairs = 0usize;
+        let mut linked = 0usize;
+        let mut walked = 0usize;
+        for (seed, wide) in [
+            (0x9E37_79B9_7F4A_7C15u64, false),
+            (0xD1B5_4A32_D192_ED03, true),
+        ] {
+            let bin = page(seed, wide);
+            let mut s = FinderSearch::default();
+            s.find_finders(&bin, 1, true);
+            let finders: Vec<Finder> = s.finders.iter().copied().take(70).collect();
+            assert!(finders.len() > 10, "finders: {}", finders.len());
+            let mut buf = LinkBuf::default();
+            for inverted in [false, true] {
+                let plane = Plane::new(&bin, inverted);
+                for i in 0..finders.len() {
+                    for j in i + 1..finders.len() {
+                        for relaxed in [false, true] {
+                            let (a, b) = (&finders[i], &finders[j]);
+                            let new = link(plane, &mut buf, a, b, i, j, relaxed);
+                            let old = link_reference(plane, a, b, i, j, relaxed);
+                            assert_eq!(format!("{new:?}"), format!("{old:?}"), "pair {i} {j}");
+                            pairs += 1;
+                            linked += usize::from(new.is_some_and(|l| l.score >= 0.75));
+                            walked += usize::from(new.is_some_and(|l| l.score > 0.0));
+                        }
+                    }
+                }
+            }
+        }
+        // The test must exercise the walk, not only the early exits.
+        assert!(pairs > 1000, "pairs: {pairs}");
+        assert!(walked > 100, "walked: {walked}");
+        assert!(linked > 10, "verified links: {linked} among {pairs} pairs");
+    }
 }

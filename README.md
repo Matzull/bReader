@@ -50,16 +50,16 @@ Start at [docs/README.md](docs/README.md): status, a map of all documents by aud
 
 ## Performance
 
-Release build, AMD Ryzen 5 5500U, one thread, decode call only (details in [docs/BASELINES.md](docs/BASELINES.md)).
+Release build, AMD Ryzen 7 3700X (latency was measured on a Ryzen 5 5500U until 2026-10-20), library single-threaded, decode call only (details in [docs/BASELINES.md](docs/BASELINES.md#status-2026-10-20-new-machine-ryzen-7-3700x)).
 
 | Dataset | Effort | Read rate | False positives | Latency p50 / p95 (ms) |
 |---|---|---|---|---|
-| challenging-images (392 symbols) | Fast | 71.2 % | 0 | 2.1 / 25.4 |
-| challenging-images | Balanced | 88.8 % | 0 | 9.4 / 90.9 |
-| challenging-images | Exhaustive | 87.8 % | 0 | 22.2 / 246.0 |
-| synth (228 symbols) | Balanced | 97.8 % | 0 | 3.9 / 25.1 |
+| challenging-images (448 symbols) | Fast | 74.3 % | 0 | 5.0 / 40.5 |
+| challenging-images | Balanced | 91.7 % | 0 | 20.8 / 146.9 |
+| challenging-images | Exhaustive | 94.6 % | 0 | 53.9 / 409.3 |
+| synth (511 symbols) | Balanced | 98.8 % | 0 | 5.7 / 48.9 |
 
-In the same session, zxing-cpp read 87.0 % of challenging-images with 1 false positive at 23.3 / 330.2 ms (p50 / p95).
+In the same session, zxing-cpp read 86.8 % of challenging-images with 0 false positives at 21.0 / 281.4 ms (p50 / p95, through Python).
 
 ## License
 

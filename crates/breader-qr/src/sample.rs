@@ -479,30 +479,78 @@ pub(crate) fn sample_grid(
     outside * 20 <= dim * dim
 }
 
+/// Cells of the 9x9 finder template that are dark: the 7x7 pattern without
+/// its inner light ring, in a light border (`WANT[j][i]`, i along x).
+const FINDER_WANT: [[bool; 9]; 9] = {
+    let mut t = [[false; 9]; 9];
+    let mut j = 0;
+    while j < 9 {
+        let mut i = 0;
+        while i < 9 {
+            let (ai, aj) = ((i as i32 - 4).abs(), (j as i32 - 4).abs());
+            let r = if ai > aj { ai } else { aj };
+            t[j][i] = r <= 3 && r != 2;
+            i += 1;
+        }
+        j += 1;
+    }
+    t
+};
+
 /// Sub-module refinement of a finder center: maximizes agreement of the 9x9
 /// finder template (7x7 pattern in a light one-module border) with the
 /// binary image, along the module axes `ex`, `ey` (pixels per module).
 pub(crate) fn refine_finder(bin: Plane<'_>, c: Point, ex: Point, ey: Point) -> Point {
+    // Offsets of the template cells along the axes, formed once (the same
+    // products, added in the same order, as a cell-by-cell evaluation).
+    let mut di = [[0.0f32; 9]; 2];
+    let mut dj = [[0.0f32; 9]; 2];
+    for k in 0..9 {
+        let d = (k as i32 - 4) as f32;
+        di[0][k] = d * ex.x;
+        di[1][k] = d * ex.y;
+        dj[0][k] = d * ey.x;
+        dj[1][k] = d * ey.y;
+    }
+    let (w, h) = (bin.width(), bin.height());
+    // Half-extent of the template in pixels, with a pixel to spare: a
+    // template whose center is this far inside the image samples only
+    // pixels inside it, and needs no per-cell bounds test.
+    let rx = 4.0 * (ex.x.abs() + ey.x.abs()) + 1.0;
+    let ry = 4.0 * (ex.y.abs() + ey.y.abs()) + 1.0;
     // Agreement count; gives up (returning 0) once `floor` can no longer be beaten.
     let score = |p: Point, floor: i32| -> i32 {
+        let inside =
+            p.x - rx >= 0.0 && p.y - ry >= 0.0 && p.x + rx < w as f32 && p.y + ry < h as f32;
         let mut s = 0;
         let mut left = 81;
-        for j in -4i32..=4 {
-            for i in -4i32..=4 {
-                let r = i.abs().max(j.abs());
-                let want = r <= 3 && r != 2;
-                let q = Point::new(
-                    p.x + i as f32 * ex.x + j as f32 * ey.x,
-                    p.y + i as f32 * ex.y + j as f32 * ey.y,
-                );
-                let got = q.x >= 0.0
-                    && q.y >= 0.0
-                    && (q.x as usize) < bin.width()
-                    && (q.y as usize) < bin.height()
-                    && bin.get(q.x as usize, q.y as usize);
-                s += i32::from(got == want);
-                left -= 1;
+        for (j, want_row) in FINDER_WANT.iter().enumerate() {
+            if inside {
+                // Positions of the row first, as plain array arithmetic; every
+                // coordinate is inside the image, so truncating to i32 is the
+                // same as truncating to usize.
+                let mut xs = [0i32; 9];
+                let mut ys = [0i32; 9];
+                for i in 0..9 {
+                    xs[i] = (p.x + di[0][i] + dj[0][j]) as i32;
+                    ys[i] = (p.y + di[1][i] + dj[1][j]) as i32;
+                }
+                for i in 0..9 {
+                    s += i32::from(bin.get(xs[i] as usize, ys[i] as usize) == want_row[i]);
+                }
+            } else {
+                for (i, &want) in want_row.iter().enumerate() {
+                    let qx = p.x + di[0][i] + dj[0][j];
+                    let qy = p.y + di[1][i] + dj[1][j];
+                    let got = qx >= 0.0
+                        && qy >= 0.0
+                        && (qx as usize) < w
+                        && (qy as usize) < h
+                        && bin.get(qx as usize, qy as usize);
+                    s += i32::from(got == want);
+                }
             }
+            left -= 9;
             if s + left <= floor {
                 return 0;
             }
@@ -634,4 +682,125 @@ pub(crate) fn sample_grid_local(
         }
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use breader_core::{BitMatrix, Plane, Point};
+
+    use super::refine_finder;
+
+    /// The cell-by-cell evaluation that `refine_finder` replaced.
+    fn refine_finder_reference(bin: Plane<'_>, c: Point, ex: Point, ey: Point) -> Point {
+        let score = |p: Point, floor: i32| -> i32 {
+            let mut s = 0;
+            let mut left = 81;
+            for j in -4i32..=4 {
+                for i in -4i32..=4 {
+                    let r = i.abs().max(j.abs());
+                    let want = r <= 3 && r != 2;
+                    let q = Point::new(
+                        p.x + i as f32 * ex.x + j as f32 * ey.x,
+                        p.y + i as f32 * ex.y + j as f32 * ey.y,
+                    );
+                    let got = q.x >= 0.0
+                        && q.y >= 0.0
+                        && (q.x as usize) < bin.width()
+                        && (q.y as usize) < bin.height()
+                        && bin.get(q.x as usize, q.y as usize);
+                    s += i32::from(got == want);
+                    left -= 1;
+                }
+                if s + left <= floor {
+                    return 0;
+                }
+            }
+            s
+        };
+        let mut best = (score(c, -1), c);
+        for (span, steps) in [(0.7f32, 4i32), (0.18, 3)] {
+            let center = best.1;
+            let step = span / steps as f32;
+            for oj in -steps..=steps {
+                for oi in -steps..=steps {
+                    let (a, b) = (oi as f32 * step, oj as f32 * step);
+                    let p = Point::new(
+                        center.x + a * ex.x + b * ey.x,
+                        center.y + a * ex.y + b * ey.y,
+                    );
+                    let sc = score(p, best.0);
+                    if sc > best.0 {
+                        best = (sc, p);
+                    }
+                }
+            }
+        }
+        best.1
+    }
+
+    fn xorshift(state: &mut u64) -> u64 {
+        *state ^= *state << 13;
+        *state ^= *state >> 7;
+        *state ^= *state << 17;
+        *state
+    }
+
+    fn uniform(state: &mut u64, lo: f32, hi: f32) -> f32 {
+        lo + (hi - lo) * ((xorshift(state) >> 40) as f32 / (1u64 << 24) as f32)
+    }
+
+    /// Same answer as the cell-by-cell evaluation: on noise (so that early
+    /// exits and ties happen), with finder-like blocks, tilted axes and
+    /// centers inside the image, at its border and outside it.
+    #[test]
+    fn refine_finder_matches_reference() {
+        let mut st = 0x9E37_79B9_7F4A_7C15u64;
+        for round in 0..300 {
+            let (w, h) = (
+                40 + (xorshift(&mut st) % 50) as usize,
+                40 + (xorshift(&mut st) % 50) as usize,
+            );
+            let mut bin = BitMatrix::new(w, h);
+            // Noise of a varying density, then a finder pattern stamped at a
+            // random place on half of the rounds.
+            let density = 1 + xorshift(&mut st) % 3;
+            for y in 0..h {
+                for x in 0..w {
+                    bin.set(x, y, xorshift(&mut st) % 4 < density);
+                }
+            }
+            let module = uniform(&mut st, 1.2, 4.5);
+            let theta = uniform(&mut st, 0.0, std::f32::consts::TAU);
+            let (sn, cs) = theta.sin_cos();
+            let ex = Point::new(module * cs, module * sn);
+            let ey = Point::new(-module * sn, module * cs);
+            let c = Point::new(
+                uniform(&mut st, -3.0, w as f32 + 3.0),
+                uniform(&mut st, -3.0, h as f32 + 3.0),
+            );
+            if round % 2 == 0 {
+                for y in 0..h {
+                    for x in 0..w {
+                        let (dx, dy) = (x as f32 - c.x, y as f32 - c.y);
+                        let u = (dx * cs + dy * sn) / module;
+                        let v = (-dx * sn + dy * cs) / module;
+                        let r = u.abs().max(v.abs());
+                        if r < 4.0 {
+                            bin.set(x, y, r <= 3.5 && !(2.5..=3.5).contains(&r) || r < 1.5);
+                        }
+                    }
+                }
+            }
+            for inverted in [false, true] {
+                let plane = Plane::new(&bin, inverted);
+                let a = refine_finder(plane, c, ex, ey);
+                let b = refine_finder_reference(plane, c, ex, ey);
+                assert_eq!(
+                    (a.x.to_bits(), a.y.to_bits()),
+                    (b.x.to_bits(), b.y.to_bits()),
+                    "round {round}"
+                );
+            }
+        }
+    }
 }
