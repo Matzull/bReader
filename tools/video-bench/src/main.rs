@@ -7,6 +7,8 @@ mod video;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 use benchlib::gate::{Baseline, Counts, Groups};
@@ -19,7 +21,7 @@ use serde_json::{Value, json};
 use metrics::{Acc, Key, Report};
 
 const USAGE: &str = "usage: video-bench <dataset-dir> [--engines tracker,fast,balanced] \
-[--filter substr] [--max-frames N] [--json out.json] [--verbose] \
+[--filter substr] [--max-frames N] [--jobs N] [--json out.json] [--verbose] \
 [--check baseline.json | --write-baseline baseline.json] [--strips N] [--overlap F] [--lost N] [--margin F] [--roi-effort E] [--global-effort E] [--full-effort E]";
 
 struct Args {
@@ -29,6 +31,7 @@ struct Args {
     max_frames: Option<u64>,
     json: Option<PathBuf>,
     verbose: bool,
+    jobs: usize,
     check: Option<PathBuf>,
     write_baseline: Option<PathBuf>,
     config: TrackerConfig,
@@ -57,6 +60,7 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
         max_frames: None,
         json: None,
         verbose: false,
+        jobs: 1,
         check: None,
         write_baseline: None,
         config: TrackerConfig::default(),
@@ -79,6 +83,12 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--max-frames" => a.max_frames = Some(num(args.next(), "--max-frames")?),
             "--json" => a.json = args.next().map(PathBuf::from),
             "--verbose" => a.verbose = true,
+            "--jobs" => {
+                a.jobs = num(args.next(), "--jobs")?;
+                if a.jobs == 0 {
+                    return Err("--jobs needs a positive integer".into());
+                }
+            }
             "--check" => a.check = Some(args.next().ok_or("--check needs a path")?.into()),
             "--write-baseline" => {
                 a.write_baseline = Some(args.next().ok_or("--write-baseline needs a path")?.into());
@@ -227,43 +237,95 @@ fn run_gate(args: &Args, reports: &[Report]) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Reports of one video, or the reason it could not be processed.
+type VideoResult = Result<Vec<Report>, String>;
+
+/// Runs every engine over one video; no reports when its annotation csv is missing.
+fn run_video(args: &Args, path: &Path) -> VideoResult {
+    let name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("?")
+        .to_owned();
+    let csv = path
+        .parent()
+        .map(|p| p.join("annotations").join(format!("{name}.csv")));
+    let Some(expected) = csv.as_deref().and_then(|c| expected::load(c).ok()) else {
+        eprintln!("skip {name}: no readable annotation csv");
+        return Ok(Vec::new());
+    };
+    let mut runners: Vec<Runner> = args
+        .engines
+        .iter()
+        .map(|e| Runner::new(e, args.config))
+        .collect();
+    let frames = video::for_each_frame(path, args.max_frames, |index, view| {
+        for r in &mut runners {
+            r.frame(index, view);
+        }
+    })?;
+    eprintln!("{name}: {frames} frames");
+    Ok(runners
+        .into_iter()
+        .map(|r| Report::build(&name, &r.name, frames, &expected, r.acc))
+        .collect())
+}
+
+/// One video per task over `args.jobs` threads (each video keeps its own sequential trackers);
+/// results are returned in the order of `paths`.
+fn run_videos_parallel(args: &Args, paths: &[PathBuf]) -> Vec<VideoResult> {
+    const STACK: usize = 16 << 20;
+    let next = AtomicUsize::new(0);
+    let slots: Vec<Mutex<Option<VideoResult>>> = paths.iter().map(|_| Mutex::new(None)).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..args.jobs.min(paths.len()) {
+            let worker = || {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(path) = paths.get(i) else { break };
+                    let result = run_video(args, path);
+                    *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+                }
+            };
+            std::thread::Builder::new()
+                .stack_size(STACK)
+                .spawn_scoped(scope, worker)
+                .expect("cannot spawn a video-bench worker thread");
+        }
+    });
+    slots
+        .into_iter()
+        .map(|slot| {
+            slot.into_inner()
+                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(|| Err("video not processed".into()))
+        })
+        .collect()
+}
+
 fn run() -> Result<bool, String> {
     let args = parse_args(std::env::args().skip(1)).map_err(|e| format!("{e}\n{USAGE}"))?;
     let videos = find_videos(&args.dataset);
     if videos.is_empty() {
         return Err(format!("no mp4 files under {}", args.dataset.display()));
     }
+    let paths: Vec<PathBuf> = videos
+        .into_iter()
+        .filter(|path| {
+            let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?");
+            args.filter.as_ref().is_none_or(|f| name.contains(f))
+        })
+        .collect();
+    let results = if args.jobs > 1 {
+        eprintln!("--jobs {}: latencies are not valid", args.jobs);
+        run_videos_parallel(&args, &paths)
+    } else {
+        paths.iter().map(|p| run_video(&args, p)).collect()
+    };
+    // Reports keep the order of the videos whatever the number of jobs.
     let mut reports: Vec<Report> = Vec::new();
-    for path in videos {
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("?")
-            .to_owned();
-        if args.filter.as_ref().is_some_and(|f| !name.contains(f)) {
-            continue;
-        }
-        let csv = path
-            .parent()
-            .map(|p| p.join("annotations").join(format!("{name}.csv")));
-        let Some(expected) = csv.as_deref().and_then(|c| expected::load(c).ok()) else {
-            eprintln!("skip {name}: no readable annotation csv");
-            continue;
-        };
-        let mut runners: Vec<Runner> = args
-            .engines
-            .iter()
-            .map(|e| Runner::new(e, args.config))
-            .collect();
-        let frames = video::for_each_frame(&path, args.max_frames, |index, view| {
-            for r in &mut runners {
-                r.frame(index, view);
-            }
-        })?;
-        eprintln!("{name}: {frames} frames");
-        for r in runners {
-            reports.push(Report::build(&name, &r.name, frames, &expected, r.acc));
-        }
+    for r in results {
+        reports.extend(r?);
     }
     metrics::print_table(&reports, args.verbose);
     if let Some(p) = &args.json {

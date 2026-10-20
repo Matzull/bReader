@@ -25,7 +25,7 @@ A change is done when all of this holds:
 1. `cargo fmt --all --check` clean.
 2. `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean; `cargo doc --no-deps` warning-free when doc comments changed.
 3. `cargo test --workspace`; for the five crates with the `rayon` feature also `cargo test -p breader -p breader-imgproc -p breader-linear -p breader-qr -p breader-datamatrix --features breader/rayon` (output must be identical).
-4. The gates pass with `--check` ([testing](testing.md#test-and-gate-tiers)): tier a locally (`tools/check-regression.sh`), tier b before merge (`--tier b`), c1 for changes that raise false-positive exposure (`--tier c1`; the trigger list is in [testing](testing.md#when-to-run-c1)). No read count drops.
+4. The gates pass with `--check` ([testing](testing.md#test-and-gate-tiers)): tier a locally (`tools/check-regression.sh`), tier b before merge and for changes that raise false-positive exposure (`--tier b`, which includes the BarBeR development subset; [testing](testing.md#test-and-gate-tiers)), the release tier only when publishing a version. No read count drops.
 5. **0 false positives** on every dataset including negatives.
 6. Baselines rewritten if reads increased, in the same change, with the movement written in BASELINES.
 7. Docs updated (see the table at the end), `tools/check-docs.py` passes (no broken links or anchors) and, if a design choice was made or reversed, a [decision](decisions.md) entry.

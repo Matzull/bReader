@@ -23,7 +23,7 @@ The tiers are defined in [testing](testing.md#test-and-gate-tiers). CI maps them
 | weekly (`datasets.yml`), manual | c2 | every dataset in CI at every effort and the video gate with all engines (about 7 minutes of gates plus the dataset fetch; BarBeR is local-only) | about 10 minutes of gates (estimate) |
 | nightly (`fuzz.yml`) | fuzz | 17 targets, 300 s each | 85 minutes |
 
-The real datasets are not fetched on pull requests or pushes (the Dynamsoft sets have no stated license), so CI's tier a and b cover the synthetic sets only (`--synthetic-only`); the Dynamsoft, zxing and video parts of tiers a and b are a local check, and the weekly job runs all of them. The BarBeR gates (b subset, c1 and c2 full set) are local only. Run c1 locally for the changes in [the c1 list](testing.md#when-to-run-c1).
+The real datasets are not fetched on pull requests or pushes (the Dynamsoft sets have no stated license), so CI's tier a and b cover the synthetic sets only (`--synthetic-only`); the Dynamsoft, zxing and video parts of tiers a and b are a local check, and the weekly job runs all of them. The BarBeR gates (the development subset in b, the full set in the release tier) are local only; tier b covers the changes that raise false-positive exposure.
 
 ## The regression gate
 
@@ -37,7 +37,7 @@ The real datasets are not fetched on pull requests or pushes (the Dynamsoft sets
 | `dynamsoft-skewed-{...}.json` | `data/dynamsoft/skewed-datamatrix` | `bench data/dynamsoft/skewed-datamatrix --effort E` |
 | `dynamsoft-ups-{...}.json` | `data/dynamsoft/UPS-Synthetic-Labels` (CC BY 4.0; 52 of its 58 labelled images are present) | `bench data/dynamsoft/UPS-Synthetic-Labels --effort E` |
 | `dynamsoft-pdf417-{...}.json` | `data/dynamsoft/pdf417-small-module-size` | `bench data/dynamsoft/pdf417-small-module-size --effort E` |
-| `dynamsoft-video.json` | `data/dynamsoft/video-based-testing` | `video-bench data/dynamsoft/video-based-testing` (`--engines tracker` for tier b and c1: entries of engines not run are ignored) |
+| `dynamsoft-video.json` | `data/dynamsoft/video-based-testing` | `video-bench data/dynamsoft/video-based-testing` (`--engines tracker` for tier b: entries of engines not run are ignored) |
 | `zxing-samples-{...}.json` | `data/zxing-samples/test/samples` (one group per sample directory) | `bench data/zxing-samples/test/samples --effort E` |
 
 A baseline stores, per dataset (or video) and per symbology (or engine), the expected count, the read count and the false positives. The effort is part of the key: a baseline only applies to the effort it was recorded at.
@@ -55,9 +55,8 @@ Higher read counts and entries not yet in the baseline only print a notice. Late
 ```sh
 tools/fetch-datasets.sh                # once, needs git (ffmpeg for the videos)
 tools/check-regression.sh              # tier a (default); synthetic sets are generated into data/ when missing
-tools/check-regression.sh --tier b     # before merging: all efforts, all real sets, BarBeR subset, tracker video
-tools/check-regression.sh --tier c1    # FP-exposure changes: tier b with the full BarBeR set at Balanced and Exhaustive
-tools/check-regression.sh --tier c2    # phase end (--all is the same): everything, all efforts, all video engines
+tools/check-regression.sh --tier b        # before merging and for FP-exposure changes: all efforts, all real sets, BarBeR development subset, tracker video
+tools/check-regression.sh --tier release   # publishing a version (c2 and --all are the same): everything, all efforts, full BarBeR, all video engines
 tools/check-regression.sh --tier b --efforts exhaustive   # keep only some efforts of a tier
 tools/check-regression.sh --tier a --synthetic-only       # what CI runs
 ```

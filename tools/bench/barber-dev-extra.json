@@ -1,0 +1,4857 @@
+{
+  "about": "BarBeR development subset trap images (docs/datasets.md#barber-development-subset); regenerate with tools/bench/regen_barber_dev_extra.py, do not edit by hand.",
+  "generated_with": {
+    "zxing-cpp": "3.1.1",
+    "pyzbar": "0.1.9"
+  },
+  "images": [
+    {
+      "file": "0012044039991.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "0016000502666.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "00187343.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0020685000959.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0025293003804.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "00314121.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0036000373905.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0038000916106.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0040000000327.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0040000424314.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0040293982249.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0048582003309.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0050428375624.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "0054881000055.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0054881005517.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0054881006972.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0056600816503.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "00705615.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0072417178245.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "00765107.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0077034009873.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "00806756.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0082000001294.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "0096619235797.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "00994965.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "01209303.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "01510294.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0201093005396.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0220040003162.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0224607004692.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "0253097015413_2.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "0258771003649.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0272118009392.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0310158083511.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "03240014.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "04041906.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "041.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "05102009159.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "0602652176517.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "066.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "068.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0710619793940.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0717273501560.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0722252161031.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "076.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0858764000350.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "0890512002032.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "09012028.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "1541430020002.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2000000281179.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2007002006212-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20110817_114.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20110817_146.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20110817_189.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20110817_215.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20110817_219.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20110817_255.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20110817_334.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20110817_368.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20110817_404.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_201049.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_201217.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_201401.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_201410.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_201427.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_201510.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_201525.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "20140607_201623.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_201626.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_201630.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_201634.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_201745.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_201953.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_202008.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_202153.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_202425.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_202442.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_202538.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_202623.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_202631.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_202658.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_202704.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_202722.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_202817.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "20140607_203032.jpg",
+      "reason": "zbar false positive; zxing-cpp false positive"
+    },
+    {
+      "file": "20140607_203038.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_203055.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_203149.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_203505.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_203532.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_203551.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_203608.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_203621.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_203704.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_203752.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_203932.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_204009.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_204014.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_204132.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_204147.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "20140607_204159.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_204218.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_204255.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_204342.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_204442.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_204509.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_204549.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "20140607_204600.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "20140607_204604.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "20140607_204618.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20140607_204620.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_204633.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140607_204638.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140608_120553.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20140608_120605.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20154691.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20191019_122813.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20191019_125039.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20200916_212929.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20200916_213010.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20200916_213138.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20200916_213210.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20200916_213424.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20246648.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20289102.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "20409531.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20431617.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20452056.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20480370.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20553913.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20564629.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20609269.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "20706852.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "21285363.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2135003002756.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2136004004459.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2165742004797_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "22121103.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "22166821.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2239569018555.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2244057017125.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2286328008319.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "23036925.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2319125202007.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2322013800599.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2326926601007.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2328182300656.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2329238801752.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2330740028407_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "24044028.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "26001425.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "26063669.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2689120051895.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "2800020005003.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2868039009054_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "2868039009054_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3033710065066.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3073781000122.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3080216048543.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3080920983840.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "3083680012294-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "3092718617967.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3104931615917_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3144550019369_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3171920011272_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3171920011272_2.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "3173286693666_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3178530410105.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3180950010346.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3181731138013-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "3181731138013-02_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "3191010083309.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3222475403064_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3222476440570.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3228020481150.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3228021000084.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3228022120095.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3234750027414.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3240931541419_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3250390007395.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3250391273782_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3256220210492.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3256221674569.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3256226081836.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3257986632214.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "3258231071000.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3258561430621.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3258831092795_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3262151833754_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3263626463810.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3265850000038.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3266191057910.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3270160603718.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "3270160682669.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3276724114058.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3292992003993.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3307130602553.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3328079000057_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3336374401684_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3343929291218.jpg",
+      "reason": "zbar false positive; zxing-cpp false positive"
+    },
+    {
+      "file": "3347431200256.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3389090003342_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3389682001244_2.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "3425470021008_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3427290003097.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3428290000093_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3434730707835.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3438860001658.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3448550008010_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3451790988813.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3457040288764_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3462800000302_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3462800000302_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3483130000879.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3505340020529.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3516890002873.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3521872711056.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3524130000350.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "3560070423088.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3560070669813.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3560070677825.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3560071008796.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3560071094980_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3560071182816.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3564700014660.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3574660026948-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "3596710344642.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3609050750056.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3661112054045.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3661112055813.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3661112056810.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3661112056834.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3661112850449.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3700238314159_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3760057250038.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3760077187918.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3760091970275.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3760159101344.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3760166270453.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3760199054563.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3770008126008_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "3848231873959.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4000400002150-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4000508045752-02_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4000576484736-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4000869060098-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4001133962810-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4001419009611-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4001432078533-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4001438012135-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4001683001335-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4001686215210.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4001702025304-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4001845521107-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4001845525143-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4002239423106.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4002448018551-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4002644601151-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4002644614021-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4002809022203.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4002809042447.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4002940016215-02_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4003084881905.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4003665360973-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4005401285991.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4005401285991_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4005781155112-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4005800225062-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4005808801046.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4005808801046_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4005808811519-01_N95.jpg",
+      "reason": "zbar false positive; zxing-cpp false positive"
+    },
+    {
+      "file": "4005808813803-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4006387009311-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4006395324123-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4006431011413-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4006508121243-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4006670360150-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4006975020704-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4007111757065-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4007141034624-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4007237015414-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4007486620322-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4007591570277-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4007803439002.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4008367351137-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4008491217255-02_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4008617030935-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4008617030935-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4008912828015-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4008913810415-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4009300505341.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4009418180416-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4009864016123-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4011315018129-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4012200040263.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4013162006656-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4013200105228-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4015000010320-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4015000011303-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4015000011921-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4015000012263-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4015000012263-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4015000018418-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4015000018418-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4015400141228-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4016348019396-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4016364008176-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4016598347027-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4017026031341-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4017026055521-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4017026055521-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4017026057457-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4017026058867-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4018852004370-01.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4018852004370-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4020500966411-02_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4022622078294-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4022622078294-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4022622079802-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4022804050650-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4023900190462-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4023900190462-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4023900539063-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4025500245078.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4026175043419-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4026584133107.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4026701001005-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4028665001404-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4028691017011-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4030414003058.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4035364000706.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4037300039115-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4037300104394.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4037300108378-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4037678222164-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4038437012224-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4042763424293-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4043002362185-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4045178003510.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4047584005577-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4052700093079_3.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4053700260256-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4056489036654.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4056800563081-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4056800563081-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4058700310321.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4058700520430-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4058700621052-02.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4058700660068-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4058700807982-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4060800174475.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4062300012769-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4062300026919-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4068400010124-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4068400010124-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4078500098700-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4088700052013.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4100310725306-01.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4103810091223-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4210201124191-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4210201212867-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4210201382683-01.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4210201572831-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "42124504.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "42208532.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "42256069.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4250090807959-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4250665325581_3.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4260089612594-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4260107220299.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4260130210052.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4260134390019.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4305399063558-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4305399070501-01.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4305399071201-01.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4305615490212_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4305615516011-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4306188029717-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4306188227380-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4311501484838_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4311501625217_4.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4311501625217_9.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "4388844280564.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4531915002255.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4580385650039.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "46164186.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4711931011565.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4714449063118-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "4779039730276.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4779039730290.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4779039730306.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4800519183036.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4809010272027.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4893913999600-01.jpg",
+      "reason": "zbar false positive; zxing-cpp false positive"
+    },
+    {
+      "file": "4897036691120.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4901885002058.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4902102126915.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4902705100787.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4903034012659.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4967825561023-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "4968988050904.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "5000128147514.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "5000128653145.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "5000128919586.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5000169024904.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5000169046814.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5000169061787.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "5000169267578.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5000213020128.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5000314126125.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5000382036319_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010102241497.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010238015252.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010241993059-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010251618447.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010251712633.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010357112092.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010358216782.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010549104614.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5010677024204-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "5010677024204-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "5010909006770.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5011166054559.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5011295195451.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5011308000994.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5011417537930-01.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "5012251012850.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5012254112595.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5012389670731.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5013531211765.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5014213000929.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5014442007867.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5017174118023.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5017375377182.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5018811000848.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5020379135085.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5020379150774.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5020411125883.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5021554989356.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5022374050134.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5023751000322.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5024333004400.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5024333233152.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5024616003069.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5025232413997-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5025253004112.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "50271382.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5029053522289-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "5029730075305.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5031153333412.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5032722313637.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5034210110070.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "50357215.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5038584800018.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5039303002386.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5045097866592.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5051413188514.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5051413258477.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5051413679876.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5051413739273.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5051413965399.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5051594007062.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5052003083127.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5052109876630.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5052109939205.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5052320289240.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5052449065688.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "5052449479027.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5052449753752.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5053990153459.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5054070039748.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5054070299043.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5054070716335.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5055014320076.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5057172016037.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5057172098743.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5057172098958.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5057373870810.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5057753125806.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5057753304188.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5057967620579.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060028560509.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060038571533.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060045586322.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "5060123607765.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060123609714.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060135537227.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060151180773.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060337221108.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060338039795.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060479997336.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5060479997695.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "50989706.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "50989713.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5099873046173.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "51001120.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5202853100318.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5400112392102.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5400141167153.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5400141323139.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5410228223054_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5410543551016.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5411183072916-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "5412253972778-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5412929000514_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5449000259912.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5600499577059.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5701001475174.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5702014499102-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "5702014499102-01_N95.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "5760466118798-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "5773184530148.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5900084207461.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5900084207485.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "5900084261029.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5900334007421.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5900512110165.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5900531000010.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5901960048055.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "5998997405906.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "6009702811154.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "6281052230131.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "6600412475256_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "6902395310280.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "6907992632476.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "6922255451427.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "6935543280012.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7290013998026_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7310791192185-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7441163401007.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7610029180428.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7610287335585.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7610434019832.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7610614027206.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7610800639329.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7610849567980.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "7611174441006.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "7611201002095.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7611521048261.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7611631315284.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "7611631315949.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7611916156816.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "7612297021328.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613034684875.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613035619425.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613036959063.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613036961707.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613269382904.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613269547020.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "7613269677031.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613269780076.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613269887171.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613312103272.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613312159644.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613379512277.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613379771407.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613404013885.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613404121528.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613404131473.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613404135228.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613404155035.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613413748181.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7613413851102.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7616500661608.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "7622210318947.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7622210449283.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7622300136055.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "76237317.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7624841023177.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7630017624413.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7640109530027.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7640157480053.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7640159761037.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "7640172470046.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7640175926083.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7684625684710.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7702018925957.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7861182301506.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "7891095300808.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "7899572806164_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8000050448700.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8000121310370.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8000850210422-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8001916002326.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8002205319804.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8002266000017-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8002270000294.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8002330002534.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8002580010945.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8003753900551.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8003753900551_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8004020931773.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "80052760.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8005495341005.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8006860642031.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8007900000255.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8021425074508-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8022628330033-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8022628330033-01_N95.jpg",
+      "reason": "zbar false positive; zxing-cpp false positive"
+    },
+    {
+      "file": "8057014941555.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8076802085738.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8076808060654.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8076808150072.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8076809513388.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8076809513722-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8076809513722-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8076809513753.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "80787174_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8410069010568_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8410104002954-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8410261111124.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8410416008866_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8410843016076.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8411135441019.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8413376011624.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8424193222223.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8425408220416.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8437004440679.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8588004338111.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8699421939956.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8710609016310-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8711200503896.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8711500430168-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8712439063403.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "8715186814014-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8715186854218-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "87157154.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8717163581407-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8717644390269-01.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8717644390269-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8717973830030.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "87182262.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8718537512362.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8718885890846_3.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8718885890846_4.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8719200088986.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8723400772187.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801007052397.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801007120515.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801007303147.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801007402284.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801024956296.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801037025217.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801037067897.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8801037073164.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801037073218.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801037073225.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801037073232.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801045132228.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801045440200.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801045522838.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801045571867.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801045890661.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8801048002313.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801052036212.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8801052730547.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801052734460.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801055704521.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801056043551.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801062014828.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801083453002.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801094012304.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801094112400.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801094132705.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801094202408.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801094432409.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801097250703.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801115134237.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801117534912.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801155735081.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801237806623.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801237806647.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801391100681.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801767335679.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801767335686.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801767336690.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8801767337314.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8802259001096.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8803381101722.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8803733168113.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8803733236379.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8805806117059_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8805806117066.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8806004801467.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8806182557187.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8806365009632.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8806365082970.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8808739000108.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8808739000306.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8808739000504.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809081710035.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809196730553.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809326451563.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809388460237.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809388460398.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809388461029.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809388461418.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809394642443.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809456977872.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809456977919.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8809487490180.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8850389106235.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8850389106259.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8886467105357.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "8887719277495.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934563138165_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934563138165_2.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934588232220.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934673109345.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934673576390.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934678020225.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8934678030033.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934680011518.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934707010487.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934707011736.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8934777201167.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935015510447.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935039510034.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935039513189.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935039513196.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935054882826.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935054882826_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935107560428.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935107563498.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935134592751.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8935136860292.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8936010541320.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8936017360634.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8936017360634_1.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8936025771217.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8936028043717.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8936072190221.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8936079280819.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8936175700822.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8938500053467.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "8938500334023.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8938503101042.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8993053411010.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "8996001301760.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9001432047282.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9002490100070.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9002740218234-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "9002759812614-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9002759812614-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "9002827249014-01.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "90082993.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "90424403.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9088882448203-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "9100000781099.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9300633522063.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9300652804973.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9300682043007.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9300727004048.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9300767092821.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9310012040057.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9310012045502.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9311493002985.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9319864001926.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9322214006229-01_N95.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "9339687066841.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9339687106738.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9355606000222.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9415549814635.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "9556041131087.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "EAN13_09_0004.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "EAN13_09_0087.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Excise_stamp_0004.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "Foto(479).jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Foto(682).jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Foto(706).jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "Foto(712).jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Foto(726).jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Foto(729).jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Foto(730).jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Foto(746).jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Foto(756).jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Foto(791).jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "Foto(793).jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "Foto(794).jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "Foto(816).jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "IMAG0396.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "IMAG0398.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "IMAG0444.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "IMAG0486.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "IMAG0488.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PICT0010.JPG",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PICT0021.JPG",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PICT0022fhghg.JPG",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PICT0050.JPG",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PICT0hhfhg011.JPG",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PICfggfhT0018.JPG",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PICsdT0032.JPG",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PostBarcode003_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode097_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode102.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode103.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode106.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode108.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode109_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode112.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode169.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode172.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode174.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode211_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode222_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode267.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode277.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode512.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode535_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode568.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode575.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode675_0.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PostBarcode710.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "PostBarcode757_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode802.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "PostBarcode836.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode882_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode888.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode889_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "PostBarcode893.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode122.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode137.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode144.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode171.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode188.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode242.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode293.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode300_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode322.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode382.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode398.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode408_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode429_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode439.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode457_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode466.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode509_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "ProductBarcode516_0.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "QR-photo_26_0019.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "QR-photo_26_0056.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "RoyalMail_0001.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0002.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0003.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0004.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0005.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0006.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0007.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0008.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0009.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0010.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0011.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0012.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0013.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0014.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0015.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0016.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0017.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0018.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0019.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0020.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0021.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0022.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0023.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0024.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0025.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0026.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0027.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0028.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0029.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0030.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0031.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0032.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0033.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0034.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0035.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0036.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0037.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0038.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0039.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0040.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0041.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0042.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0043.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0044.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0045.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0046.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0047.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0048.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0049.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0050.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0051.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0052.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0053.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0054.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0055.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0056.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0057.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0058.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0059.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0060.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0061.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0062.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0063.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0064.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0065.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0066.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0067.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0068.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0069.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0070.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0071.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0072.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0073.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0074.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0075.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0076.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0077.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0078.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0079.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0080.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0081.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0082.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0083.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0084.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0085.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0086.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0087.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0088.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0089.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0090.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0091.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0092.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0093.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0094.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0095.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0096.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0097.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0098.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0099.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0100.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0101.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0102.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0103.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0104.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0105.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0106.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0107.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0108.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0109.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0110.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0111.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0112.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0113.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0114.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0115.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0116.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0117.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0118.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0119.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0120.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0121.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0122.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0123.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0124.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0125.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0126.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0127.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0128.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0129.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0130.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0131.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0132.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0133.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0134.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0135.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0136.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0137.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0138.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0139.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0140.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0141.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0142.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0143.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0144.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0145.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0146.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0147.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0148.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0149.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0150.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0151.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0152.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0153.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0154.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0155.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0156.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0157.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0158.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0159.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0160.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0161.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0162.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0163.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0164.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0165.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0166.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0167.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0168.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0169.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0170.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0171.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0172.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0173.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0174.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0175.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0176.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0177.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0178.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0179.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0180.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0181.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0182.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0183.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0184.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0185.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0186.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0187.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0188.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0189.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0190.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0191.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0192.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0193.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0194.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0195.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0196.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0197.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0198.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0199.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "RoyalMail_0200.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0008.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Special_0011.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0016.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0018.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0019.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0021.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0023.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0024.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0026.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0027.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0028.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0029.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0030.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0031.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0033.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0035.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0037.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0038.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0039.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0040.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0041.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0043.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0046.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0047.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0048.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0049.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0050.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0051.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0053.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0057.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0059.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0061.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0063.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0068.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0069.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0070.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0072.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0074.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0075.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0076.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0077.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0079.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0080.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0082.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0083.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0084.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0086.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0087.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0088.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0089.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0090.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0091.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0092.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0093.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0095.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0096.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0097.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0098.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0099.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0100.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0101.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0103.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0105.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0106.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0108.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0111.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0112.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0113.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0114.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0121.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0122.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0123.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0125.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0126.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0127.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0128.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0129.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0134.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0135.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0136.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0137.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0139.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0140.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0142.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0143.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0144.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0145.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0146.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0149.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0150.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0154.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0156.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0163.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "Special_0165.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0172.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0176.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0177.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0178.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0182.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0184.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0185.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0188.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0189.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0191.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0192.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0193.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0194.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0195.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0196.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0197.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0199.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0201.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0202.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0205.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0207.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0209.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0210.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0211.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0214.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0216.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0220.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0221.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0222.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0225.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0228.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0229.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0230.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0231.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0239.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0240.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0245.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0246.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0248.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0254.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0256.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0260.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0263.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0264.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0266.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0268.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "Special_0270.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0271.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0279.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0286.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0287.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0293.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0299.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0301.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0302.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0304.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0307.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0308.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0309.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0311.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0312.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0317.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0318.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0320.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0321.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0322.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0323.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0324.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0325.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0326.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0327.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "Special_0332.jpg",
+      "reason": "no supported label"
+    },
+    {
+      "file": "[P]ISBN_18_0007.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "[P]ISBN_18_0013.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "[P]ISBN_18_0016.jpg",
+      "reason": "zbar false positive"
+    },
+    {
+      "file": "[P]ISBN_18_0022.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "[S]ISBN_02_0023.jpg",
+      "reason": "zxing-cpp false positive"
+    },
+    {
+      "file": "[S]ISBN_02_0036.jpg",
+      "reason": "zxing-cpp false positive"
+    }
+  ]
+}

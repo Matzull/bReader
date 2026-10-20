@@ -14,7 +14,7 @@ Every dataset the project measures against. `data/` is gitignored: nothing here 
 | Dynamsoft `UPS-Synthetic-Labels` | `data/dynamsoft/UPS-Synthetic-Labels` | same | CC BY 4.0 | `--dynamsoft`, `datasets.yml` (Code 128; MaxiCode unsupported) | `dynamsoft-ups-*.json` |
 | Dynamsoft `pdf417-small-module-size` | `data/dynamsoft/pdf417-small-module-size` | same | no license stated; internal only | `--dynamsoft`, `datasets.yml` (PDF417 counted; 7 unlabelled Code 128 added as overrides) | `dynamsoft-pdf417-*.json` |
 | zxing-cpp samples | `data/zxing-samples/test/samples` | `tools/fetch-datasets.sh zxing-samples` | Apache-2.0, test data only | `--zxing-samples`, `datasets.yml` (`zxing-samples` job) | `zxing-samples-*.json` |
-| BarBeR | `data/barber/BarBeR - Dataset` | manual: `data/BarBeR_Dataset.zip` (6 GB), extract into `data/barber/` | no license stated, sources have their own terms; internal only | `--barber` (1/8 subset), `--barber-full`, `--tier b` (subset), `--tier c1`/`c2` (full); not in CI | `barber-subset-*.json`, `barber-*.json` |
+| BarBeR | `data/barber/BarBeR - Dataset` | manual: `data/BarBeR_Dataset.zip` (6 GB), extract into `data/barber/` | no license stated, sources have their own terms; internal only | `--barber` (development subset), `--barber-full`, `--tier b` (development subset), `--tier release` (full); not in CI | `barber-dev-*.json`, `barber-*.json` |
 
 All Dynamsoft subsets come from one clone, [Dynamsoft/datasets-from-dynamsoft](https://github.com/Dynamsoft/datasets-from-dynamsoft) (`git clone --depth 1`, updated with `pull --ff-only`). CI caches it keyed on the upstream commit.
 
@@ -68,8 +68,25 @@ Rules:
 - **Text normalization**: XML character references are decoded; line endings CR LF and CR compare equal to LF (general, in `matching::canonical`; the labels use LF).
 - **ZVZ-real binary payloads.** Its PDF417, Data Matrix and Aztec labels show the payload bytes as text or as hex: IBM437 characters (`M\u00f7glinger` for `M\xf6glinger`; recognised by box-drawing, Greek or division characters), or the hex of the UTF-16 units of such text (`0002005E...`; units that all fit a byte are byte values, otherwise IBM437 characters). A NUL and a real caret both show as `^`, so a hex payload with a `^` is ambiguous and is treated as undecodable (32 regions). Plain digit strings that merely look like hex are left alone.
 - **Duplicated images.** An image named in several projects is scanned once, under the first project in file-name order (Dubska), with the union of the regions; the common de-duplication then merges the labels of one symbol (23 removed). Several entries for one file in one project keep those whose `size` equals the image's pixel count.
-- **Subset.** `bench ... --subset N` keeps the images whose FNV-1a hash of the file name is divisible by N (also in `py_bench.py`): a stable, source-balanced sample for the quick gate. `--only NAME` limits the run to the sources whose name contains NAME.
+- **Subset.** `bench ... --subset N` keeps the images whose FNV-1a hash of the file name is divisible by N (also in `py_bench.py`): a stable, source-balanced sample. `--only NAME` limits the run to the sources whose name contains NAME. `--subset dev` is the [development subset](#barber-development-subset).
 - **Overrides** (`gt-overrides.json`, key `barber`, 15 entries, each with the evidence): invalid check digits and typos, a garbled Code 128, the `\000001` QR prefix, a mislabeled QR, a 1-character Code 128 labelled `Q1`, an Aztec labelled with a ticket number (masked as undecodable), and three unlabeled symbols (two EAN-13, one QR). Same [policy](#overrides-policy) as for the other sets.
+
+### BarBeR development subset
+
+The full set takes about 35 minutes serially, so day-to-day work and tier b use `bench data/barber --subset dev` ([D-051](decisions.md#d-051)); the full set runs only in the release tier. The subset is the union of two lists of file names:
+
+- the 1/4 hash share (`--subset 4`, the same FNV-1a rule as above), a source-balanced sample;
+- the **trap list** `tools/bench/barber-dev-extra.json` (versioned; file name plus reason, like `gt-overrides.json`): every image where zxing-cpp 3.1.1 or zbar 0.23 (library defaults, through pyzbar) gives at least one false positive on the full set, so the images that tempt a reader into misdecodes are always in the gate, and every image without a supported label (only undecodable, unsupported or no regions), where any read is suspect. The list is embedded in the bench; `Subset::dev` in `tools/bench/src/subset.rs` builds the union, with unit tests that it holds every listed image and is deterministic.
+
+Its baselines are `barber-dev-<effort>.json`, recorded with `--subset dev`, so their expected counts differ from the full ones. The trap list is the false-positive part of the subset: the 1/4 share alone sees a new independent FP mode with probability 1/4 per instance, the trap list adds the images that are known to provoke FPs in other readers, which is a better predictor than the hash. A new FP mode on an image outside both is still only caught by the release tier.
+
+Regenerate the list (only when the pinned zxing-cpp or pyzbar changes, or the BarBeR labels or overrides change; it is deterministic for the same library versions):
+
+```sh
+flock ~/.cache/breader-heavy.lock .venv/bin/python tools/bench/regen_barber_dev_extra.py   # about 22 minutes on the 3700X
+```
+
+It runs `py_bench.py data/barber --engine zxingcpp` and `--engine zbar` side by side with `--fp-list` (one `engine<TAB>file` line per image with a false positive of that engine) and `--no-label-list` (images without a supported label) and merges them, sorted, into the JSON with the reasons and the library versions. After regenerating, rewrite the three `barber-dev-*` baselines ([testing](testing.md#the-barber-gate)) and say so in [BASELINES](BASELINES.md).
 
 ## Ground-truth format
 

@@ -74,10 +74,18 @@ pub fn print_table(engine: &str, dataset: &str, stats: &Stats) {
         rate_text(&t),
         t.false_positives
     );
-    let l = latency(stats);
+    let latency_text = if stats.latencies.is_empty() {
+        "latency n/a (not measured with --jobs > 1)".to_owned()
+    } else {
+        let l = latency(stats);
+        format!(
+            "latency ms p50 {:.2} p95 {:.2} max {:.2}",
+            l.p50, l.p95, l.max
+        )
+    };
     println!(
-        "scan errors {}, unsupported (excluded) {}, latency ms p50 {:.2} p95 {:.2} max {:.2}\n",
-        stats.errors, stats.unsupported, l.p50, l.p95, l.max
+        "scan errors {}, unsupported (excluded) {}, {latency_text}\n",
+        stats.errors, stats.unsupported
     );
 }
 
@@ -95,12 +103,17 @@ pub fn stats_json(stats: &Stats) -> Value {
         .map(|(n, s)| ((*n).to_string(), sym(s)))
         .collect();
     let l = latency(stats);
+    let latency_ms = if stats.latencies.is_empty() {
+        Value::Null
+    } else {
+        json!({ "p50": l.p50, "p95": l.p95, "max": l.max })
+    };
     json!({
         "images": stats.images,
         "scan_errors": stats.errors,
         "unsupported": stats.unsupported,
         "symbologies": symbologies,
         "total": sym(&stats.totals()),
-        "latency_ms": { "p50": l.p50, "p95": l.p95, "max": l.max },
+        "latency_ms": latency_ms,
     })
 }
