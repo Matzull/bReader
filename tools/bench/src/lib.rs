@@ -7,4 +7,5 @@ pub mod engine;
 pub mod gate;
 pub mod groundtruth;
 pub mod matching;
+pub mod subset;
 pub mod zxing_samples;

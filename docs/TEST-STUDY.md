@@ -2,6 +2,8 @@
 
 All timings in this study are from the Ryzen 5 5500U (shared with another agent); the project moved to a Ryzen 7 3700X on 2026-10-20.
 
+> **Update 2026-10-21 ([D-051](decisions.md#d-051)).** The tiers of this study were changed by the owner after it was written: tier C1 is gone, tier B now runs the BarBeR development subset (the 1/4 hash share united with the trap images where zxing-cpp or zbar give a false positive, [datasets](datasets.md#barber-development-subset)) at Balanced and Exhaustive instead of the 1/8 subset, the full BarBeR set runs only in the release tier (the old C2), and the gates run on all threads (`--jobs`). The 1/8 subset, its baselines and its "FP seen with probability 1/8" argument below are historical; the current tiers and times are in [testing](testing.md#test-and-gate-tiers). The times in this study remain the serial ones.
+
 Recommendation report on the cost and overlap of the test suite and the regression gates. Nothing here is implemented; the ranked change list is at the end. Owner's position: end-to-end tests are necessary but overused; no redundant tests; nothing that takes about 40 minutes unless it is really important; coverage is not to be removed blindly; the zero-false-positive rule ([D-002](decisions.md#d-002)) is a hard constraint.
 
 ## 1. Method and caveats

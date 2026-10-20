@@ -3,6 +3,8 @@ mod report;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 use breader::{Effort, Escalation};
@@ -10,13 +12,14 @@ use image::{ImageDecoder, metadata::Orientation};
 use serde_json::{Value, json};
 
 use benchlib::gate::{Baseline, Counts, Groups};
+use benchlib::subset::Subset;
 use benchlib::{barber, engine, groundtruth, matching};
 use engine::{BreaderEngine, Engine};
 use groundtruth::Expected;
 use matching::Stats;
 
 const USAGE: &str = "usage: bench <dataset-dir> [--engine breader|rxing|rqrr|all] \
-[--effort fast|balanced|exhaustive] [--escalation all|found|stable] [--json out.json] [--no-overrides] [--subset N] [--only SOURCE] [--check baseline.json | --write-baseline baseline.json]";
+[--effort fast|balanced|exhaustive] [--escalation all|found|stable] [--json out.json] [--no-overrides] [--subset N|dev] [--jobs N] [--only SOURCE] [--check baseline.json | --write-baseline baseline.json]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EngineSel {
@@ -33,7 +36,8 @@ struct Args {
     escalation: Option<Escalation>,
     json: Option<PathBuf>,
     overrides: bool,
-    subset: u64,
+    subset: Subset,
+    jobs: usize,
     only: Option<String>,
     check: Option<PathBuf>,
     write_baseline: Option<PathBuf>,
@@ -46,7 +50,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut escalation = None;
     let mut json = None;
     let mut overrides = true;
-    let mut subset = 1;
+    let mut subset = Subset::all();
+    let mut jobs = 1;
     let mut only = None;
     let mut check = None;
     let mut write_baseline = None;
@@ -82,11 +87,23 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--no-overrides" => overrides = false,
             "--only" => only = Some(args.next().ok_or("--only needs a name")?),
             "--subset" => {
-                subset = args
+                subset = match args.next().as_deref() {
+                    Some("dev") => Subset::dev()?,
+                    Some(v) => v
+                        .parse()
+                        .ok()
+                        .filter(|&n| n >= 1)
+                        .map(Subset::share)
+                        .ok_or("--subset needs a positive integer or `dev`")?,
+                    None => return Err("--subset needs a value".into()),
+                };
+            }
+            "--jobs" => {
+                jobs = args
                     .next()
                     .and_then(|v| v.parse().ok())
                     .filter(|&n| n >= 1)
-                    .ok_or("--subset needs a positive integer")?;
+                    .ok_or("--jobs needs a positive integer")?;
             }
             "--check" => check = Some(args.next().ok_or("--check needs a path")?.into()),
             "--write-baseline" => {
@@ -114,6 +131,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
         json,
         overrides,
         subset,
+        jobs,
         only,
         check,
         write_baseline,
@@ -176,21 +194,11 @@ struct Dataset {
     images: Vec<Item>,
 }
 
-/// Keeps an image when a hash of its name falls in the 1/`n` share; `n` of 0 or 1 keeps all.
-fn in_subset(file: &str, n: u64) -> bool {
-    n <= 1 || {
-        let h = file.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
-            (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-        });
-        (h >> 16) % n == 0
-    }
-}
-
 /// BarBeR: one dataset per source (VIA project file), ground truth converted in memory.
 fn load_barber(
     via: &Path,
     use_overrides: bool,
-    subset: u64,
+    subset: &Subset,
     only: &Option<String>,
 ) -> Result<Vec<Dataset>, String> {
     let overrides = groundtruth::parse_overrides(groundtruth::OVERRIDES_JSON)?;
@@ -218,7 +226,7 @@ fn load_barber(
         eprintln!("{name}: removed {removed} duplicate GT entries");
         let mut images = Vec::new();
         for img in source.annotations.images {
-            if !in_subset(&img.file, subset) {
+            if !subset.contains(&img.file) {
                 continue;
             }
             let path = base.join(&img.file);
@@ -251,7 +259,7 @@ fn load_barber(
 fn load_datasets(
     root: &Path,
     use_overrides: bool,
-    subset: u64,
+    subset: &Subset,
     only: &Option<String>,
 ) -> Result<Vec<Dataset>, String> {
     if let Some(via) = barber::find_via_dir(root) {
@@ -326,38 +334,84 @@ fn load_gray(path: &Path) -> Result<(image::GrayImage, Orientation), String> {
     Ok((img.into_luma8(), orientation))
 }
 
-fn run_dataset(engine: &mut dyn Engine, ds: &Dataset) -> Stats {
-    let mut stats = Stats::default();
-    for Item {
+/// Scores one image; `timed` records the decode latency (only valid when nothing else runs).
+fn run_item(engine: &mut dyn Engine, item: &Item, timed: bool) -> Stats {
+    let Item {
         path,
         expected,
         ignore,
-    } in &ds.images
-    {
-        stats.images += 1;
-        let (gray, orientation) = match load_gray(path) {
-            Ok(img) => img,
-            Err(e) => {
-                eprintln!("{}: {e}", path.display());
-                stats.errors += 1;
-                matching::score_masked(&[], expected, ignore, &mut stats);
-                continue;
-            }
-        };
-        // Ground-truth polygons are in the EXIF-corrected frame, the engines see the raw pixels.
-        let ignore = &barber::to_raw_frame(ignore, orientation, gray.width(), gray.height());
-        let start = Instant::now();
-        let result = engine.decode(&gray);
-        stats.latencies.push(start.elapsed());
-        let found = result.unwrap_or_else(|e| {
+    } = item;
+    let mut stats = Stats {
+        images: 1,
+        ..Stats::default()
+    };
+    let (gray, orientation) = match load_gray(path) {
+        Ok(img) => img,
+        Err(e) => {
             eprintln!("{}: {e}", path.display());
             stats.errors += 1;
-            Vec::new()
-        });
-        if std::env::var_os("BENCH_SHOW_FP").is_some() {
-            eprintln!("image {}", path.display());
+            matching::score_masked(&[], expected, ignore, &mut stats);
+            return stats;
         }
-        matching::score_masked(&found, expected, ignore, &mut stats);
+    };
+    // Ground-truth polygons are in the EXIF-corrected frame, the engines see the raw pixels.
+    let ignore = &barber::to_raw_frame(ignore, orientation, gray.width(), gray.height());
+    let start = Instant::now();
+    let result = engine.decode(&gray);
+    if timed {
+        stats.latencies.push(start.elapsed());
+    }
+    let found = result.unwrap_or_else(|e| {
+        eprintln!("{}: {e}", path.display());
+        stats.errors += 1;
+        Vec::new()
+    });
+    if std::env::var_os("BENCH_SHOW_FP").is_some() {
+        eprintln!("image {}", path.display());
+    }
+    matching::score_masked(&found, expected, ignore, &mut stats);
+    stats
+}
+
+fn run_dataset(engine: &mut dyn Engine, ds: &Dataset) -> Stats {
+    let mut stats = Stats::default();
+    for item in &ds.images {
+        stats.merge(&run_item(engine, item, true));
+    }
+    stats
+}
+
+/// Runs the images of `ds` on `jobs` threads, each with its own engine (`make`). Per-image results are
+/// merged in image order, so counts match the sequential run exactly; latencies are not recorded.
+fn run_dataset_parallel(
+    make: &(dyn Fn() -> Box<dyn Engine> + Sync),
+    ds: &Dataset,
+    jobs: usize,
+) -> Stats {
+    const STACK: usize = 16 << 20;
+    let next = AtomicUsize::new(0);
+    let slots: Vec<Mutex<Option<Stats>>> = ds.images.iter().map(|_| Mutex::new(None)).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..jobs.min(ds.images.len()) {
+            let worker = || {
+                let mut engine = make();
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(item) = ds.images.get(i) else { break };
+                    let stats = run_item(engine.as_mut(), item, false);
+                    *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(stats);
+                }
+            };
+            std::thread::Builder::new()
+                .stack_size(STACK)
+                .spawn_scoped(scope, worker)
+                .expect("cannot spawn a bench worker thread");
+        }
+    });
+    let mut stats = Stats::default();
+    for slot in slots {
+        let item = slot.into_inner().unwrap_or_else(|e| e.into_inner());
+        stats.merge(&item.expect("every image is scored by some worker"));
     }
     stats
 }
@@ -440,7 +494,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let datasets = match load_datasets(&args.dataset, args.overrides, args.subset, &args.only) {
+    let datasets = match load_datasets(&args.dataset, args.overrides, &args.subset, &args.only) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{e}");
@@ -450,12 +504,21 @@ fn main() -> ExitCode {
 
     let mut reports: Vec<Value> = Vec::new();
     let mut gate_groups_slot: Option<Groups> = None;
-    for engine in &mut engines {
+    for (engine_idx, engine) in engines.iter_mut().enumerate() {
         let mut total = Stats::default();
         let mut per_dataset: BTreeMap<String, Value> = BTreeMap::new();
         let mut all_stats: Vec<(String, Stats)> = Vec::new();
         for ds in &datasets {
-            let stats = run_dataset(engine.as_mut(), ds);
+            let stats = if args.jobs > 1 {
+                let make = || {
+                    build_engines(args.engine, args.effort, args.escalation)
+                        .map(|mut v| v.swap_remove(engine_idx))
+                        .expect("engines were built once already")
+                };
+                run_dataset_parallel(&make, ds, args.jobs)
+            } else {
+                run_dataset(engine.as_mut(), ds)
+            };
             report::print_table(engine.name(), &ds.name, &stats);
             per_dataset.insert(ds.name.clone(), report::stats_json(&stats));
             total.merge(&stats);

@@ -15,6 +15,16 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-21: BarBeR development subset (D-051)
+
+[D-051](decisions.md#d-051), on main `abecd0c` plus these changes, Ryzen 7 3700X. First measurement of `bench data/barber --subset dev` (the 1/4 hash share united with the 1212 trap images of `tools/bench/barber-dev-extra.json`): 3094 images in 12 sources, 2362 expected labels (224 unsupported labels excluded). Reads (of 2362), false positives in parentheses; breader is the Rust `bench` (the committed `barber-dev-*` baselines), zxing-cpp 3.1.1 and zbar 0.23 (pyzbar, library defaults) are `tools/bench/py_bench.py --subset dev` (one run each, zxing-cpp does not depend on an effort):
+
+| breader Fast | breader Balanced | breader Exhaustive | zxing-cpp | zbar |
+|---|---|---|---|---|
+| 1509 (0) | 1768 (0) | 1827 (0) | 1678 (84) | 1536 (198) |
+
+The false positives of the other readers are the point of the trap list: zxing-cpp 84 and zbar 198 on this subset, none for breader at any effort. The trap list has 1212 images: 971 without a supported label, 74 with a zxing-cpp false positive only, 162 with a zbar one only and 5 with both (regenerated in 22 minutes, deterministic). Gate times with `--jobs 1` and `--jobs 16` (one image set, three efforts) and the tiers are in [D-051](decisions.md#d-051) and [testing](testing.md#test-and-gate-tiers). Equivalence of `--jobs 1` and `--jobs 16` (JSON without latency) held on challenging-images, zxing samples, synth seed 2024 and the development subset at Fast, Balanced and Exhaustive, and on the video gate (tracker, fast, balanced). The `barber-subset-*` baselines (1/8) were removed.
+
 ## Status 2026-10-20: new machine (Ryzen 7 3700X)
 
 [D-050](decisions.md#d-050). The project moved from the Ryzen 5 5500U (14 GB) to an AMD Ryzen 7 3700X (8 cores / 16 threads, 31 GB RAM, `schedutil` governor, boost up to about 4.2 GHz). Every latency number in the sections below was measured on the 5500U; this section re-measures all of it on the 3700X and the absolute v1 targets apply to these numbers (owner decision 2026-10-20). Read counts do not depend on the machine.
@@ -481,7 +491,7 @@ Other engines (summary): rxing 828 false positives (EAN-8 126, EAN-13 77, QR 3, 
 
 ### Gate
 
-`tools/check-regression.sh --barber` (1/8 subset, about 1100 images: fast 51 s, balanced 67 s, exhaustive 133 s, 4.2 minutes in total on the shared machine) and `--barber-full` / `--all` (fast 297 s, balanced 549 s, exhaustive 1071 s). Baselines `barber-subset-*.json` and `barber-*.json`, written from real runs with 0 false positives: groups are the 12 sources, items the symbologies. The full gate is over the 3 minute budget per effort (Balanced and Exhaustive), so the quick check is the subset; the trade-off is a 1/8 sample (about 12 images from the smallest source) against exact coverage, and a regression below about 8 reads of one source and symbology can hide in the sample. Run tier b before merging a reader change and `--tier c1` (the full set at Balanced and Exhaustive) only for changes that raise false-positive exposure; the list is in [testing](testing.md#when-to-run-c1).
+`tools/check-regression.sh --barber` (1/8 subset, about 1100 images: fast 51 s, balanced 67 s, exhaustive 133 s, 4.2 minutes in total on the shared machine) and `--barber-full` / `--all` (fast 297 s, balanced 549 s, exhaustive 1071 s). Baselines `barber-subset-*.json` and `barber-*.json`, written from real runs with 0 false positives: groups are the 12 sources, items the symbologies. The full gate is over the 3 minute budget per effort (Balanced and Exhaustive), so the quick check is the subset; the trade-off is a 1/8 sample (about 12 images from the smallest source) against exact coverage, and a regression below about 8 reads of one source and symbology can hide in the sample. Since 2026-10-21 ([D-051](decisions.md#d-051)) the quick check is the BarBeR development subset (`barber-dev-*.json`) in tier b, which also covers changes that raise false-positive exposure, and the full set runs in the release tier; the 1/8 subset and tier c1 described here no longer exist ([testing](testing.md#test-and-gate-tiers)).
 
 ## Dynamsoft `UPS-Synthetic-Labels` and `pdf417-small-module-size` (2026-10-09)
 

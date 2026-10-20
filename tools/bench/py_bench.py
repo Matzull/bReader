@@ -5,10 +5,15 @@ Same matching, normalization, timing and report format as the Rust bench. Images
 as grayscale numpy arrays; the timed section is the engine call only.
 
 usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|zbar|both|all] [--effort fast|balanced|exhaustive]
-                   [--json out.json] [--no-overrides] [--subset N] [--zbar-all]
+                   [--json out.json] [--no-overrides] [--subset N|dev] [--zbar-all]
+                   [--fp-list fp.txt] [--no-label-list nolabel.txt]
 
 `both` is breader plus zxing-cpp; `all` adds zbar. zbar needs the system libzbar and pyzbar; it runs
 with the library defaults unless --zbar-all names every symbology explicitly (see ZbarEngine).
+
+--fp-list writes one `engine<TAB>file` line per image where an engine gave a false positive, and
+--no-label-list one file name per image without any supported label (tools/bench/regen_barber_dev_extra.py
+builds the BarBeR development trap list from both).
 """
 import json
 import os
@@ -364,6 +369,8 @@ class Stats:
         self.unsupported = 0
         self.per = {}
         self.latencies = []
+        self.fp_files = []
+        self.no_label_files = []
 
     def row(self, name):
         return self.per.setdefault(name, {"expected": 0, "read": 0, "false_positives": 0})
@@ -373,6 +380,8 @@ class Stats:
         self.errors += other.errors
         self.unsupported += other.unsupported
         self.latencies += other.latencies
+        self.fp_files += other.fp_files
+        self.no_label_files += other.no_label_files
         for k, v in other.per.items():
             r = self.row(k)
             for f in r:
@@ -767,14 +776,32 @@ def to_raw_frame(polys, orientation, w, h):
     return [[f(p) for p in poly] for poly in polys] if f else polys
 
 
+DEV_SHARE = 4
+
+
 def in_subset(file, n):
-    """Keeps an image when an FNV-1a hash of its name falls in the 1/n share (same as the Rust bench)."""
+    """Keeps an image when an FNV-1a hash of its name falls in the 1/n share (same as the Rust bench).
+    `n` may be "dev": the BarBeR development subset, the 1/4 share united with barber-dev-extra.json."""
+    if n == "dev":
+        return in_subset(file, DEV_SHARE) or file in dev_extra()
     if n <= 1:
         return True
     h = 0xCBF29CE484222325
     for b in file.encode("utf-8"):
         h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
     return (h >> 16) % n == 0
+
+
+_DEV_EXTRA = None
+
+
+def dev_extra():
+    """File names of the BarBeR development trap list (tools/bench/barber-dev-extra.json)."""
+    global _DEV_EXTRA
+    if _DEV_EXTRA is None:
+        doc = json.loads((Path(__file__).resolve().parent / "barber-dev-extra.json").read_text())
+        _DEV_EXTRA = {i["file"] for i in doc["images"]}
+    return _DEV_EXTRA
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif"}
@@ -841,6 +868,9 @@ def run_dataset(base, ann, engine, subset=1):
             continue
         expected = expected_by_file[file]
         stats.images += 1
+        if all(sym is None for sym, _ in expected):
+            stats.no_label_files.append(file)
+        fp_before = stats.totals()["false_positives"]
         if SHOW_FP:
             print(f"image {paths[file]}", file=sys.stderr)
         try:
@@ -862,10 +892,12 @@ def run_dataset(base, ann, engine, subset=1):
             found = []
         stats.latencies.append((time.perf_counter() - t0) * 1000.0)
         score(found, expected, stats, ignore)
+        if stats.totals()["false_positives"] > fp_before:
+            stats.fp_files.append(file)
     return stats
 
 
-USAGE = "usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|both] [--effort E] [--json out.json] [--no-overrides] [--subset N]"
+USAGE = "usage: py_bench.py <dataset-dir> [--engine breader|zxingcpp|both] [--effort E] [--json out.json] [--no-overrides] [--subset N|dev]"
 
 
 def main(argv):
@@ -877,6 +909,8 @@ def main(argv):
     effort = "balanced"
     subset = 1
     zbar_all = False
+    fp_list = None
+    no_label_list = None
     while args:
         a = args.pop(0)
         if a == "--json":
@@ -887,10 +921,15 @@ def main(argv):
             effort = args.pop(0)
         elif a == "--no-overrides":
             use_overrides = False
+        elif a == "--fp-list":
+            fp_list = args.pop(0)
+        elif a == "--no-label-list":
+            no_label_list = args.pop(0)
         elif a == "--zbar-all":
             zbar_all = True
         elif a == "--subset":
-            subset = int(args.pop(0))
+            v = args.pop(0)
+            subset = v if v == "dev" else int(v)
         elif root is None:
             root = Path(a)
         else:
@@ -922,6 +961,8 @@ def main(argv):
             work.append((dataset_name(root, base), ann, base, base.resolve().name))
     totals = {e.name: Stats() for e in engines}
     per_dataset = {e.name: {} for e in engines}
+    fp_lines = set()
+    no_label = set()
     overrides = load_overrides()
     for ds, ann, base, key in work:
         if use_overrides:
@@ -933,10 +974,16 @@ def main(argv):
             stats = run_dataset(base, ann, e, subset)
             print_table(e.name, ds, stats)
             per_dataset[e.name][ds] = stats_json(stats)
+            fp_lines.update(f"{e.name}\t{f}" for f in stats.fp_files)
+            no_label.update(stats.no_label_files)
             totals[e.name].merge(stats)
     if len(work) > 1:
         for e in engines:
             print_table(e.name, "ALL DATASETS", totals[e.name])
+    if fp_list:
+        Path(fp_list).write_text("".join(f"{line}\n" for line in sorted(fp_lines)))
+    if no_label_list:
+        Path(no_label_list).write_text("".join(f"{f}\n" for f in sorted(no_label)))
     if out_json:
         doc = {
             "dataset_root": str(root),

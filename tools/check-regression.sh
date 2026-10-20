@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 # Runs the regression gate against the versioned baselines in tools/bench/baselines.
-# Usage: tools/check-regression.sh [--tier a|b|c1|c2] [--efforts fast,balanced,exhaustive]
+# Usage: tools/check-regression.sh [--tier a|b|release] [--efforts fast,balanced,exhaustive]
 #            [--synthetic-only] [--dynamsoft] [--zxing-samples] [--barber] [--barber-full] [--all]
 #
 # Tiers (docs/testing.md, docs/TEST-STUDY.md); the default is tier a:
-#   a   every change, about 35 s of gates. Balanced on synth seed 1, synth seed 2024,
-#       Dynamsoft challenging-images, Dynamsoft pdf417-small-module-size and zxing-cpp samples.
-#   b   before merging, about 10 minutes. Everything in a, plus all three efforts on synth seed 2024
-#       and every cheap real set (skewed-datamatrix and UPS-Synthetic-Labels too), the BarBeR 1/8
-#       subset at Balanced and Exhaustive, and the video gate with the tracker engine only.
-#   c1  changes that raise false-positive exposure, about 35 minutes. Like b, but the full BarBeR set
-#       at Balanced and Exhaustive instead of the subset.
-#   c2  phase end or release, about 42 minutes. Every set at every effort, the full BarBeR set and the
-#       video gate with all engines. --all is an alias of c2.
+#   a        every change, about 35 s of gates. Balanced on synth seed 1, synth seed 2024,
+#            Dynamsoft challenging-images, Dynamsoft pdf417-small-module-size and zxing-cpp samples.
+#   b        before merging and for changes that raise false-positive exposure. Everything in a, plus
+#            all three efforts on synth seed 2024 and every cheap real set (skewed-datamatrix and
+#            UPS-Synthetic-Labels too), the BarBeR development subset (1/4 by hash plus the trap list,
+#            docs/datasets.md#barber-development-subset) at Balanced and Exhaustive, and the video gate
+#            with the tracker engine only.
+#   release  publishing a version. Every set at every effort, the full BarBeR set and the video gate
+#            with all engines. c2 and --all are aliases of release.
 #   Synth seed 1 is gated at Balanced only in every tier. Any false positive fails the run.
+#   The old tier c1 is gone: tier b covers changes that raise false-positive exposure.
+#
+# The gates run on BENCH_JOBS threads (default: nproc). Results do not depend on the number; latency is
+# not measured with more than one (tools/bench --jobs).
 #
 # --efforts E1,E2 keeps only those efforts of the selected tier (fast, balanced, exhaustive); the video
 # gate is not affected.
@@ -24,10 +28,10 @@
 #   --dynamsoft also gates data/dynamsoft/challenging-images, skewed-datamatrix, UPS-Synthetic-Labels,
 #   pdf417-small-module-size and the videos, all engines (needs tools/fetch-datasets.sh and ffmpeg).
 #   --zxing-samples also gates data/zxing-samples/test/samples (needs tools/fetch-datasets.sh).
-#   --barber gates a deterministic 1/8 subset of data/barber (BarBeR, ~1100 of 8748 images; needs
-#   data/barber/BarBeR - Dataset, see docs/datasets.md) against barber-subset-*.json.
-#   --barber-full gates the whole BarBeR set against barber-*.json (5 to 18 minutes per effort).
-#   --all is --tier c2.
+#   --barber gates the BarBeR development subset of data/barber (needs data/barber/BarBeR - Dataset,
+#   see docs/datasets.md) against barber-dev-*.json.
+#   --barber-full gates the whole BarBeR set against barber-*.json.
+#   --all is --tier release.
 #   A BarBeR stage is skipped with a message when data/barber is missing.
 set -euo pipefail
 
@@ -38,7 +42,7 @@ bin=target/release
 all="fast balanced exhaustive"
 
 # Efforts per gate set (space separated; empty = not run) and the video engines (empty = no video gate).
-e_synth1="" e_synth2024="" e_chal="" e_skew="" e_ups="" e_pdf="" e_zx="" e_barsub="" e_barfull=""
+e_synth1="" e_synth2024="" e_chal="" e_skew="" e_ups="" e_pdf="" e_zx="" e_bardev="" e_barfull=""
 video=""
 
 tier=""
@@ -54,17 +58,17 @@ set_tier() {
             ;;
         b)
             e_synth1=balanced e_synth2024=$all e_chal=$all e_skew=$all e_ups=$all e_pdf=$all e_zx=$all
-            e_barsub="balanced exhaustive" video=tracker
+            e_bardev="balanced exhaustive" video=tracker
             ;;
         c1)
-            e_synth1=balanced e_synth2024=$all e_chal=$all e_skew=$all e_ups=$all e_pdf=$all e_zx=$all
-            e_barfull="balanced exhaustive" video=tracker
+            echo "tier c1 was removed (D-051): use --tier b for changes that raise false-positive exposure, or --tier release for the full BarBeR set" >&2
+            exit 2
             ;;
-        c2)
+        release | c2)
             e_synth1=balanced e_synth2024=$all e_chal=$all e_skew=$all e_ups=$all e_pdf=$all e_zx=$all
             e_barfull=$all video=tracker,fast,balanced
             ;;
-        *) echo "unknown tier $1 (a, b, c1 or c2)" >&2; exit 2 ;;
+        *) echo "unknown tier $1 (a, b or release)" >&2; exit 2 ;;
     esac
 }
 
@@ -81,7 +85,7 @@ while [ $# -gt 0 ]; do
         --zxing-samples) legacy=1; want_zxing=1 ;;
         --barber) legacy=1; [ "$want_barber" = full ] || want_barber=subset ;;
         --barber-full) legacy=1; want_barber=full ;;
-        --all) tier=c2 ;;
+        --all) tier=release ;;
         *) echo "unknown option $arg" >&2; exit 2 ;;
     esac
 done
@@ -95,14 +99,14 @@ elif [ "$legacy" = 1 ]; then
         e_chal=$all e_skew=$all e_ups=$all e_pdf=$all video=tracker,fast,balanced
     fi
     [ "$want_zxing" = 1 ] && e_zx=$all
-    [ "$want_barber" = subset ] && e_barsub=$all
+    [ "$want_barber" = subset ] && e_bardev=$all
     [ "$want_barber" = full ] && e_barfull=$all
 else
     set_tier a
 fi
 
 if [ "$synthetic_only" = 1 ]; then
-    e_chal="" e_skew="" e_ups="" e_pdf="" e_zx="" e_barsub="" e_barfull="" video=""
+    e_chal="" e_skew="" e_ups="" e_pdf="" e_zx="" e_bardev="" e_barfull="" video=""
 fi
 
 # --efforts keeps only the listed efforts of every set.
@@ -120,7 +124,7 @@ if [ -n "$efforts_filter" ]; then
     }
     e_synth1=$(keep "$e_synth1") e_synth2024=$(keep "$e_synth2024") e_chal=$(keep "$e_chal")
     e_skew=$(keep "$e_skew") e_ups=$(keep "$e_ups") e_pdf=$(keep "$e_pdf") e_zx=$(keep "$e_zx")
-    e_barsub=$(keep "$e_barsub") e_barfull=$(keep "$e_barfull")
+    e_bardev=$(keep "$e_bardev") e_barfull=$(keep "$e_barfull")
 fi
 
 cargo build --release -p bench -p video-bench -p synth
@@ -140,10 +144,12 @@ need_data() {
     exit 2
 }
 
-if [ -n "$e_barsub$e_barfull" ] && [ ! -f "data/barber/BarBeR - Dataset/Annotations/VIA/Artelab.json" ]; then
+if [ -n "$e_bardev$e_barfull" ] && [ ! -f "data/barber/BarBeR - Dataset/Annotations/VIA/Artelab.json" ]; then
     echo "data/barber is missing or incomplete (see docs/datasets.md#barber): skipping the BarBeR stage"
-    e_barsub="" e_barfull=""
+    e_bardev="" e_barfull=""
 fi
+
+jobs="${BENCH_JOBS:-$(nproc)}"
 
 status=0
 gate() {
@@ -155,7 +161,7 @@ bench_gate() {
     shift 3
     for effort in $efforts; do
         echo "=== $label, $effort"
-        gate "$bin/bench" "$@" --effort "$effort" --check "$base/$stem-$effort.json"
+        gate "$bin/bench" "$@" --jobs "$jobs" --effort "$effort" --check "$base/$stem-$effort.json"
     done
 }
 bench_gate "$e_synth1" "synth seed 1" synth-seed1 data/synth
@@ -164,12 +170,12 @@ bench_gate "$e_chal" "dynamsoft challenging-images" dynamsoft-challenging data/d
 bench_gate "$e_skew" "dynamsoft skewed-datamatrix" dynamsoft-skewed data/dynamsoft/skewed-datamatrix
 bench_gate "$e_ups" "dynamsoft UPS-Synthetic-Labels" dynamsoft-ups data/dynamsoft/UPS-Synthetic-Labels
 bench_gate "$e_pdf" "dynamsoft pdf417-small-module-size" dynamsoft-pdf417 data/dynamsoft/pdf417-small-module-size
-bench_gate "$e_barsub" "BarBeR 1/8 subset" barber-subset data/barber --subset 8
+bench_gate "$e_bardev" "BarBeR development subset" barber-dev data/barber --subset dev
 bench_gate "$e_barfull" "BarBeR" barber data/barber
 bench_gate "$e_zx" "zxing-cpp samples" zxing-samples data/zxing-samples/test/samples
 if [ -n "$video" ]; then
     echo "=== dynamsoft videos ($video)"
-    gate "$bin/video-bench" data/dynamsoft/video-based-testing --engines "$video" \
+    gate "$bin/video-bench" data/dynamsoft/video-based-testing --engines "$video" --jobs "$jobs" \
         --check "$base/dynamsoft-video.json"
 fi
 exit "$status"
