@@ -23,6 +23,11 @@
         "read": 3,
         "false_positives": 0
       },
+      "Code 93": {
+        "expected": 7,
+        "read": 5,
+        "false_positives": 0
+      },
       "Data Matrix": {
         "expected": 7,
         "read": 7,
@@ -103,6 +108,11 @@
       "Code 39": {
         "expected": 6,
         "read": 6,
+        "false_positives": 0
+      },
+      "Code 93": {
+        "expected": 7,
+        "read": 7,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -194,6 +204,11 @@
         "read": 6,
         "false_positives": 0
       },
+      "Code 93": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "Data Matrix": {
         "expected": 7,
         "read": 7,
@@ -274,6 +289,11 @@
       "Code 39": {
         "expected": 6,
         "read": 6,
+        "false_positives": 0
+      },
+      "Code 93": {
+        "expected": 7,
+        "read": 7,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -358,6 +378,11 @@
         "read": 6,
         "false_positives": 0
       },
+      "Code 93": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "Data Matrix": {
         "expected": 7,
         "read": 7,
@@ -438,6 +463,11 @@
       "Code 39": {
         "expected": 17,
         "read": 17,
+        "false_positives": 0
+      },
+      "Code 93": {
+        "expected": 23,
+        "read": 23,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -523,6 +553,11 @@
         "read": 6,
         "false_positives": 0
       },
+      "Code 93": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "Data Matrix": {
         "expected": 7,
         "read": 7,
@@ -605,6 +640,11 @@
         "read": 6,
         "false_positives": 0
       },
+      "Code 93": {
+        "expected": 7,
+        "read": 7,
+        "false_positives": 0
+      },
       "Data Matrix": {
         "expected": 7,
         "read": 7,
@@ -685,6 +725,11 @@
       "Code 39": {
         "expected": 6,
         "read": 6,
+        "false_positives": 0
+      },
+      "Code 93": {
+        "expected": 7,
+        "read": 7,
         "false_positives": 0
       },
       "Data Matrix": {
