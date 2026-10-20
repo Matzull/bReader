@@ -17,6 +17,7 @@ pub mod fuzzing;
 mod itf;
 mod marks;
 mod plan;
+mod pool;
 mod profile;
 mod reader;
 #[cfg(test)]

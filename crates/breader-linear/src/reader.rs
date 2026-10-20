@@ -73,7 +73,9 @@ impl Work {
     /// Empties everything a scan fills; the allocations stay.
     fn reset(&mut self) {
         self.lines.clear();
-        self.seeds.clear();
+        for seed in self.seeds.drain(..) {
+            seed.recycle();
+        }
         let stage = &mut self.stage;
         stage.hits.clear();
         stage.aggregator.reset();
@@ -291,9 +293,10 @@ fn scan_lines_parallel(
             cursor.advance(line);
         }
     }
+    let edge_params = &template.edge_params;
     let fresh = || {
         let mut stage = Stage::default();
-        stage.edge_params.clone_from(&template.edge_params);
+        stage.edge_params.clone_from(edge_params);
         (stage, Vec::new())
     };
     let per_chunk: Vec<(Vec<PlacedHit>, Vec<Mark>)> = lines

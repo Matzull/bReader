@@ -272,7 +272,7 @@ fn read(v: &View<'_>, j: isize, lead: isize, e: usize, out: &mut Vec<LineHit>) -
     let Some(orientation) = check_region(region) else {
         return true;
     };
-    let mut text = Vec::with_capacity(2 + m);
+    let mut text = crate::pool::take(2 + m);
     text.push(PART_ROW);
     text.push(orientation | (((lead - 1) as u8) << 1));
     text.extend_from_slice(region);
