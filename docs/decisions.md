@@ -40,6 +40,7 @@ Product-level defaults and scope are owner decisions ([contributing](contributin
 | [D-043](#d-043) | 2026-10-12 | Code 39 thin modules: relaxed element rules, 4 independent lines, 7X quiet zones |
 | [D-049](#d-049) | 2026-10-20 | Code 93 in `breader-linear`: both mod-47 checks, 9-module quantization, measured 4-module quiet zones, Full ASCII always |
 | [D-050](#d-050) | 2026-10-20 | Latency re-baselined on the Ryzen 7 3700X; the absolute v1 targets apply to the new numbers; exact QR link/refinement speed-ups bring the worst Fast video from 14.7 to 12.4 ms |
+| [D-051](#d-051) | 2026-10-20 | The full BarBeR set gates releases only; tier b gates a BarBeR dev subset (1/4 plus trap images); bench and video-bench run gates on N threads (`--jobs`); tier c1 removed |
 | [D-052](#d-052) | 2026-10-20 | NFR-4 restored for the linear reader: spurious DataBar part hits and the aggregator no longer allocate per scan (pooled hit texts, kept grouping and agreement vectors) |
 
 ## D-001
