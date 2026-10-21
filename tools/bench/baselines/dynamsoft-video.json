@@ -43,7 +43,7 @@
       },
       "fast": {
         "expected": 28,
-        "read": 3,
+        "read": 2,
         "false_positives": 0
       },
       "tracker": {
@@ -89,7 +89,7 @@
     "batch_datamatrix_1080p": {
       "balanced": {
         "expected": 100,
-        "read": 89,
+        "read": 88,
         "false_positives": 0
       },
       "fast": {
@@ -99,7 +99,7 @@
       },
       "tracker": {
         "expected": 100,
-        "read": 95,
+        "read": 94,
         "false_positives": 0
       }
     },

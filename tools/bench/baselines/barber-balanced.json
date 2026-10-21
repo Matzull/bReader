@@ -137,7 +137,7 @@
       },
       "EAN-13": {
         "expected": 1056,
-        "read": 851,
+        "read": 854,
         "false_positives": 0
       },
       "EAN-8": {
@@ -272,7 +272,7 @@
       },
       "EAN-13": {
         "expected": 302,
-        "read": 256,
+        "read": 257,
         "false_positives": 0
       },
       "EAN-8": {
