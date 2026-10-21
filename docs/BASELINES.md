@@ -15,6 +15,114 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-21: per-class scoreboard
+
+Phase 0 of the v1 accuracy plan, on main `aa5e9fe` (Ryzen 7 3700X, ffmpeg n9.0.2, all runs under the heavy lock). breader is the Rust `bench --jobs 16` at Balanced; zxing-cpp 3.1.1 and zbar 0.23 (pyzbar, library defaults) are `tools/bench/py_bench.py --engine zxingcpp` and `--engine zbar` (one run each; neither depends on an effort). Cells are reads / false positives; Exp is the number of expected symbols of the class (unsupported labels excluded); Gap is breader minus zxing-cpp in reads. Code 93 has no BarBeR or challenging-images labels, so it appears only in the zxing samples (3 symbols).
+
+### BarBeR full (8585 labels)
+
+| Class | Exp | breader | zxing-cpp | zbar | Gap |
+|---|---|---|---|---|---|
+| EAN-13 | 4970 | 4019 / 0 | 3826 / 69 | 3686 / 179 | +193 |
+| Code 128 | 1428 | 597 / 0 | 447 / 1 | 570 / 4 | +150 |
+| QR Code | 1329 | 1156 / 0 | 1155 / 0 | 876 / 1 | +1 |
+| UPC-A | 327 | 272 / 0 | 257 / 0 | 252 / 0 | +15 |
+| Code 39 | 198 | 130 / 0 | 149 / 1 | 118 / 0 | **-19** |
+| Data Matrix | 110 | 95 / 0 | 99 / 0 | 0 / 0 | **-4** |
+| ITF | 72 | 48 / 0 | 59 / 1 | 57 / 13 | **-11** |
+| EAN-8 | 70 | 67 / 0 | 65 / 0 | 64 / 1 | +2 |
+| PDF417 | 67 | 33 / 0 | 37 / 1 | 0 / 0 | **-4** |
+| Aztec | 14 | 14 / 0 | 11 / 0 | 0 / 0 | +3 |
+| UPC-E (no labels) | 0 | 0 / 0 | 0 / 11 | 0 / 0 | 0 |
+| **Total** | 8585 | **6431 / 0** | 6105 / 84 | 5623 / 198 | +326 |
+
+breader at the other efforts: Fast 5453 / 0, Exhaustive 6641 / 0.
+
+### Dynamsoft challenging-images (448)
+
+| Class | Exp | breader | zxing-cpp | zbar | Gap |
+|---|---|---|---|---|---|
+| QR Code | 234 | 229 / 0 | 222 / 0 | 51 / 0 | +7 |
+| UPC-A | 74 | 71 / 0 | 70 / 0 | 68 / 0 | +1 |
+| Code 128 | 60 | 41 / 0 | 28 / 0 | 30 / 0 | +13 |
+| Data Matrix | 50 | 45 / 0 | 43 / 0 | 0 / 0 | +2 |
+| EAN-13 | 18 | 17 / 0 | 17 / 0 | 16 / 0 | 0 |
+| PDF417 | 6 | 3 / 0 | 3 / 0 | 0 / 0 | 0 |
+| ITF | 4 | 3 / 0 | 4 / 0 | 3 / 5 | **-1** |
+| Code 39 | 1 | 1 / 0 | 1 / 0 | 1 / 0 | 0 |
+| EAN-8 | 1 | 1 / 0 | 1 / 0 | 1 / 0 | 0 |
+| **Total** | 448 | **411 / 0** | 389 / 0 | 170 / 5 | +22 |
+
+breader Fast 333 / 0, Exhaustive 424 / 0.
+
+### zxing-cpp samples (861 labels)
+
+| Class | Exp | breader | zxing-cpp | zbar | Gap |
+|---|---|---|---|---|---|
+| GS1 DataBar Expanded | 226 | 226 / 0 | 162 / 64 | 156 / 50 | +64 |
+| QR Code | 138 | 128 / 0 | 125 / 1 | 95 / 9 | +3 |
+| Data Matrix | 97 | 87 / 0 | 93 / 0 | 0 / 0 | **-6** |
+| UPC-A | 76 | 53 / 0 | 49 / 0 | 46 / 0 | +4 |
+| EAN-13 | 65 | 39 / 0 | 45 / 4 | 47 / 11 | **-6** |
+| PDF417 | 58 | 57 / 0 | 58 / 0 | 0 / 0 | **-1** |
+| Aztec | 48 | 48 / 0 | 48 / 0 | 0 / 0 | 0 |
+| UPC-E | 29 | 20 / 0 | 20 / 0 | 20 / 0 | 0 |
+| Code 128 | 22 | 21 / 0 | 22 / 0 | 20 / 1 | **-1** |
+| ITF | 20 | 7 / 0 | 20 / 0 | 19 / 0 | **-13** |
+| GS1 DataBar | 20 | 16 / 0 | 17 / 0 | 16 / 0 | **-1** |
+| Micro QR Code | 16 | 14 / 0 | 14 / 0 | 0 / 0 | 0 |
+| Codabar | 15 | 12 / 0 | 14 / 0 | 12 / 0 | **-2** |
+| Code 39 | 14 | 11 / 0 | 12 / 0 | 11 / 3 | **-1** |
+| EAN-8 | 9 | 8 / 0 | 9 / 0 | 8 / 0 | **-1** |
+| Code 93 | 3 | 1 / 0 | 3 / 0 | 3 / 0 | **-2** |
+| rMQR Code | 3 | 3 / 0 | 3 / 0 | 0 / 0 | 0 |
+| GS1 DataBar Limited | 2 | 2 / 0 | 2 / 0 | 0 / 0 | 0 |
+| **Total** | 861 | **753 / 0** | 716 / 69 | 453 / 74 | +37 |
+
+breader Fast 637 / 0, Exhaustive 761 / 0. The three sets have 0 false positives for breader at every effort; zxing-cpp has 84, 0 and 69, zbar 198, 5 and 74.
+
+### Work list for phase 1 (classes where breader trails zxing-cpp, by reads)
+
+| Rank | Class, set | Gap | Note |
+|---|---|---|---|
+| 1 | Code 39, BarBeR | -19 | 130 against 149; thin modules and spacing (FAILURES-BARBER-1D C2) |
+| 2 | ITF, zxing samples | -13 | 7 against 20; the default length list ([D-008](decisions.md#d-008), [D-041](decisions.md#d-041)); changing it is an owner decision |
+| 3 | ITF, BarBeR | -11 | 48 against 59; in-symbol decoding failures (C4) |
+| 4 | Data Matrix, zxing samples | -6 | 87 against 93 |
+| 4 | EAN-13, zxing samples | -6 | 39 against 45 (zxing-cpp has 4 false positives on it) |
+| 6 | Data Matrix, BarBeR | -4 | 95 against 99 |
+| 6 | PDF417, BarBeR | -4 | 33 against 37 (was -10 on 2026-10-14) |
+| 8 | Codabar, zxing samples | -2 | |
+| 8 | Code 93, zxing samples | -2 | 1 of 3; the blank-zone default is an owner decision |
+| 10 | -1 each: ITF (challenging-images), PDF417, Code 128, GS1 DataBar, Code 39 and EAN-8 (zxing samples) | -1 | |
+
+Classes at or above zxing-cpp everywhere: QR Code, UPC-A, UPC-E, Aztec, Micro QR, rMQR, GS1 DataBar Expanded and Limited, EAN-13 and Code 128 on BarBeR and challenging-images, EAN-8 on BarBeR. The 2026-10-14 table below listed Code 39 at -21, PDF417 at -10 and Code 128 at +147 on BarBeR; the present figures were measured again and are not derived from it.
+
+### Latency margin (Balanced, `--jobs 1`)
+
+Median of 5 interleaved rounds (challenging-images then BarBeR development subset in each round), heavy lock held for the whole session, nothing else running. Per-image p50, ms:
+
+| Set | breader rounds | breader median | zxing-cpp (one py_bench run) | Margin |
+|---|---|---|---|---|
+| challenging-images | 20.16, 20.15, 20.21, 20.07, 20.29 | 20.16 | 20.62 | 0.46 ms (2.2 %) faster |
+| BarBeR development subset (3094) | 24.67, 24.54, 24.49, 24.51, 24.45 | 24.51 | 30.05 | 5.54 ms (18 %) faster |
+
+The challenging-images margin is thin and depends on the zxing-cpp figure, which comes from a single run: the same engine measured 19.46 ms p50 in the scoreboard run above (executed right after a 16-thread breader run, otherwise idle), against which breader would trail by 0.7 ms. Five breader rounds span 0.22 ms, so the breader side is stable; the zxing-cpp side has a spread of about 1 ms between two runs. Any accuracy work that costs latency on challenging-images Balanced can lose the objective; the BarBeR subset has room.
+
+### Video gate cells (tracker `batch_datamatrix_1080p` 95 to 94, Fast `batch_EAN13_1080p` 3 to 2, Balanced `batch_datamatrix_1080p` 89 to 88)
+
+Not code regressions. Bisecting over the first-parent merges (builds of `video-bench` in a scratch worktree, `--filter batch_`, serial): all three cells read 94 / 2 / 88 at every one of `d0fedb5`, `2adacfa`, `5b6f09b`, `5a39448`, `287ce3a`, `8d6115d`, `c6e0690`, `2ac2745`, `662f3f6`, `c171fe4`, `91be06b`, `d936c13` and at `10c37d7`, the commit that wrote the baseline (2026-10-09). At `8adf4e0`, one commit before that, the committed baseline already said Balanced 87 and Fast EAN-13 3 and the code reads 86 and 2. So the baseline never reproduced on this machine, whatever the code. The cause is the frame source, not the decoder: `video-bench` pipes `ffmpeg -pix_fmt gray`, and on this machine's ffmpeg n9.0.2 the conversion from the limited-range (tv, 16 to 235) yuv420p of the HEVC files expands the range to 0..255 (first frame of `batch_datamatrix_1080p`: gray differs from the raw Y plane in 2 021 529 of 2 073 600 pixels, and equals `-vf scale=in_range=tv:out_range=pc` exactly). The baseline came from another ffmpeg build on the old machine. The cells are sensitive to such pixel differences: feeding the raw Y plane (`-vf extractplanes=y`, temporary experiment, not kept) moves the same cells to tracker 96, Fast 72, Balanced 90 on Data Matrix and Fast EAN-13 to 3, but loses one tracker EAN-13 read (27 of 28). Results do not vary from run to run: two full runs of the gate with all three engines gave identical counts. Action: `dynamsoft-video.json` was rewritten with `--write-baseline` on this machine (only these three cells changed, 3 to 2, 89 to 88, 95 to 94; 0 false positives), a baseline reset for a changed frame source and not a recorded loss. The video baselines are valid for ffmpeg n9.0.2; a different ffmpeg can move these cells by one or more reads without any decoder change.
+
+### Baselines rewritten
+
+| File | Change |
+|---|---|
+| `dynamsoft-video.json` | the three cells above |
+| `barber-balanced.json` | Muenster EAN-13 851 to 854, ZVZ-real EAN-13 256 to 257 |
+| `barber-exhaustive.json` | Deal Kaist EAN-13 2154 to 2155, InventBar Code 128 161 to 162, Muenster EAN-13 866 to 868 |
+
+Before rewriting, `--check` of the six BarBeR files (full and development subset at the three efforts) passed with 0 false positives and no read below its baseline; only the five notices above (EAN-13 and Code 128 gains inherited from earlier merges) were pending. `barber-fast.json` and the three `barber-dev-*` files had no notice and are unchanged. The tier b run showed no "read increased" notice in any other baseline.
+
 ## Status 2026-10-21: BarBeR development subset (D-051)
 
 [D-051](decisions.md#d-051), on main `abecd0c` plus these changes, Ryzen 7 3700X. First measurement of `bench data/barber --subset dev` (the 1/4 hash share united with the 1212 trap images of `tools/bench/barber-dev-extra.json`): 3094 images in 12 sources, 2362 expected labels (224 unsupported labels excluded). Reads (of 2362), false positives in parentheses; breader is the Rust `bench` (the committed `barber-dev-*` baselines), zxing-cpp 3.1.1 and zbar 0.23 (pyzbar, library defaults) are `tools/bench/py_bench.py --subset dev` (one run each, zxing-cpp does not depend on an effort):

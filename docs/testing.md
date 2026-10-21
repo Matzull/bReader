@@ -116,7 +116,7 @@ tools/check-regression.sh --tier a --synthetic-only       # no downloaded datase
 tools/check-regression.sh --dynamsoft      # older per-set flags: synthetic sets plus that set, all efforts
 ```
 
-The video gate also accepts `--engines`; with `--engines tracker`, baseline entries of the engines not run are ignored. Run one heavy job at a time (a tier run, a bench, a wheel build); the gates use all threads by default, so on a shared machine set `BENCH_JOBS` (and `RAYON_NUM_THREADS=4` for latency runs).
+The video gate also accepts `--engines`; with `--engines tracker`, baseline entries of the engines not run are ignored. The frames come from `ffmpeg -pix_fmt gray`, whose range handling depends on the ffmpeg version, so `dynamsoft-video.json` is valid for the version it was written with (n9.0.2 since 2026-10-21, [BASELINES](BASELINES.md#status-2026-10-21-per-class-scoreboard)); a different ffmpeg can move cells by a read or more without any decoder change. Run one heavy job at a time (a tier run, a bench, a wheel build); the gates use all threads by default, so on a shared machine set `BENCH_JOBS` (and `RAYON_NUM_THREADS=4` for latency runs).
 
 Measure latency with `--jobs 1` and only on an idle machine and compare builds in interleaved runs; concurrent jobs distort timings by up to 2x.
 
