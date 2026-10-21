@@ -551,3 +551,20 @@ fn nothing_in_stripes_and_noise() {
         );
     }
 }
+
+/// The patterns at the ends of the start and stop sides are gone (a smudge, a
+/// label edge), so the boundaries stop rows short of the symbol; the rows
+/// beyond are read from the indicators of the rows that were found.
+#[test]
+fn boundaries_that_stop_short_of_the_symbol_are_extended() {
+    let msg = text(200);
+    let opts = EncodeOptions {
+        level: 3,
+        ..EncodeOptions::default()
+    };
+    let mut s = Scene::new(&msg, opts, 3.0);
+    // The start pattern is 17 modules of the symbol's width.
+    let start = 16.5 / s.modules[0].len() as f32;
+    s.damage = vec![[0.0, 0.0, start, 0.1], [0.0, 0.9, start, 1.0]];
+    expect(&read_alone(&s.raster(), Effort::Balanced), &msg);
+}

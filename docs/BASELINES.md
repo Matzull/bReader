@@ -123,6 +123,20 @@ Not code regressions. Bisecting over the first-parent merges (builds of `video-b
 
 Before rewriting, `--check` of the six BarBeR files (full and development subset at the three efforts) passed with 0 false positives and no read below its baseline; only the five notices above (EAN-13 and Code 128 gains inherited from earlier merges) were pending. `barber-fast.json` and the three `barber-dev-*` files had no notice and are unchanged. The tier b run showed no "read increased" notice in any other baseline.
 
+## Status 2026-10-22: PDF417 lines past the boundary (D-054)
+
+Phase 1, agent B, on main `0c5773a` (Ryzen 7 3700X, all runs under the heavy lock). PDF417 reads, before / after (Rust `bench --jobs 16`; 0 false positives everywhere):
+
+| Set | Fast | Balanced | Exhaustive |
+|---|---|---|---|
+| BarBeR full (67 labels; zxing-cpp 37) | 25 / 25 | 33 / 39 | 35 / 38 |
+| BarBeR development subset (12) | 10 / not run | 11 / 11 | 9 / 9 |
+| challenging-images (6; zxing-cpp 3) | 3 / 3 | 3 / 3 | 3 / 4 |
+| zxing samples (58; zxing-cpp 58) | 51 / 53 | 57 / 58 | 56 / 58 |
+| `pdf417-small-module-size` (15; zxing-cpp 0) | 1 / 1 | 1 / 1 | 1 / 1 |
+
+UPS-Synthetic-Labels and synthetic seeds 1 and 2024: unchanged. Gates: tiers a and b, the workspace and rayon tests and the allocation test pass; clippy and fmt clean. Latency, interleaved main against the change, 3 rounds, `--jobs 1`, p50 in ms: challenging-images Balanced 20.64 / 20.57 / 20.60 against 20.74 / 20.66 / 20.54 (zxing-cpp 20.62 in the scoreboard); `pdf417-small-module-size` Balanced 56.9 / 56.2 / 55.4 against 55.6 / 59.9 / 56.1; Fast 1080p videos 3 rounds, median video 6.55 ms and worst 12.1 ms (`batch_code39`) before and after, `batch_rotated_small_pdf417` 12.0 to 11.9 ms. The video latencies were measured on the first build of the change, which lacks the line-count screen added later (it only returns earlier on seeds without 8 numbered lines); the reads of that build and of the final one are equal on BarBeR Balanced and Exhaustive. Baselines in `tools/bench/baselines` were not rewritten here; the combined tree needs `--write-baseline` for the cells above. See [D-054](decisions.md#d-054) and [FAILURES-BARBER-2D](FAILURES-BARBER-2D.md#triage-and-outcome-d-054-2026-10-22-main-0c5773a).
+
 ## Status 2026-10-21: BarBeR development subset (D-051)
 
 [D-051](decisions.md#d-051), on main `abecd0c` plus these changes, Ryzen 7 3700X. First measurement of `bench data/barber --subset dev` (the 1/4 hash share united with the 1212 trap images of `tools/bench/barber-dev-extra.json`): 3094 images in 12 sources, 2362 expected labels (224 unsupported labels excluded). Reads (of 2362), false positives in parentheses; breader is the Rust `bench` (the committed `barber-dev-*` baselines), zxing-cpp 3.1.1 and zbar 0.23 (pyzbar, library defaults) are `tools/bench/py_bench.py --subset dev` (one run each, zxing-cpp does not depend on an effort):

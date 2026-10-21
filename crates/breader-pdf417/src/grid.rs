@@ -397,11 +397,9 @@ pub(crate) fn central_lines(obs: &[Obs]) -> Option<Vec<Obs>> {
     (kept.len() >= 6).then_some(kept)
 }
 
-/// Solves the symbol from its lines, or `None`.
-pub(crate) fn solve(obs: &[Obs]) -> Option<Solved> {
-    let ind: Vec<Indicators> = obs.iter().map(|o| indicators(&o.read)).collect();
+fn count_votes(obs: &[Obs], ind: &[Indicators]) -> Votes {
     let mut votes = Votes::default();
-    for (o, i) in obs.iter().zip(&ind) {
+    for (o, i) in obs.iter().zip(ind) {
         for f in [i.left, i.right].into_iter().flatten() {
             votes.add(f);
         }
@@ -409,6 +407,43 @@ pub(crate) fn solve(obs: &[Obs]) -> Option<Solved> {
             votes.cols[s - 3] += 1;
         }
     }
+    votes
+}
+
+/// Lines with a row number needed before `symbol_extent` trusts the fit.
+const MIN_EXTENT_ROWS: usize = 8;
+
+/// Boundary positions `(from, to)` of the first and last row of the symbol and
+/// the row pitch,
+/// as the best-voted layout and the row numbers the indicators gave place
+/// them; `None` unless eight or more lines carry a row number that follows
+/// a line over the position.
+pub(crate) fn symbol_extent(obs: &[Obs], fit: Option<(f32, f32)>) -> Option<(f32, f32, f32)> {
+    let ind: Vec<Indicators> = obs.iter().map(|o| indicators(&o.read)).collect();
+    let layout = layouts(&count_votes(obs, &ind)).into_iter().next()?;
+    let mut rows_of = vec![None; obs.len()];
+    let assigned = assign_rows(obs, &ind, layout.rows, &mut rows_of);
+    let fit = fit.or_else(|| pitch_fit(obs));
+    let (slope, offset) = fit.or(assigned)?;
+    let known = ind
+        .iter()
+        .zip(&rows_of)
+        .filter(|(i, r)| i.row.is_some() && (fit.is_some() || r.is_some()))
+        .count();
+    if known < MIN_EXTENT_ROWS || slope.abs() < 1e-4 {
+        return None;
+    }
+    let (a, b) = (
+        (-0.5 - offset) / slope,
+        (layout.rows as f32 - 0.5 - offset) / slope,
+    );
+    Some((a.min(b), a.max(b), 1.0 / slope.abs()))
+}
+
+/// Solves the symbol from its lines, or `None`.
+pub(crate) fn solve(obs: &[Obs]) -> Option<Solved> {
+    let ind: Vec<Indicators> = obs.iter().map(|o| indicators(&o.read)).collect();
+    let votes = count_votes(obs, &ind);
     let mut rows_of = vec![None; obs.len()];
     for layout in layouts(&votes) {
         let fit = assign_rows(obs, &ind, layout.rows, &mut rows_of);
@@ -518,6 +553,44 @@ mod tests {
         assert_eq!(kept.len(), n - 1);
         let s = solve(&kept).expect("solved");
         assert_eq!(s.decoded.data, text(60).as_bytes());
+    }
+
+    #[test]
+    fn extent_reaches_rows_the_lines_do_not() {
+        let r = render(&text(80), EncodeOptions::default());
+        let per_row = 3;
+        let obs = lines(&r, per_row);
+        let rows = r.layout.rows;
+        // Lines only over the middle rows, as when the boundary stops short
+        // of the symbol's ends.
+        let kept: Vec<Obs> = obs
+            .iter()
+            .filter(|o| (3 * per_row..(rows - 3) * per_row).contains(&((o.t / 1.5) as usize)))
+            .cloned()
+            .collect();
+        let (from, to, pitch) = symbol_extent(&kept, None).expect("extent");
+        assert!((pitch - per_row as f32 * 1.5).abs() < 0.5, "{pitch}");
+        // The extent is the symbol's, not the lines'.
+        let lo = kept.first().unwrap().t;
+        let hi = kept.last().unwrap().t;
+        assert!(from < lo - 2.0 * pitch, "{from} {lo}");
+        assert!(to > hi + 2.0 * pitch, "{to} {hi}");
+        assert!(from > -2.0 * pitch && to < (rows * per_row) as f32 * 1.5 + 2.0 * pitch);
+    }
+
+    #[test]
+    fn extent_needs_lines_with_row_numbers() {
+        let r = render(&text(80), EncodeOptions::default());
+        let obs = lines(&r, 1);
+        // Seven lines are under the minimum: no extent, so no extra reads.
+        assert!(symbol_extent(&obs[..7], None).is_none());
+        // Lines whose indicators are unreadable carry no row number.
+        let mut blind = lines(&r, 2);
+        for o in &mut blind {
+            o.read.cw[0].value = ERASED;
+            o.read.cw[o.read.stop.unwrap() - 1].value = ERASED;
+        }
+        assert!(symbol_extent(&blind, None).is_none());
     }
 
     #[test]
