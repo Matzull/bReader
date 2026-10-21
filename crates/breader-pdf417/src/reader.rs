@@ -11,7 +11,7 @@ use breader_linear::stacked::{EdgeParams, Mark, MarkKind, MarkSet, RawMark, scan
 
 use crate::detect::{Boundary, grow, grow_other, rank_seeds};
 use crate::geom::{Vec2, at, dot, perp, sub, unit};
-use crate::grid::{Obs, Solved, central_lines, lines_with_rows, pitch_fit, solve};
+use crate::grid::{Obs, Solved, central_lines, lines_with_rows, pitch_fit, solve, symbol_extent};
 use crate::row::{Entry, RowRead, walk};
 use crate::scan::Scanner;
 
@@ -71,6 +71,12 @@ const MIN_DENSE_ROWS: usize = 12;
 /// spread in row pitches.
 const MEAN_LINES: usize = 5;
 const MEAN_HALF: f32 = 0.25;
+/// Most lines read beyond each end of the lines of a pass, and the shortfall,
+/// in row pitches, under which an end is left alone.
+const MAX_EXTEND: usize = 250;
+const EXTEND_SLACK: f32 = 0.75;
+/// Lines with a row number needed before the ends are looked at.
+const MIN_EXTEND_LINES: usize = 8;
 /// Clean codewords on the sampled lines that make a tilted reading worth a
 /// full pass.
 const MIN_TILT_SCORE: usize = 24;
@@ -243,6 +249,11 @@ impl Work {
                 return None;
             }
             let fit = pitch_fit(&self.obs)?;
+            // The boundary may end rows short of the symbol.
+            if self.extend(img, b, edge, (rows, fan), (step, reach), Some(fit)) {
+                self.obs.sort_by(|a, c| a.t.total_cmp(&c.t));
+            }
+            let fit = pitch_fit(&self.obs).unwrap_or(fit);
             // Mean profiles per row and the single lines that lie in a row
             // vote together: neither reads every row alone.
             let mut all = self.mean_rows(img, b, edge, (rows, fan), fit, reach);
@@ -250,7 +261,16 @@ impl Work {
             all.sort_by(|a, c| a.t.total_cmp(&c.t));
             solve(&all)?
         } else {
-            solve(&self.obs)?
+            match solve(&self.obs) {
+                Some(s) => s,
+                None => {
+                    if !self.extend(img, b, edge, (rows, fan), (step, reach), None) {
+                        return None;
+                    }
+                    self.obs.sort_by(|a, c| a.t.total_cmp(&c.t));
+                    solve(&self.obs)?
+                }
+            }
         };
         if width == 0.0 {
             let mean_module: f32 =
@@ -268,6 +288,53 @@ impl Work {
             },
             span: (b.lo, b.hi),
         })
+    }
+
+    /// Reads more lines when the rows the indicators number run beyond the
+    /// ends of the lines read so far (a boundary that stops short, rows that
+    /// blur or curve at the ends of the symbol). Returns whether lines were
+    /// added.
+    fn extend(
+        &mut self,
+        img: &ImageView<'_>,
+        b: &Boundary,
+        edge: &EdgeParams,
+        (rows, fan): (Vec2, f32),
+        (step, reach): (f32, f32),
+        fit: Option<(f32, f32)>,
+    ) -> bool {
+        // Most failing seeds are not symbols: leave them before allocating.
+        if lines_with_rows(&self.obs) < MIN_EXTEND_LINES {
+            return false;
+        }
+        let Some((from, to, pitch)) = symbol_extent(&self.obs, fit) else {
+            return false;
+        };
+        let (have_lo, have_hi) = match (self.obs.first(), self.obs.last()) {
+            (Some(a), Some(c)) => (a.t, c.t),
+            _ => return false,
+        };
+        // Whole rows are worth reading for, not a sliver of one.
+        let slack = EXTEND_SLACK * pitch;
+        let mut added = 0usize;
+        let mut ts = Vec::new();
+        if from < have_lo - slack {
+            let n = (((have_lo - from) / step).ceil() as usize).min(MAX_EXTEND);
+            ts.extend((1..=n).map(|k| have_lo - step * k as f32));
+        }
+        if to > have_hi + slack {
+            let n = (((to - have_hi) / step).ceil() as usize).min(MAX_EXTEND);
+            ts.extend((1..=n).map(|k| have_hi + step * k as f32));
+        }
+        for t in ts {
+            let q = b.line.point(t);
+            let spec = row_spec(b, fanned(rows, fan, b, t), q, reach);
+            if let Some((read, _)) = self.read_line(img, &spec, edge) {
+                self.obs.push(Obs { t, read });
+                added += 1;
+            }
+        }
+        added > 0
     }
 
     /// One observation per row of a dense pass whose row pitch is known:
