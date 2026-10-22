@@ -6,7 +6,10 @@ use crate::runs::Runs;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LineHit {
     pub symbology: Symbology,
-    /// Payload bytes; ASCII, or ISO-8859-1 for Code 128 with FNC4.
+    /// Payload bytes; ASCII, or ISO-8859-1 for Code 128 with FNC4. Empty for a
+    /// probe: a symbol that started properly and failed after some characters
+    /// (`start` to `end` is what was read, `module` its module width). The
+    /// reader keeps probes apart from real hits and scans around them.
     pub text: Vec<u8>,
     /// Supplement digits that follow the symbol, if any.
     pub addon: Option<Vec<u8>>,

@@ -325,6 +325,21 @@ impl Aggregator {
         met
     }
 
+    /// True when a symbol of `symbology` that starts within `radius` of `at`
+    /// already has the agreement `finish` will require.
+    pub fn symbol_met_near(
+        &self,
+        symbology: Symbology,
+        at: Point,
+        radius: f32,
+        settings: &Settings,
+    ) -> bool {
+        self.hits
+            .iter()
+            .filter(|h| h.symbology == symbology && h.from.distance(at) < radius)
+            .any(|h| self.seed_met(h, settings))
+    }
+
     /// One representative hit of every group that lacks the agreement
     /// required by `settings`.
     pub fn seeds(&mut self, settings: &Settings, out: &mut Vec<PlacedHit>) {

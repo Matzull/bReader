@@ -61,6 +61,8 @@ static WIDTHS: [[f32; 6]; 107] = {
 const QUIET: f32 = 5.0;
 /// Longest symbol read, in characters between start and stop.
 const MAX_CHARS: usize = 256;
+/// Characters after which a symbol that fails later counts as a near miss (`Runs::note_start`).
+const NOTE_CHARS: usize = 3;
 /// Largest total deviation of a character from its pattern, in modules.
 const MAX_CHAR_ERROR: f32 = 2.2;
 /// Required distance between the best and the second best pattern.
@@ -272,6 +274,9 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
         }
         read.values[read.len] = m.value;
         read.len += 1;
+        if read.len == NOTE_CHARS {
+            runs.note_start(module);
+        }
     }
     None
 }

@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use crate::edges::Edges;
 
 /// Alternating bar and space widths between consecutive edges.
@@ -13,7 +15,13 @@ pub struct Runs {
     edges: Vec<f32>,
     lead: f32,
     trail: f32,
+    /// A decoder found a start pattern of a symbol with a narrow element of
+    /// at most `THIN_START_MODULE` samples (see [`Runs::note_start`]).
+    thin_start: Cell<bool>,
 }
+
+/// Largest module, in samples, of a start pattern that [`Runs::note_start`] reports.
+pub const THIN_START_MODULE: f32 = 2.4;
 
 /// Smallest margin to the profile border, in samples, that is trusted as a
 /// light area rather than as the border cutting through an element.
@@ -21,6 +29,7 @@ const OPEN_MARGIN: f32 = 1.0;
 
 impl Runs {
     pub fn from_edges(edges: &Edges, out: &mut Self) {
+        out.thin_start.set(false);
         out.widths.clear();
         out.edges.clear();
         let items = edges.as_slice();
@@ -40,6 +49,7 @@ impl Runs {
 
     /// Fills `self` with `src` read from the other end.
     pub fn reverse_from(src: &Self, out: &mut Self) {
+        out.thin_start.set(false);
         out.widths.clear();
         out.edges.clear();
         out.widths.extend(src.widths.iter().rev());
@@ -47,6 +57,20 @@ impl Runs {
         out.first_is_bar = !src.widths.is_empty() && src.is_bar(src.len() - 1);
         out.lead = src.trail;
         out.trail = src.lead;
+    }
+
+    /// Records that a decoder found a start pattern whose module is `module`
+    /// samples wide. The reader tries another edge detector on lines where a
+    /// start pattern of a small symbol was found and nothing was read.
+    pub fn note_start(&self, module: f32) {
+        if module <= THIN_START_MODULE {
+            self.thin_start.set(true);
+        }
+    }
+
+    /// Whether [`Runs::note_start`] saw a small module since these runs were built.
+    pub fn thin_start(&self) -> bool {
+        self.thin_start.get()
     }
 
     /// Swaps the roles of bars and spaces: the same edges, read as a symbol
@@ -70,6 +94,7 @@ impl Runs {
             edges,
             lead,
             trail,
+            thin_start: Cell::new(false),
         }
     }
 
@@ -264,5 +289,26 @@ mod tests {
         // A profile that starts or ends inside a bar has no margin there.
         let in_bar = Runs::from_widths(false, &[1.0, 2.0, 1.0], 5.0, 5.0);
         assert!(!in_bar.open_before(0) && !in_bar.open_after(2));
+    }
+
+    #[test]
+    fn small_start_notes_are_kept_until_the_runs_are_rebuilt() {
+        let r = Runs::from_widths(true, &[2.0, 1.0, 2.0], 5.0, 5.0);
+        assert!(!r.thin_start());
+        r.note_start(THIN_START_MODULE + 0.1);
+        assert!(!r.thin_start());
+        r.note_start(THIN_START_MODULE);
+        assert!(r.thin_start());
+        let mut rev = Runs::default();
+        Runs::reverse_from(&r, &mut rev);
+        assert!(!rev.thin_start(), "a rebuild starts clean");
+        rev.note_start(1.0);
+        Runs::reverse_from(&r, &mut rev);
+        assert!(!rev.thin_start());
+        let mut edges = Edges::default();
+        EdgeDetector::default().detect(&[200u8; 40], &EdgeParams::default(), &mut edges);
+        rev.note_start(1.0);
+        Runs::from_edges(&edges, &mut rev);
+        assert!(!rev.thin_start());
     }
 }

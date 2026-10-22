@@ -57,6 +57,12 @@ pub struct EdgeParams {
     /// With `refine`, blend the reference levels with the extremes of a window
     /// scaled by the local run width (see `EdgeDetector::refine_edges`).
     pub window: bool,
+    /// Edges are the crossings of the profile with its local mean, found with
+    /// a Schmitt trigger and placed by linear interpolation, instead of
+    /// gradient extrema (`EdgeDetector::detect_crossing`). Sees runs of one
+    /// sample, which a central difference cannot resolve; `smooth`, `refine`
+    /// and `window` are ignored.
+    pub crossing: bool,
 }
 
 impl EdgeParams {
@@ -91,6 +97,14 @@ impl EdgeParams {
         self
     }
 
+    /// Level crossings of the local mean: resolves bars and spaces of about one
+    /// sample that the gradient variants merge. Tried after them.
+    pub const fn crossing() -> Self {
+        let mut p = Self::new();
+        p.crossing = true;
+        p
+    }
+
     const fn new() -> Self {
         Self {
             min_edge: 6.0,
@@ -101,6 +115,7 @@ impl EdgeParams {
             smooth: false,
             refine: false,
             window: false,
+            crossing: false,
         }
     }
 }
@@ -124,6 +139,12 @@ const WINDOW_SPAN: usize = 4;
 const WINDOW_SHIFT: f32 = 0.25;
 /// Half-width of the search for the half-level crossing of an edge.
 const CROSSING_REACH: usize = 3;
+/// Samples on each side of a sample in the mean that `detect_crossing`
+/// compares it with.
+const CROSSING_WINDOW: usize = 6;
+/// Distance from the mean at which the crossing detector changes state, as a
+/// fraction of the local range.
+const CROSSING_HYSTERESIS: f32 = 0.12;
 /// Smallest distance kept between neighboring edges after relocation.
 const MIN_RUN: f32 = 0.05;
 /// Largest distance from an edge at which plateau levels are measured.
@@ -184,6 +205,10 @@ impl EdgeDetector {
             return;
         }
         let noise = self.block_statistics(profile);
+        if params.crossing {
+            self.detect_crossing(profile, params, out);
+            return;
+        }
         let noise_d = noise * if params.smooth { 0.79 } else { 1.41 };
         self.thresholds(params, noise_d);
         if self.threshold.iter().all(|&t| t == i32::MAX) {
@@ -235,6 +260,85 @@ impl EdgeDetector {
         }
         if params.refine {
             Self::refine_edges(profile, &mut out.items, params.window);
+        }
+    }
+
+    /// Edges as the crossings of the profile with its mean over
+    /// `CROSSING_WINDOW` samples on each side. A Schmitt trigger decides which
+    /// crossings count: the state changes only when the profile is at least
+    /// `CROSSING_HYSTERESIS` of the local range (and `min_edge`) beyond the
+    /// mean on the other side, and the edge is placed at the last crossing
+    /// before that, by linear interpolation between the two samples around it.
+    /// A bar or space of one sample is an edge pair like any other, where the
+    /// central difference of its two neighbours is blind to it. Blocks whose
+    /// local range is below `min_range` hold no edge.
+    fn detect_crossing(&mut self, profile: &[u8], params: &EdgeParams, out: &mut Edges) {
+        let n = profile.len();
+        let blocks = self.block_min.len();
+        self.threshold.clear();
+        for b in 0..blocks {
+            let lo = b.saturating_sub(RANGE_REACH);
+            let hi = (b + RANGE_REACH).min(blocks - 1);
+            let max = self.block_max[lo..=hi].iter().copied().max().unwrap_or(0);
+            let min = self.block_min[lo..=hi].iter().copied().min().unwrap_or(0);
+            let range = f32::from(max - min);
+            self.threshold.push(if range < params.min_range {
+                i32::MAX
+            } else {
+                params.min_edge.max(CROSSING_HYSTERESIS * range) as i32
+            });
+        }
+        // Profile value minus the middle of the local extremes, times two.
+        let level = |i: usize| -> (i64, i64) {
+            let lo = i.saturating_sub(CROSSING_WINDOW);
+            let hi = (i + CROSSING_WINDOW + 1).min(n);
+            let (l, h) = (low(&profile[lo..hi]), high(&profile[lo..hi]));
+            (2 * i64::from(profile[i]) - i64::from(l) - i64::from(h), 2)
+        };
+        let mut state = 0i8;
+        let mut last_same = 0usize;
+        for i in 0..n {
+            let (d, count) = level(i);
+            let h = self.threshold[i / BLOCK];
+            if h == i32::MAX {
+                continue;
+            }
+            if d != 0 && state != 0 && (d > 0) == (state > 0) {
+                last_same = i;
+            }
+            if d.abs() < i64::from(h) * count {
+                continue;
+            }
+            let sign = if d > 0 { 1i8 } else { -1i8 };
+            if state == 0 {
+                state = sign;
+                last_same = i;
+                continue;
+            }
+            if sign == state {
+                continue;
+            }
+            // `last_same` is the last sample on the old side; the next one is on the new.
+            let k = last_same;
+            let (d0, c0) = level(k);
+            let (d1, c1) = level(k + 1);
+            let (a, b) = (d0 as f32 / c0 as f32, d1 as f32 / c1 as f32);
+            let t = if a != b {
+                (a / (a - b)).clamp(0.0, 1.0)
+            } else {
+                0.5
+            };
+            let rising = sign > 0;
+            let pos = k as f32 + t;
+            if out.items.last().is_none_or(|e| pos > e.pos) {
+                out.items.push(Edge {
+                    pos,
+                    strength: (b - a).abs() / 2.0,
+                    rising,
+                });
+            }
+            state = sign;
+            last_same = i;
         }
     }
 
@@ -670,5 +774,82 @@ mod tests {
                 "thin bars {thin_bars}: {blended} vs {local}"
             );
         }
+    }
+
+    fn crossing(profile: &[u8]) -> Edges {
+        let mut out = Edges::default();
+        EdgeDetector::default().detect(profile, &EdgeParams::crossing(), &mut out);
+        out
+    }
+
+    /// A bar and a gap of one sample each between wide runs: the case that
+    /// motivated the crossing detector (Code 39 at 1.3 px per module).
+    fn one_sample_features() -> Vec<u8> {
+        let mut p = vec![180u8; 24];
+        p.extend([6, 6, 6, 180, 180, 180]);
+        p.extend([55, 177, 46]);
+        p.extend([180, 180, 6, 6, 6, 180, 180, 180]);
+        p.extend(std::iter::repeat_n(180u8, 16));
+        p
+    }
+
+    #[test]
+    fn crossing_sees_one_sample_runs_that_the_gradient_variants_merge() {
+        let p = one_sample_features();
+        let e = crossing(&p);
+        let pos: Vec<f32> = e.as_slice().iter().map(|e| e.pos).collect();
+        // wide bar (2 edges), bar of 55 and bar of 46 (4 edges), wide bar (2 edges)
+        assert_eq!(pos.len(), 8, "{pos:?}");
+        assert!(e.as_slice().windows(2).all(|w| w[0].rising != w[1].rising));
+        assert!(!e.as_slice()[0].rising);
+        // The gap between the one-sample bars is about one sample wide.
+        let gap = pos[4] - pos[3];
+        assert!((0.8..=1.6).contains(&gap), "{gap} {pos:?}");
+        let mut merged = Edges::default();
+        EdgeDetector::default().detect(&p, &EdgeParams::fine(), &mut merged);
+        assert!(
+            merged.len() < 8,
+            "the gradient variant resolves it: {}",
+            merged.len()
+        );
+    }
+
+    #[test]
+    fn crossing_positions_follow_blurred_edges() {
+        for sigma in [0.0, 0.4, 0.6] {
+            for frac in [0.0f32, 0.3, 0.6] {
+                let widths = [10.0 + frac, 1.6, 3.4, 1.5, 1.7, 3.3, 1.6, 6.0, 20.0];
+                let p = render(&widths, 25.0, 20.0, 220.0, sigma);
+                let e = crossing(&p);
+                assert_eq!(e.len(), widths.len() - 1, "sigma {sigma} frac {frac}");
+                let mut x = 25.0 + widths[0];
+                for (k, edge) in e.as_slice().iter().enumerate() {
+                    assert!(
+                        (edge.pos - x).abs() < 0.5,
+                        "sigma {sigma} edge {k}: {} vs {x}",
+                        edge.pos
+                    );
+                    x += widths[k + 1];
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn crossing_finds_nothing_in_flat_or_noisy_but_low_contrast_profiles() {
+        let mut rng = crate::testutil::Rng(3);
+        let flat = vec![120u8; 200];
+        assert!(crossing(&flat).is_empty());
+        // Noise of a few levels around a mean, range below the minimum.
+        let noisy: Vec<u8> = (0..200)
+            .map(|_| (120.0 + rng.unit() * 14.0) as u8)
+            .collect();
+        assert!(crossing(&noisy).is_empty());
+        // The same noise next to one real bar: the hysteresis keeps the
+        // chatter out, only the bar's two edges remain.
+        let mut p: Vec<u8> = (0..200).map(|_| (200.0 + rng.unit() * 6.0) as u8).collect();
+        p[90..96].fill(20);
+        let e = crossing(&p);
+        assert_eq!(e.len(), 2, "{:?}", e.as_slice());
     }
 }

@@ -71,8 +71,9 @@ fn decode_everything(runs: &Runs, opts: &LineOptions) -> usize {
     ALL.decode(&a, opts, &mut out);
     ALL.decode(&b, opts, &mut out);
     // Rows of stacked DataBar symbols are not symbols; they are only
-    // joined, with a checksum, by the aggregator.
-    out.iter().filter(|h| !h.part).count()
+    // joined, with a checksum, by the aggregator. Probes (empty text) are
+    // not symbols either.
+    out.iter().filter(|h| !h.part && !h.text.is_empty()).count()
 }
 
 #[test]

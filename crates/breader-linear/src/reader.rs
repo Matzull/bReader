@@ -49,6 +49,8 @@ struct Stage {
     reversed: Runs,
     hits: Vec<LineHit>,
     aggregator: Aggregator,
+    /// Probes of the plan lines (see `LineHit::text`), in line order.
+    probes: Vec<PlacedHit>,
     edge_params: Vec<EdgeParams>,
     marks: Vec<Mark>,
     raw_marks: Vec<RawMark>,
@@ -79,6 +81,7 @@ impl Work {
         let stage = &mut self.stage;
         stage.hits.clear();
         stage.aggregator.reset();
+        stage.probes.clear();
         stage.edge_params.clear();
         stage.marks.clear();
         stage.raw_marks.clear();
@@ -95,9 +98,10 @@ thread_local! {
 fn edge_variants(effort: Effort) -> &'static [EdgeParams] {
     const FINE: EdgeParams = EdgeParams::fine();
     const SMOOTH: EdgeParams = EdgeParams::smoothed();
+    const CROSSING: EdgeParams = EdgeParams::crossing();
     match effort {
         Effort::Fast => &[SMOOTH],
-        Effort::Balanced | Effort::Exhaustive => &[FINE, SMOOTH],
+        Effort::Balanced | Effort::Exhaustive => &[FINE, SMOOTH, CROSSING],
     }
 }
 
@@ -106,6 +110,19 @@ fn edge_variants(effort: Effort) -> &'static [EdgeParams] {
 const REFINE_MISSES: usize = 3;
 const REFINE_MAX_LINES: usize = 24;
 const REFINE_MAX_SEEDS: usize = 48;
+/// Lines of a probe's refinement without a hit or probe before it stops: a
+/// thin symbol decodes on few lines.
+const PROBE_MISSES: usize = 8;
+/// Probes kept per scan, and refined of them.
+const MAX_PROBES: usize = 64;
+const REFINE_PROBES_BALANCED: usize = 1;
+const REFINE_PROBES_EXHAUSTIVE: usize = 2;
+/// A probe is not refined when a probe refined before, or a hit of the same
+/// symbology, started within this many module widths of it.
+const PROBE_NEAR: f32 = 40.0;
+/// How far a probe's refinement lines run past what was read, in module
+/// widths; the line is clipped to the image.
+const PROBE_REACH: f32 = 200.0;
 /// Quiet zone, in modules, kept on each side of a refinement line.
 const REFINE_MARGIN: f32 = 14.0;
 
@@ -126,18 +143,27 @@ fn scan_profile<D: LinearDecoder>(
     stage: &mut Stage,
 ) {
     let mut retry = false;
+    let mut decoded = false;
+    let mut thin_seen = false;
     for (variant, params) in stage.edge_params.iter().enumerate() {
-        // The smoothed variant only matters when the unsmoothed one saw a
-        // start pattern it could not decode.
-        if variant > 0 && !retry {
-            break;
+        // The later variants only matter when an earlier one saw a start
+        // pattern it could not decode; the last one, the crossing detector,
+        // only on a line where no symbol was read and a decoder found the start
+        // of a small one (`Runs::note_start`).
+        let skip = if params.crossing {
+            decoded || !thin_seen
+        } else {
+            variant > 0 && !retry
+        };
+        if skip {
+            continue;
         }
         stage.detector.detect(profile, params, &mut stage.edges);
         Runs::from_edges(&stage.edges, &mut stage.runs);
         if stage.runs.is_empty() {
             continue;
         }
-        if opts.marks {
+        if opts.marks && !params.crossing {
             marks::record(&stage.runs, line, &mut stage.raw_marks, &mut stage.marks);
         }
         Runs::reverse_from(&stage.runs, &mut stage.reversed);
@@ -156,8 +182,13 @@ fn scan_profile<D: LinearDecoder>(
                 hit.inverted = true;
             }
         }
+        thin_seen |= stage.runs.thin_start() || stage.reversed.thin_start();
         for hit in stage.hits.drain(..) {
-            stage.aggregator.push(PlacedHit {
+            let probe = hit.text.is_empty();
+            if probe && stage.probes.len() >= MAX_PROBES {
+                continue;
+            }
+            let placed = PlacedHit {
                 symbology: hit.symbology,
                 text: hit.text,
                 addon: hit.addon,
@@ -175,7 +206,13 @@ fn scan_profile<D: LinearDecoder>(
                 segments: hit.segments,
                 thin: hit.thin,
                 part: hit.part,
-            });
+            };
+            if probe {
+                stage.probes.push(placed);
+            } else {
+                decoded = true;
+                stage.aggregator.push(placed);
+            }
         }
     }
 }
@@ -280,7 +317,7 @@ fn scan_lines_parallel(
     lines: &[Scanline],
     sources: &Sources<'_>,
     template: &Stage,
-) -> (Vec<PlacedHit>, Vec<Mark>) {
+) -> (Vec<PlacedHit>, Vec<Mark>, Vec<PlacedHit>) {
     use rayon::prelude::*;
     let mut starts = Vec::with_capacity(lines.len().div_ceil(PAR_LINES));
     let mut cursor = Cursor {
@@ -299,7 +336,7 @@ fn scan_lines_parallel(
         stage.edge_params.clone_from(edge_params);
         (stage, Vec::new())
     };
-    let per_chunk: Vec<(Vec<PlacedHit>, Vec<Mark>)> = lines
+    let per_chunk: Vec<(Vec<PlacedHit>, Vec<Mark>, Vec<PlacedHit>)> = lines
         .par_chunks(PAR_LINES)
         .zip(starts.par_iter())
         .enumerate()
@@ -313,16 +350,19 @@ fn scan_lines_parallel(
             (
                 stage.aggregator.take_hits(),
                 std::mem::take(&mut stage.marks),
+                std::mem::take(&mut stage.probes),
             )
         })
         .collect();
     let mut hits = Vec::new();
     let mut marks = Vec::new();
-    for (h, m) in per_chunk {
+    let mut probes = Vec::new();
+    for (h, m, p) in per_chunk {
         hits.extend(h);
         marks.extend(m);
+        probes.extend(p);
     }
-    (hits, marks)
+    (hits, marks, probes)
 }
 
 /// Parallel lines on both sides of `seed`, stopping per side once the
@@ -338,6 +378,7 @@ fn refine<D: LinearDecoder>(
     work: &mut Work,
     next_index: &mut u32,
     settings: Option<&Settings>,
+    probe: bool,
 ) {
     let len = seed.from.distance(seed.to);
     if len < 1.0 {
@@ -356,6 +397,12 @@ fn refine<D: LinearDecoder>(
     };
     let step = seed.module.round().clamp(2.0, 6.0);
     let pad = REFINE_MARGIN * seed.module;
+    // A probe knows where the symbol starts, not where it ends.
+    let pad_end = if probe {
+        PROBE_REACH * seed.module
+    } else {
+        pad
+    };
     let axis_aligned = uy.abs() < 1e-4 || ux.abs() < 1e-4;
     for side in [1.0f32, -1.0] {
         let mut misses = 0;
@@ -365,12 +412,16 @@ fn refine<D: LinearDecoder>(
                 seed.from.x - ux * pad + nx * o,
                 seed.from.y - uy * pad + ny * o,
             );
-            let b = Point::new(seed.to.x + ux * pad + nx * o, seed.to.y + uy * pad + ny * o);
+            let b = Point::new(
+                seed.to.x + ux * pad_end + nx * o,
+                seed.to.y + uy * pad_end + ny * o,
+            );
             let Some(line) = clip_line(a, b, pass.width, pass.height, axis_aligned) else {
                 break;
             };
             profile::sample(img, &line, false, &mut work.profile);
             let before = work.stage.aggregator.len();
+            let probes_before = work.stage.probes.len();
             scan_profile(
                 decoders,
                 &work.profile,
@@ -385,11 +436,16 @@ fn refine<D: LinearDecoder>(
             if settings.is_some_and(|st| work.stage.aggregator.seed_met(seed, st)) {
                 return;
             }
-            if work.stage.aggregator.count_matching(before, seed) > 0 {
+            let alive = if probe {
+                work.stage.aggregator.len() > before || work.stage.probes.len() > probes_before
+            } else {
+                work.stage.aggregator.count_matching(before, seed) > 0
+            };
+            if alive {
                 misses = 0;
             } else {
                 misses += 1;
-                if misses >= REFINE_MISSES {
+                if misses >= if probe { PROBE_MISSES } else { REFINE_MISSES } {
                     break;
                 }
             }
@@ -487,6 +543,60 @@ impl LinearReader {
         });
     }
 
+    /// Scans around the probes of the plan lines: symbols that started and
+    /// failed part-way are the ones a few more lines may read. The probes
+    /// that read the most come first; probes near one refined before, or near
+    /// a symbol that already has its agreement, are skipped. Fast does not
+    /// look at probes at all (its latency is the tightest).
+    #[allow(clippy::too_many_arguments)]
+    fn refine_probes(
+        &self,
+        settings: &Settings,
+        effort: Effort,
+        img: &ImageView<'_>,
+        pass: PassImage,
+        opts: &LineOptions,
+        work: &mut Work,
+        next_index: &mut u32,
+    ) {
+        let limit = match effort {
+            Effort::Fast => 0,
+            Effort::Balanced => REFINE_PROBES_BALANCED,
+            Effort::Exhaustive => REFINE_PROBES_EXHAUSTIVE,
+        };
+        let planned = work.stage.probes.len();
+        let mut done = [Point::new(0.0, 0.0); REFINE_PROBES_EXHAUSTIVE];
+        for count in 0..limit {
+            let mut best: Option<(f32, usize)> = None;
+            for k in 0..planned {
+                let probe = &work.stage.probes[k];
+                let span = probe.from.distance(probe.to);
+                let near = PROBE_NEAR * probe.module;
+                if best.is_some_and(|(s, _)| s >= span)
+                    || done[..count].iter().any(|p| p.distance(probe.from) < near)
+                    || work.stage.aggregator.symbol_met_near(
+                        probe.symbology,
+                        probe.from,
+                        near,
+                        settings,
+                    )
+                {
+                    continue;
+                }
+                best = Some((span, k));
+            }
+            let Some((_, k)) = best else {
+                break;
+            };
+            let probe = work.stage.probes[k].clone();
+            done[count] = probe.from;
+            refine(
+                &DECODERS, img, &probe, pass, opts, work, next_index, None, true,
+            );
+        }
+        work.stage.probes.clear();
+    }
+
     fn scan_with(&self, work: &mut Work, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {
         let opts = LineOptions::from(ctx.options());
         let effort = ctx.options().effort;
@@ -540,11 +650,15 @@ impl LinearReader {
         if parallel {
             #[cfg(feature = "rayon")]
             {
-                let (hits, marks) = scan_lines_parallel(&img, &lines, &sources, &work.stage);
+                let (hits, marks, probes) =
+                    scan_lines_parallel(&img, &lines, &sources, &work.stage);
                 for hit in hits {
                     work.stage.aggregator.push(hit);
                 }
                 work.stage.marks.extend(marks);
+                work.stage
+                    .probes
+                    .extend(probes.into_iter().take(MAX_PROBES));
             }
         } else {
             scan_lines(&img, &lines, &sources, &mut work.profile, &mut work.stage);
@@ -572,9 +686,11 @@ impl LinearReader {
                 work,
                 &mut next_index,
                 early,
+                false,
             );
         }
         work.seeds = seeds;
+        self.refine_probes(&settings, effort, &img, pass, &opts, work, &mut next_index);
         work.lines = lines;
         work.stage.aggregator.finish(&settings, out);
         if opts.marks {
@@ -1433,6 +1549,50 @@ mod tests {
             let img = blank(w, h, 100);
             for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
                 assert!(scan(&img, &ScanOptions::with_effort(effort)).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn small_code_39_reads_at_every_phase_and_never_misreads() {
+        // 1.3 to 1.7 px per module: the gradient edges merge some elements,
+        // the crossing detector and the probe lines recover them.
+        let text = "9033296";
+        let modules = code39_modules(text, 2, 1);
+        let mut reads = 0;
+        for (i, px) in [1.3f32, 1.4, 1.5, 1.6, 1.7].into_iter().enumerate() {
+            for angle in [0.0f32, 7.0, 90.0] {
+                let img = wide_picture(&modules, px + i as f32 * 0.003, angle);
+                for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+                    let found = scan(&img, &ScanOptions::with_effort(effort));
+                    for s in &found {
+                        assert_eq!(s.symbology, Symbology::Code39, "{px} {angle}");
+                        assert_eq!(s.data, text.as_bytes(), "{px} {angle}");
+                    }
+                    reads += found.len();
+                }
+            }
+        }
+        assert!(reads >= 15, "{reads}");
+    }
+
+    #[test]
+    fn code_39_that_fails_part_way_is_never_reported() {
+        let modules = code39_modules("ABC4821", 2, 1);
+        for at in [60usize, 75, 90, 105] {
+            for px in [1.4f32, 2.0, 3.0] {
+                let mut broken = modules.clone();
+                for m in &mut broken[at..at + 6] {
+                    *m = !*m;
+                }
+                let img = wide_picture(&broken, px, 0.0);
+                for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+                    let found = scan(&img, &ScanOptions::with_effort(effort));
+                    assert!(
+                        found.iter().all(|s| s.symbology != Symbology::Code39),
+                        "{at} {px} {effort:?}: {found:?}"
+                    );
+                }
             }
         }
     }

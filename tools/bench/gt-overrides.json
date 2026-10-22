@@ -312,6 +312,20 @@
         "reason": "Nested double QR: the image holds an outer and an inner symbol, only the inner one ([inner QR code]) is labeled. The outer one is a separate, fully readable symbol (verified visually, and zxing-cpp reads both); text is its Shift JIS payload as UTF-8."
       }
     ],
+    "ean13-2": [
+      {
+        "file": "23.webp",
+        "from": {
+          "format": "EAN_13",
+          "text": "9780804816632"
+        },
+        "to": {
+          "format": "EAN_13",
+          "text": "9784872348880"
+        },
+        "reason": "Mislabelled: the human-readable digits printed under the symbol read 9 784872 348880 (viewed on the image), which is the value the symbol decodes to (checksum valid); the dataset label is the one of another image of the series."
+      }
+    ],
     "code39-1": [
       {
         "file": "code32-1.png",

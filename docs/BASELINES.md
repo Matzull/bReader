@@ -15,6 +15,28 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-22: 1D read-rate phase ([D-053](decisions.md#d-053))
+
+Main `0c5773a` against the D-053 tree, same machine (3700X) and protocol as the scoreboard below (Rust `bench --jobs 16`; latency `--jobs 1`, interleaved). 0 false positives everywhere; tiers a and b and the full BarBeR check at the three efforts pass (read increases are notices; the shared baselines were not rewritten).
+
+| Set, effort | Class | Before | After |
+|---|---|---|---|
+| BarBeR full, Balanced (total 6431 to 6466) | Code 39 | 130 | 140 |
+| | Code 128 | 597 | 619 |
+| | EAN-13 | 4019 | 4021 |
+| | ITF | 48 | 49 |
+| BarBeR full, Exhaustive (6641 to 6666) | Code 39 | 138 | 145 |
+| | Code 128 | 672 | 689 |
+| | EAN-13 | 4124 | 4125 |
+| BarBeR full, Fast | all | 5453 | 5453 |
+| BarBeR dev subset | Balanced 1768 to 1780 (Code 128 149 to 156, Code 39 31 to 35, EAN-13 1165 to 1166); Exhaustive 1827 to 1835 (Code 128 167 to 171, Code 39 31 to 35); Fast 1509 unchanged | | |
+| challenging-images | Fast 333, Balanced 411, Exhaustive 424, all unchanged | | |
+| zxing samples | Fast 637, Balanced 753, Exhaustive 761, all unchanged | | |
+
+Gaps to zxing-cpp on BarBeR after the change: Code 39 -9 (was -19), ITF -10 (was -11); the zxing-sample 1D gaps (EAN-13 -6, ITF -13, Codabar -2, Code 93 -2, one each Code 128, Code 39, EAN-8, GS1 DataBar) and challenging-images ITF -1 did not move (owner defaults or border geometry, see [FAILURES-BARBER-1D](FAILURES-BARBER-1D.md#7-phase-1-triage-and-outcome-d-053)).
+
+Latency, interleaved main against this change: challenging-images Balanced p50, 7 rounds, 20.55 against 20.62 ms (+0.3 percent; rounds 20.35 / 20.54 / 20.73 / 20.65 / 20.41 / 20.64 / 20.55 against 20.28 / 20.56 / 20.97 / 20.47 / 20.60 / 20.72 / 20.74); Fast p50 4.9 to 5.0 ms in both (probes and the detector are off at Fast). Fast 1080p video, `video-bench ... --engines fast,balanced --filter 1080p`, 3 rounds, per-video median p50: median video 6.6 ms in both, worst 12.1 (main) and 12.2 ms (`batch_code39_1080p`, then `batch_rotated_small_pdf417` 12.1 in both). Balanced video: median 18.35 against 18.55 ms, worst `batch_code39_1080p` 83.8 against 90.5 ms. Measured and not merged: the crossing detector on every line, BarBeR Balanced +107 (Code 39 +14, Code 128 +26, EAN-13 +62, ITF +3, EAN-8 +1, UPC-A +1) and zxing samples +12 (EAN-13 +5, UPC-A +3, UPC-E +4) at challenging-images Balanced p50 27.0 ms (+30 percent); ITF quiet zone 6 modules (see D-053 (7)).
+
 ## Status 2026-10-21: per-class scoreboard
 
 Phase 0 of the v1 accuracy plan, on main `aa5e9fe` (Ryzen 7 3700X, ffmpeg n9.0.2, all runs under the heavy lock). breader is the Rust `bench --jobs 16` at Balanced; zxing-cpp 3.1.1 and zbar 0.23 (pyzbar, library defaults) are `tools/bench/py_bench.py --engine zxingcpp` and `--engine zbar` (one run each; neither depends on an effort). Cells are reads / false positives; Exp is the number of expected symbols of the class (unsupported labels excluded); Gap is breader minus zxing-cpp in reads. Code 93 has no BarBeR or challenging-images labels, so it appears only in the zxing samples (3 symbols).

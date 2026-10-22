@@ -89,6 +89,18 @@ const MIN_SEPARATION: f32 = 1.3;
 /// Allowed ratio between the narrow widths of neighboring characters.
 const MODULE_DRIFT: f32 = 1.7;
 const MAX_CHARS: usize = 256;
+/// Data characters a symbol that fails further on must have read to be reported
+/// as a probe (see [`Probe`]).
+const PROBE_MIN_CHARS: usize = 3;
+
+/// A symbol that started properly (start character, quiet zone) and read some
+/// characters before it failed: where to look again, with more lines.
+#[derive(Debug, Clone, Copy)]
+struct Probe {
+    start: f32,
+    end: f32,
+    module: f32,
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Code39Decoder;
@@ -168,7 +180,13 @@ fn start_of(runs: &Runs, j: usize, thin: bool) -> Option<(CharRead, f32, bool)> 
     (quiet_before_open(runs, j, bias) >= QUIET * start.narrow).then_some((start, bias, short))
 }
 
-fn read_symbol(runs: &Runs, j: usize, started: &mut bool, thin: bool) -> Option<Read> {
+fn read_symbol(
+    runs: &Runs,
+    j: usize,
+    started: &mut bool,
+    thin: bool,
+    probe: &mut Option<Probe>,
+) -> Option<Read> {
     let (start, bias, short_start) = start_of(runs, j, thin)?;
     *started = true;
     let mut read = Read {
@@ -183,11 +201,25 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool, thin: bool) -> Option<
     let mut narrow = start.narrow;
     let mut at = j + 10;
     loop {
+        let failed = |read: &Read, narrow: f32| {
+            (read.len >= PROBE_MIN_CHARS && narrow <= THIN_MAX_MODULE).then(|| {
+                runs.note_start(narrow);
+                Probe {
+                    start: runs.start(j),
+                    end: runs.end(at - 2),
+                    module: narrow,
+                }
+            })
+        };
         let gap = adjusted_width(runs, at - 1, bias)?;
         if gap > MAX_GAP * narrow || gap < MIN_GAP * narrow {
+            *probe = failed(&read, narrow);
             return None;
         }
-        let c = read_char(runs, at, bias, narrow, thin)?;
+        let Some(c) = read_char(runs, at, bias, narrow, thin) else {
+            *probe = failed(&read, narrow);
+            return None;
+        };
         narrow = c.narrow;
         read.separation_sum += c.separation;
         read.narrow_sum += c.narrow;
@@ -250,10 +282,34 @@ impl LinearDecoder for Code39Decoder {
         let mut j = usize::from(n > 0 && !runs.is_bar(0));
         while j + 9 + 10 + 9 <= n {
             let mut thin = false;
-            let mut read = read_symbol(runs, j, &mut started, false);
+            let mut probe = None;
+            let mut read = read_symbol(runs, j, &mut started, false, &mut probe);
             if read.is_none() {
-                read = read_symbol(runs, j, &mut false, true);
+                let mut thin_probe = None;
+                read = read_symbol(runs, j, &mut false, true, &mut thin_probe);
                 thin = read.is_some();
+                probe = probe.or(thin_probe);
+            }
+            if read.is_none()
+                && let Some(p) = probe
+            {
+                out.push(LineHit {
+                    symbology: Symbology::Code39,
+                    text: Vec::new(),
+                    addon: None,
+                    start: p.start,
+                    end: p.end,
+                    module: p.module,
+                    quality: 0.0,
+                    aim: *b"]A0",
+                    checksum_verified: false,
+                    short_quiet: false,
+                    inverted: false,
+                    start_stop: None,
+                    segments: 0,
+                    thin: false,
+                    part: false,
+                });
             }
             if let Some(read) = read {
                 let mut data = &read.chars[..read.len];
@@ -789,5 +845,95 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Modules of `*`, `good`, a character of four wide elements (no such
+    /// character exists), `*`; `wide` modules per wide element.
+    fn broken_modules(good: &str, wide: usize) -> Vec<bool> {
+        let mut widths = Vec::new();
+        let mut push = |pattern: &str, gap: bool| {
+            if gap {
+                widths.push(1);
+            }
+            widths.extend(pattern.bytes().map(|b| if b == b'w' { wide } else { 1 }));
+        };
+        let pattern = |c: char| CODE39_TABLE.iter().find(|(x, _)| *x == c).unwrap().1;
+        push(pattern('*'), false);
+        for c in good.chars() {
+            push(pattern(c), true);
+        }
+        push("wnwnwnwnw", true);
+        push(pattern('*'), true);
+        runs_to_modules(&widths)
+    }
+
+    fn probes(hits: &[LineHit]) -> Vec<&LineHit> {
+        hits.iter().filter(|h| h.text.is_empty()).collect()
+    }
+
+    fn all_hits(profile: &[u8]) -> Vec<LineHit> {
+        // `decode_all` drops the probes; this is its first half.
+        crate::testutil::decode_all_parts(&Code39Decoder, profile, &opts())
+    }
+
+    #[test]
+    fn a_small_symbol_that_fails_after_three_characters_leaves_a_probe() {
+        let modules = broken_modules("4821", 2);
+        let r = Render {
+            quiet_left: 12.0,
+            quiet_right: 12.0,
+            ..Render::px(1.6)
+        };
+        let p = r.profile(&modules);
+        let hits = all_hits(&p);
+        let found = probes(&hits);
+        assert!(!found.is_empty(), "{hits:?}");
+        assert!(hits.iter().all(|h| h.text.is_empty()), "no symbol is read");
+        for h in found {
+            assert!(h.start != h.end && h.module > 1.0 && h.module <= THIN_MAX_MODULE);
+            assert_eq!(h.symbology, Symbology::Code39);
+            assert!(!h.thin && !h.part && !h.checksum_verified);
+        }
+        assert!(decode_all(&Code39Decoder, &p, &opts()).is_empty());
+    }
+
+    #[test]
+    fn probes_need_three_characters_a_small_module_and_a_start_pattern() {
+        // Two good characters, then the broken one.
+        let r = Render::px(1.6);
+        let p = r.profile(&broken_modules("48", 2));
+        assert!(probes(&all_hits(&p)).is_empty());
+        // Modules above the limit are not worth more lines.
+        let p = Render::px(3.0).profile(&broken_modules("4821", 2));
+        assert!(probes(&all_hits(&p)).is_empty());
+        // A symbol without start pattern.
+        let mut rng = Rng(17);
+        let mut p = vec![200u8; 300];
+        for v in &mut p[40..260] {
+            *v = if rng.unit() < 0.5 { 30 } else { 200 };
+        }
+        assert!(probes(&all_hits(&p)).is_empty());
+    }
+
+    #[test]
+    fn a_symbol_that_reads_leaves_no_probe_of_its_own() {
+        let p = prof("4821", 2, 3.0);
+        let hits = all_hits(&p);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text, b"4821");
+    }
+
+    #[test]
+    fn a_probe_notes_the_small_start_on_the_runs() {
+        use crate::edges::{EdgeDetector, EdgeParams, Edges};
+        let r = Render::px(1.6);
+        let p = r.profile(&broken_modules("4821", 2));
+        let mut edges = Edges::default();
+        EdgeDetector::default().detect(&p, &EdgeParams::fine(), &mut edges);
+        let mut runs = Runs::default();
+        Runs::from_edges(&edges, &mut runs);
+        let mut out = Vec::new();
+        Code39Decoder.decode(&runs, &opts(), &mut out);
+        assert!(runs.thin_start(), "{out:?}");
     }
 }

@@ -108,3 +108,23 @@ The owner approved sections 5.1 and 5.2 and ranks 1 and 2 of section 4 on 2026-1
 Not recovered by D-042: `ProductBarcode351` and `467_0` (two agreeing lines, not independent enough or modules differing by more than 15 %), and `283`, `334_0`, `475` (one line). The 4-line variant of D-043 reads exactly the labels the 3-line variant reads; looser parameters (separation 1.05, ratio 1.5, module 2.6) read nothing more, so most of the 24 thin misses fail on something else (character gaps, drift) than the separation threshold. Latency on challenging-images (three interleaved rounds): Fast p50 5.4 to 5.5 ms before and after (one 6.0 outlier), Balanced p50 19.8 to 21.2 ms before, 19.5 to 20.3 ms with D-041 and D-042, 20.1 to 20.3 ms with D-043 as well (about +0.4 ms for the thin pass).
 
 Still open: ITF decode failures inside the symbol (rank 3, 10 labels), the invalid check digit label, 2 `20140607_202330` labels, an upscaled profile for thin Code 39.
+
+## 7. Phase 1 triage and outcome ([D-053](decisions.md#d-053))
+
+Measured on main `0c5773a` (Balanced, breader against zxing-cpp 3.1.1, per image: a Python wrapper of `py_bench.py` that prints the labels each engine misses, and the Rust bench with `BENCH_SHOW_FP=1`, `--jobs 1`). Code 39: 26 images zxing-cpp reads and breader does not, 6 breader reads zxing-cpp does not (`ProductBarcode507`, `Special_0169`, `0170`, `0187`, `0288`, `0292`); all 26 are InventBar ProductBarcode labels (7 digits). ITF: 13 images zxing-cpp only (`20140607_201406` has two labels, `201410`, `201416`, `201446`, `201505`, `201513`, `202226`, `202722`, `204332`, `204336`, `Special_0060`, `0066`, `0268`), 2 breader only. Other sets, zxing-cpp only: challenging-images ITF `air-travel-luggage-bag`, EAN-13 `retail-1`; zxing samples EAN-13 10 images, ITF 13 (length and quiet zone, see FAILURES-ZXING-SAMPLES), Code 39 3 (`code39-1/1`, `code39-2/2`, `code39-2/wide`: border, Full ASCII and ratio, all owner defaults or the border rule), Codabar 2 (`codabar-1/01` no quiet zone, `codabar-2/03`), Code 93 2 (`code93-1/1` 3-module margin, `/2` aliased edges), Code 128 1 (`code128-2/06`), EAN-8 1 (`single-line`), GS1 DataBar 1 (`rss14-1/8`).
+
+**Code 39 (26 images): causes found by instrumenting the decoder (counts per image, Balanced).** The start pattern passes 4 to 51 times per image and the symbol fails inside: separation 10 to 36 times, ratio 5 to 13, inter-character gap 2 to 14; 8 images already decoded a correct symbol on one or two lines (not enough lines). On the profile itself (`ProductBarcode127`, row through the symbol, runs 1.3 to 1.7 px per module): the gradient edge detectors lose bars and spaces of one sample (a character shows 4.2, 3.8 and 6.1 samples where 2, 1 and 1 were printed), and the rows through a symbol 30 px high are few (2 to 4 plan lines). A threshold-and-integer-run reading of the same rows (local mean over 15 to 31 samples, pick the 3 widest) decodes 30 of 42 rows of `ProductBarcode177`, 21 to 45 of 65 of `392`, 45 of 45 of `425`, 22 of 25 of `420`, and none of `193`, `295`, `377_0`, `467_0`, `475` (not quite the same rows zxing-cpp uses; shown only to place the first failure in the edge stage). Rank of fixes by reads gained: (1) lines around partial symbols (+8 to +11 of 26 with a dense plan, at a cost that rules it out for the whole image), (2) a detector that sees one-sample runs (+5 alone, 15 together with 1), (3) relaxed per-character rules (separation 1.05, a constrained decision among the 44 valid patterns, no print-gain bias, a gap of 0.3 narrow widths: 0 to +1, not kept). Implemented 1 and 2 gated on near misses (D-053).
+
+**ITF (13 images).** Not worked: the 10 decode failures inside the symbol of C4 are boxed SKUU labels at 2 to 12 px per module where the first failing stage is not edge resolution; the crossing detector gives +1 (`SKUU DSP Lab` 32 to 33). Aggregation-limited reads (`201513`, `202226`, `202722`) are guarded by the 3 and 4 line rule (owner defaults). Measured for the owner, not merged: ITF quiet zone of 6 modules instead of 10 reads 49 to 58 of 72 on BarBeR, 7 to 12 of 20 on the zxing samples and 3 to 4 of 4 on challenging-images with 0 false positives (tier b passing); see D-053.
+
+**Outcome (Balanced, BarBeR full, before to after):**
+
+| Class | zxing-cpp | before | after |
+|---|---|---|---|
+| Code 39 | 149 | 130 | 140 |
+| Code 128 | 447 | 597 | 619 |
+| ITF | 59 | 48 | 49 |
+| EAN-13 | 3826 | 4019 | 4021 |
+| Total | 6105 | 6431 | 6466 |
+
+Still open: 15 InventBar Code 39 labels with 1.1 to 1.4 px per module (rows decode with integer widths, not with ours), ITF C4 and the aggregation-limited labels, the zxing-sample items listed above (all owner defaults or border geometry).
