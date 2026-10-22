@@ -183,6 +183,9 @@ fn read_symbol(runs: &Runs, j: usize, started: &mut bool) -> Option<Read> {
         read.separation_sum += g.separation;
         read.narrow_sum += g.narrow;
         read.groups += 1;
+        if read.groups == 3 {
+            runs.note_start(0.0);
+        }
         at += 10;
     }
 }

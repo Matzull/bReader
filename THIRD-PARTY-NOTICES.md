@@ -65,3 +65,7 @@ zbar (LGPL-2.1) is used only at bench time, as an external black-box library thr
 ## barcoders (Code 93 test oracle)
 
 The `barcoders` crate 2.0.0 (https://github.com/buntine/barcoders, MIT or Apache-2.0) is a dev-dependency of `breader-linear` and `tools/synth`. For Code 93 (D-049) its encoder is used only as an independent oracle: a unit test compares the module strings of the 43 basic characters, including the check characters, with those of the specification tables written down from AIM USS Code 93. No table, code or structure of it, and nothing of zxing or zbar, is in the library; its encoder source was not read.
+
+## zxing-cpp (ideas only, D-053)
+
+No zxing-cpp or zbar source, table or constant is in this repository. Two ideas of the 1D read-rate work ([D-053](docs/decisions.md#d-053)) come from observing which images zxing-cpp 3.1.1 reads through its Python bindings (black box, outputs and symbol positions only): extracting runs as crossings of a local level with linear interpolation instead of gradient extrema, and scanning many more rows around a candidate symbol. Both are general techniques; the implementation (`edges.rs::detect_crossing`, `reader.rs::refine_probes`) is written from them and from the measurements in the decision, and the source of zxing-cpp was not read.

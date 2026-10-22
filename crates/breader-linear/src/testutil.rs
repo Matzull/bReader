@@ -689,7 +689,7 @@ pub fn decode_all<D: crate::decoder::LinearDecoder>(
     opts: &crate::decoder::LineOptions,
 ) -> Vec<crate::decoder::LineHit> {
     let mut hits = decode_all_parts(decoder, profile, opts);
-    hits.retain(|h| !h.part);
+    hits.retain(|h| !h.part && !h.text.is_empty());
     hits
 }
 
