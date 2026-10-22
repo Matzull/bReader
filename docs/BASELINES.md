@@ -15,6 +15,22 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-22: phase 1 combined (D-053, D-054, D-055)
+
+Main `7cfd236` (Ryzen 7 3700X, all runs under the heavy lock). The release tier passed on the combined tree (23 gates, 0 false positives, no read under its baseline); every baseline cell that changed in the rewrite is a read increase.
+
+Reads at Balanced, breader / zxing-cpp 3.1.1 (zxing-cpp figures from the 2026-10-21 scoreboard below; the only label change since is the `ean13-2/23.webp` override of D-053, which zxing-cpp does not read). Classes not listed are as in that scoreboard.
+
+| Set | breader total | Remaining gaps to zxing-cpp |
+|---|---|---|
+| BarBeR full | 6475 / 0 (was 6431) | Code 39 140 vs 149 (-9), ITF 49 vs 59 (-10), Data Matrix 98 vs 99 (-1); PDF417 39 vs 37 (+2), Code 128 619 vs 447 |
+| challenging-images | 411 / 0 | ITF 3 vs 4 (-1) |
+| zxing samples | 758 / 0 (was 753) | ITF -13, EAN-13 -6, Data Matrix 91 vs 93 (-2), Codabar -2, Code 93 -2, Code 128, GS1 DataBar, Code 39, EAN-8 -1 each; PDF417 58 vs 58 |
+
+Latency, `--jobs 1`, p50 in ms. Phase 1 cost, interleaved builds of the first-parent merges, 5 rounds of challenging-images Balanced (medians): `0c5773a` (before) 21.24, `3f7e1d8` (D-054) 21.49, `6e97712` (D-055) 21.31, `e55dd60` (D-053) 21.56, so about +0.3 ms (+1.5 %). Fast `batch_` videos, 3 rounds, identical at the four points (worst `batch_code39` 12.2, `batch_datamatrix` 10.2). Full Fast video run on `e55dd60`, 3 rounds: median video 6.9 to 7.1, worst 12.5 (targets 10 and 13).
+
+Against zxing-cpp, interleaved: challenging-images Balanced, 5 rounds, breader 21.28 / 21.52 / 21.29 / 21.89 / 21.57 (median 21.52) against zxing-cpp 19.71 / 19.88 / 20.24 / 20.13 / 20.48 (median 20.13): **breader trails by 1.4 ms (7 %)**. The same build of `0c5773a` that measured 20.16 in the 2026-10-21 margin table measures 21.24 today, and zxing-cpp measures below its single-run 20.62, so the earlier "2.2 % faster" was within the run-to-run spread of the zxing-cpp side and breader already trailed before phase 1. BarBeR development subset Balanced, 3 rounds: breader 25.41 / 27.28 / 25.23 against zxing-cpp 30.56 / 30.42 / 30.40 (16 % faster). The challenging-images Balanced objective is not met; recovering it is latency work, not a revert of phase 1.
+
 ## Status 2026-10-22: 1D read-rate phase ([D-053](decisions.md#d-053))
 
 Main `0c5773a` against the D-053 tree, same machine (3700X) and protocol as the scoreboard below (Rust `bench --jobs 16`; latency `--jobs 1`, interleaved). 0 false positives everywhere; tiers a and b and the full BarBeR check at the three efforts pass (read increases are notices; the shared baselines were not rewritten).
