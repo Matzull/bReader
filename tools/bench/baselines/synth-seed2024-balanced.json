@@ -179,7 +179,7 @@
     "datamatrix": {
       "Data Matrix": {
         "expected": 60,
-        "read": 59,
+        "read": 60,
         "false_positives": 0
       }
     },

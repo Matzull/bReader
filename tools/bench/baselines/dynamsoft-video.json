@@ -55,7 +55,7 @@
     "batch_code39_1080p": {
       "balanced": {
         "expected": 32,
-        "read": 29,
+        "read": 31,
         "false_positives": 0
       },
       "fast": {
@@ -65,7 +65,7 @@
       },
       "tracker": {
         "expected": 32,
-        "read": 30,
+        "read": 32,
         "false_positives": 0
       }
     },
@@ -89,7 +89,7 @@
     "batch_datamatrix_1080p": {
       "balanced": {
         "expected": 100,
-        "read": 88,
+        "read": 91,
         "false_positives": 0
       },
       "fast": {
@@ -99,7 +99,7 @@
       },
       "tracker": {
         "expected": 100,
-        "read": 94,
+        "read": 95,
         "false_positives": 0
       }
     },

@@ -51,12 +51,12 @@
       },
       "Data Matrix": {
         "expected": 33,
-        "read": 26,
+        "read": 28,
         "false_positives": 0
       },
       "EAN-13": {
         "expected": 2521,
-        "read": 2100,
+        "read": 2102,
         "false_positives": 0
       },
       "EAN-8": {
@@ -90,12 +90,12 @@
     "InventBar": {
       "Code 128": {
         "expected": 193,
-        "read": 150,
+        "read": 152,
         "false_positives": 0
       },
       "Code 39": {
         "expected": 147,
-        "read": 93,
+        "read": 102,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -186,7 +186,7 @@
     "ParcelBar": {
       "Code 128": {
         "expected": 1119,
-        "read": 357,
+        "read": 375,
         "false_positives": 0
       },
       "Code 39": {
@@ -213,7 +213,7 @@
       },
       "Data Matrix": {
         "expected": 3,
-        "read": 2,
+        "read": 3,
         "false_positives": 0
       },
       "EAN-13": {
@@ -228,7 +228,7 @@
       },
       "ITF": {
         "expected": 49,
-        "read": 32,
+        "read": 33,
         "false_positives": 0
       },
       "QR Code": {
@@ -257,12 +257,12 @@
       },
       "Code 128": {
         "expected": 83,
-        "read": 70,
+        "read": 72,
         "false_positives": 0
       },
       "Code 39": {
         "expected": 46,
-        "read": 35,
+        "read": 36,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -287,7 +287,7 @@
       },
       "PDF417": {
         "expected": 67,
-        "read": 33,
+        "read": 39,
         "false_positives": 0
       },
       "QR Code": {

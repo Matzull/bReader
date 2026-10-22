@@ -5,7 +5,7 @@
     "skewed-datamatrix": {
       "Data Matrix": {
         "expected": 1324,
-        "read": 1012,
+        "read": 1071,
         "false_positives": 0
       }
     }

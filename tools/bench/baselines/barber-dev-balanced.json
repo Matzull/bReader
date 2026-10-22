@@ -41,7 +41,7 @@
       },
       "EAN-13": {
         "expected": 715,
-        "read": 599,
+        "read": 600,
         "false_positives": 0
       },
       "EAN-8": {
@@ -75,12 +75,12 @@
     "InventBar": {
       "Code 128": {
         "expected": 45,
-        "read": 33,
+        "read": 34,
         "false_positives": 0
       },
       "Code 39": {
         "expected": 38,
-        "read": 21,
+        "read": 24,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -146,7 +146,7 @@
     "ParcelBar": {
       "Code 128": {
         "expected": 292,
-        "read": 93,
+        "read": 99,
         "false_positives": 0
       },
       "Code 39": {
@@ -212,7 +212,7 @@
       },
       "Code 39": {
         "expected": 15,
-        "read": 10,
+        "read": 11,
         "false_positives": 0
       },
       "Data Matrix": {

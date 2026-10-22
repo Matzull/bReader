@@ -89,7 +89,7 @@
     "datamatrix-1": {
       "Data Matrix": {
         "expected": 30,
-        "read": 28,
+        "read": 29,
         "false_positives": 0
       }
     },
@@ -117,7 +117,7 @@
     "datamatrix-5": {
       "Data Matrix": {
         "expected": 5,
-        "read": 2,
+        "read": 3,
         "false_positives": 0
       }
     },
@@ -201,14 +201,14 @@
     "pdf417-2": {
       "PDF417": {
         "expected": 25,
-        "read": 24,
+        "read": 25,
         "false_positives": 0
       }
     },
     "pdf417-3": {
       "PDF417": {
         "expected": 16,
-        "read": 15,
+        "read": 16,
         "false_positives": 0
       }
     },
