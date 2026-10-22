@@ -11,9 +11,12 @@ use crate::check;
 use crate::decode::{DecodedDm, decode_grid};
 use crate::detect::{Candidate, Detector};
 use crate::sample::{
-    Hypothesis, Mapper, SampleScratch, analyze, clock_warp, precheck, refine, sample_grid,
-    sample_grid_warped, snap_layout,
+    Hypothesis, Layout, Mapper, SampleScratch, Warp, analyze, broad_hypotheses, clock_warp,
+    precheck, refine, sample_grid, sample_grid_warped, snap_layout, track_warp,
 };
+
+/// Sizes decoded after the corner search of `Work::read_searched`.
+const SEARCHED_TRIES: usize = 4;
 
 /// Data Matrix ECC 200 reader; handles both polarities itself.
 #[derive(Debug, Clone, Copy, Default)]
@@ -39,6 +42,9 @@ struct Params {
     invert: bool,
     /// Connected components fitted per polarity and level.
     components: usize,
+    /// Whether a candidate that did not decode gets the geometry searches
+    /// (clock-track warp, corner search over every size).
+    search: bool,
 }
 
 impl Params {
@@ -53,6 +59,7 @@ impl Params {
                 components: 48,
                 max_misses: 48,
                 invert: false,
+                search: false,
             },
             Effort::Balanced => Self {
                 max_candidates: 64,
@@ -63,6 +70,7 @@ impl Params {
                 components: 128,
                 max_misses: 96,
                 invert: true,
+                search: true,
             },
             Effort::Exhaustive => Self {
                 max_candidates: 192,
@@ -73,6 +81,7 @@ impl Params {
                 components: 512,
                 max_misses: 384,
                 invert: true,
+                search: true,
             },
         }
     }
@@ -86,6 +95,8 @@ struct Work {
     grid: BitMatrix,
     /// Whether the last candidate looked like a Data Matrix (L and clock tracks).
     layout_ok: bool,
+    /// Sizes ranked by `broad_hypotheses`, kept to reuse the buffer.
+    ranked: Vec<(f32, Hypothesis, [Point; 4])>,
 }
 
 thread_local! {
@@ -117,16 +128,64 @@ impl Work {
             &layout,
             &self.scratch,
             &mut hyps[..params.hypotheses.min(3)],
+            params.search,
         );
         for hyp in hyps.iter().flatten() {
             if *decodes >= params.max_decodes {
                 return None;
             }
-            if let Some(f) = self.try_hypothesis(plane, &layout.corners, hyp, decodes) {
+            if let Some(f) =
+                self.try_hypothesis(plane, &layout.corners, hyp, params.search, decodes)
+            {
                 return Some(f);
             }
         }
+        if params.search {
+            return self.read_searched(plane, &layout, params, decodes);
+        }
         None
+    }
+
+    /// Last resort for a candidate whose clock tracks and finder look right
+    /// but whose size estimate or geometry did not decode: every size is
+    /// scored by how well its clock tracks fit after a search of the
+    /// three free corners, and the best few are decoded.
+    fn read_searched(
+        &mut self,
+        plane: Plane<'_>,
+        layout: &Layout,
+        params: &Params,
+        decodes: &mut usize,
+    ) -> Option<Found> {
+        let mut ranked = std::mem::take(&mut self.ranked);
+        broad_hypotheses(plane, layout, &mut self.scratch, &mut ranked);
+        let mut found = None;
+        for (_, hyp, c2) in ranked.iter().take(SEARCHED_TRIES) {
+            if *decodes >= params.max_decodes {
+                break;
+            }
+            let Some(m2) = refine(plane, c2, hyp, &mut self.scratch) else {
+                continue;
+            };
+            let mut got = self.try_grid(plane, &m2, None, hyp, decodes);
+            if got.is_none()
+                && let Some(w) = track_warp(plane, &m2, hyp, &mut self.scratch)
+            {
+                got = self.try_grid(plane, &m2, Some(&w), hyp, decodes);
+            }
+            if let Some(decoded) = got {
+                let (rows, cols) = hyp.grid_dims();
+                found = Some(Found {
+                    decoded,
+                    mapper: m2,
+                    rows,
+                    cols,
+                });
+                break;
+            }
+        }
+        self.ranked = ranked;
+        found
     }
 
     fn try_hypothesis(
@@ -134,6 +193,7 @@ impl Work {
         plane: Plane<'_>,
         corners: &[Point; 4],
         hyp: &Hypothesis,
+        search: bool,
         decodes: &mut usize,
     ) -> Option<Found> {
         let (rows, cols) = hyp.grid_dims();
@@ -155,7 +215,7 @@ impl Work {
             // Retry through a mapping that follows the module pitch measured
             // on the clock tracks.
             if let Some(w) = clock_warp(plane, &mapper, hyp)
-                && sample_grid_warped(plane, &mapper, Some(&w), rows, cols, &mut self.grid)
+                && sample_grid_warped(plane, &mapper, Some(&w), rows, cols, &mut self.grid, false)
                 && check::plausible(&self.grid, hyp)
             {
                 decoded = decode_grid(&self.grid);
@@ -164,6 +224,15 @@ impl Work {
                 }
             }
         }
+        if decoded.is_err()
+            && search
+            && let Some(w) = track_warp(plane, &mapper, hyp, &mut self.scratch)
+            && let Some(d) = self.try_grid(plane, &mapper, Some(&w), hyp, decodes)
+        {
+            // A stretched or compressed axis: every boundary sits where the
+            // clock tracks show it.
+            decoded = Ok(d);
+        }
         let decoded = decoded.ok()?;
         Some(Found {
             decoded,
@@ -171,6 +240,30 @@ impl Work {
             rows,
             cols,
         })
+    }
+
+    /// Samples the grid through `mapper` (and `warp`) and decodes it when it
+    /// matches the patterns of the hypothesis. The retries that search the
+    /// geometry never read a module outside the image.
+    fn try_grid(
+        &mut self,
+        plane: Plane<'_>,
+        mapper: &Mapper,
+        warp: Option<&Warp>,
+        hyp: &Hypothesis,
+        decodes: &mut usize,
+    ) -> Option<DecodedDm> {
+        let (rows, cols) = hyp.grid_dims();
+        if !sample_grid_warped(plane, mapper, warp, rows, cols, &mut self.grid, true)
+            || !check::plausible(&self.grid, hyp)
+        {
+            return None;
+        }
+        let d = decode_grid(&self.grid);
+        if d.is_err() {
+            *decodes += 1;
+        }
+        d.ok()
     }
 }
 

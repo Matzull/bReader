@@ -13,6 +13,10 @@ const PRECHECK_SOLID_MIN: f32 = SOLID_MIN - 0.05;
 const CLOCK_SOLID_MAX: f32 = 0.95;
 /// Minimum share of clock runs with a regular length.
 const REGULAR_MIN: f32 = 0.7;
+/// Smallest module (pixels) at which the geometry searches (corner search, broad size hypotheses, track warp) run: below it a pattern is read from one or two pixels and any pattern fits.
+const MIN_SEARCH_MODULE: f32 = 2.0;
+/// Largest ratio between a size and the module count of a clock track for the size to be searched.
+const EST_FACTOR: f32 = 2.2;
 /// Largest relative size mismatch accepted when snapping to the size table.
 const SNAP_MAX_COST: f32 = 0.22;
 
@@ -163,6 +167,10 @@ pub(crate) struct SampleScratch {
     /// Clock samples of the top and right track of the last layout.
     top_samples: Vec<bool>,
     right_samples: Vec<bool>,
+    /// Clock track points of the corner search.
+    pattern: Vec<(f32, f32, bool)>,
+    /// Runs along a clock track of `track_boundaries` (colour, start, end).
+    track_runs: Vec<(bool, f64, f64)>,
 }
 
 /// Orientation and size evidence of a quad.
@@ -717,7 +725,12 @@ impl Hypothesis {
 /// Size hypotheses of a layout: the counted modules and the size implied by
 /// the side lengths (clock runs merge on bold prints and split on blurred
 /// ones, the geometry does not).
-pub(crate) fn snap_layout(layout: &Layout, sc: &SampleScratch, out: &mut [Option<Hypothesis>]) {
+pub(crate) fn snap_layout(
+    layout: &Layout,
+    sc: &SampleScratch,
+    out: &mut [Option<Hypothesis>],
+    weak: bool,
+) {
     let mut counted = [None; 4];
     snap_estimates(
         &[
@@ -727,7 +740,7 @@ pub(crate) fn snap_layout(layout: &Layout, sc: &SampleScratch, out: &mut [Option
         &mut counted,
     );
     let mut tracks = [None; 4];
-    snap_tracks(sc, &mut tracks);
+    snap_tracks(sc, weak, &mut tracks);
     // Interleave the two rankings, dropping repeats.
     let same =
         |a: &Hypothesis, b: &Hypothesis| std::ptr::eq(a.size, b.size) && a.swapped == b.swapped;
@@ -760,9 +773,14 @@ fn track_agreement(samples: &[bool], n: usize) -> f32 {
 /// Sizes ranked by how well the sampled clock tracks match their module
 /// count (robust against runs that merge on bold prints and split on blur).
 /// Both tracks must agree with at least `TRACK_AGREE_MIN`.
-fn snap_tracks(sc: &SampleScratch, out: &mut [Option<Hypothesis>]) {
+fn snap_tracks(sc: &SampleScratch, weak_ok: bool, out: &mut [Option<Hypothesis>]) {
     const TRACK_AGREE_MIN: f32 = 0.72;
+    const TRACK_STRONG: f32 = 0.8;
     let mut best: [(f32, Option<Hypothesis>); 4] = [(0.0, None); 4];
+    // Sizes with one track in strong agreement and the other not (the far
+    // end of the other track is lost to blur or perspective), best first;
+    // they only fill the slots the two-track matches leave empty.
+    let mut weak: [(f32, Option<Hypothesis>); 4] = [(0.0, None); 4];
     let mut cache: [(u16, f32, f32); 40] = [(0, 0.0, 0.0); 40];
     let mut used = 0;
     let mut scores = |n: u16| -> (f32, f32) {
@@ -788,15 +806,30 @@ fn snap_tracks(sc: &SampleScratch, out: &mut [Option<Hypothesis>]) {
             let (gr, gc) = hyp.grid_dims();
             let (rows_score, _) = scores(gr as u16);
             let (_, cols_score) = scores(gc as u16);
-            if rows_score < TRACK_AGREE_MIN || cols_score < TRACK_AGREE_MIN {
+            let both = rows_score >= TRACK_AGREE_MIN && cols_score >= TRACK_AGREE_MIN;
+            let one = weak_ok && rows_score.max(cols_score) >= TRACK_STRONG;
+            if !both && !one {
                 continue;
             }
-            let mut item = (rows_score + cols_score, Some(hyp));
-            for slot in best.iter_mut() {
+            // Squares are by far the most common sizes: prefer them.
+            let bonus = if size.rows == size.cols { 0.05 } else { 0.0 };
+            let (list, score) = if both {
+                (&mut best, rows_score + cols_score)
+            } else {
+                (&mut weak, rows_score.max(cols_score) + bonus)
+            };
+            let mut item = (score, Some(hyp));
+            for slot in list.iter_mut() {
                 if item.0 > slot.0 {
                     std::mem::swap(slot, &mut item);
                 }
             }
+        }
+    }
+    let mut spare = weak.iter().filter_map(|w| w.1);
+    for b in best.iter_mut() {
+        if b.1.is_none() {
+            b.1 = spare.next();
         }
     }
     for (o, b) in out.iter_mut().zip(best) {
@@ -977,6 +1010,149 @@ pub(crate) fn refine(
     Some(h)
 }
 
+/// Module centres of the two clock tracks in the unit square of a symbol of
+/// `rows` x `cols` modules, with the colour each must have: top row dark at
+/// even columns, right column dark at even distance from the bottom.
+fn outer_pattern(rows: usize, cols: usize, out: &mut Vec<(f32, f32, bool)>) {
+    out.clear();
+    let (w, h) = (cols as f32, rows as f32);
+    for c in 0..cols {
+        out.push(((c as f32 + 0.5) / w, 0.5 / h, c % 2 == 0));
+    }
+    for r in 0..rows {
+        out.push((
+            (w - 0.5) / w,
+            (r as f32 + 0.5) / h,
+            (rows - 1 - r).is_multiple_of(2),
+        ));
+    }
+}
+
+/// Wrong modules among the clock points read through `h`, counting stops
+/// as soon as it exceeds `limit`; `u32::MAX` when a point cannot be mapped.
+fn outer_cost(plane: Plane<'_>, h: &Perspective, pattern: &[(f32, f32, bool)], limit: u32) -> u32 {
+    let mut bad = 0u32;
+    for &(u, v, dark) in pattern {
+        let Some(p) = h.map(Point::new(u, v)) else {
+            return u32::MAX;
+        };
+        bad += u32::from(plane_at(plane, p) != dark);
+        if bad > limit {
+            break;
+        }
+    }
+    bad
+}
+
+/// Moves the three free corners of the quad (the bottom-left corner of the
+/// L stays) to the positions where the two clock tracks match best, in two
+/// passes: a window of one module in steps of half a module, then half a
+/// module in quarter steps (the size is dropped when more than 30 % of the
+/// track modules are wrong after the first). Returns the corners and the
+/// number of wrong clock modules. A window of two modules (steps of one)
+/// reads a few more symbols and admitted a false positive in the
+/// skewed-datamatrix set.
+pub(crate) fn corner_search(
+    plane: Plane<'_>,
+    corners: &[Point; 4],
+    hyp: &Hypothesis,
+    sc: &mut SampleScratch,
+) -> Option<([Point; 4], u32)> {
+    let (rows, cols) = hyp.grid_dims();
+    let module = (dist(corners[0], corners[1]) / cols as f32
+        + dist(corners[0], corners[3]) / rows as f32)
+        / 2.0;
+    if module < MIN_SEARCH_MODULE {
+        return None;
+    }
+    outer_pattern(rows, cols, &mut sc.pattern);
+    let pattern = &sc.pattern;
+    let mut best = *corners;
+    let mut best_cost = outer_cost(
+        plane,
+        &Perspective::square_to_quad(best)?,
+        pattern,
+        u32::MAX - 1,
+    );
+    let len = pattern.len() as u32;
+    for (win, step) in [(2i32, 0.5f32), (2, 0.25)] {
+        for k in [1usize, 2, 0] {
+            let base = best[k];
+            let mut pick = (best_cost, 0, base);
+            for iy in -win..=win {
+                for ix in -win..=win {
+                    let p = Point::new(
+                        base.x + ix as f32 * step * module,
+                        base.y + iy as f32 * step * module,
+                    );
+                    let mut c = best;
+                    c[k] = p;
+                    let Some(h) = Perspective::square_to_quad(c) else {
+                        continue;
+                    };
+                    // Ties go to the smallest move.
+                    let v = outer_cost(plane, &h, pattern, pick.0);
+                    let d = ix * ix + iy * iy;
+                    if v < pick.0 || (v == pick.0 && d < pick.1) {
+                        pick = (v, d, p);
+                    }
+                }
+            }
+            best_cost = pick.0;
+            best[k] = pick.2;
+        }
+        if best_cost * 10 > len * 3 {
+            return None;
+        }
+    }
+    Some((best, best_cost))
+}
+
+/// Sizes for which the outer patterns fit best after a corner search, for
+/// quads whose own size estimate is unreliable: `(share of wrong modules,
+/// hypothesis, corners)`, best first.
+pub(crate) fn broad_hypotheses(
+    plane: Plane<'_>,
+    layout: &Layout,
+    sc: &mut SampleScratch,
+    out: &mut Vec<(f32, Hypothesis, [Point; 4])>,
+) {
+    out.clear();
+    let corners = &layout.corners;
+    let lw = dist(corners[0], corners[1]);
+    let lh = dist(corners[0], corners[3]);
+    for size in spec::sizes() {
+        for swapped in [false, true] {
+            if swapped && size.rows == size.cols {
+                continue;
+            }
+            let hyp = Hypothesis { size, swapped };
+            let (r, c) = hyp.grid_dims();
+            let (pw, ph) = (lw / c as f32, lh / r as f32);
+            if pw < MIN_SEARCH_MODULE || ph < MIN_SEARCH_MODULE || pw > 2.0 * ph || ph > 2.0 * pw {
+                continue;
+            }
+            // The counted clock runs are off by blur and perspective, but not
+            // by more than this factor.
+            let off = |n: usize, est: usize| {
+                let q = n as f32 / est as f32;
+                !(1.0 / EST_FACTOR..=EST_FACTOR).contains(&q)
+            };
+            if off(r, layout.rows_est) || off(c, layout.cols_est) {
+                continue;
+            }
+            let Some((c2, cost)) = corner_search(plane, corners, &hyp, sc) else {
+                continue;
+            };
+            let share = cost as f32 / (r + c) as f32;
+            if share <= 0.2 {
+                out.push((share, hyp, c2));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.0.total_cmp(&b.0));
+}
+
 /// Per-boundary corrections of the module coordinates along each axis,
 /// measured on the clock tracks: the module pitch of a real print is not
 /// perfectly uniform, and a homography cannot follow that.
@@ -1068,6 +1244,107 @@ pub(crate) fn clock_warp(plane: Plane<'_>, h: &Mapper, hyp: &Hypothesis) -> Opti
     })
 }
 
+/// Module-coordinate positions of the `n - 1` boundaries of an alternating
+/// clock track, read along the line through `h`: `line(s)` is the module
+/// coordinate pair of position `s` (0 to `n`) along the track and `first_dark`
+/// whether the module at `s = 0` is dark. Runs shorter than 0.4 of the median
+/// are merged away; `None` unless exactly `n - 1` boundaries remain.
+fn track_boundaries(
+    plane: Plane<'_>,
+    h: &Mapper,
+    n: usize,
+    module: f64,
+    first_dark: bool,
+    line: impl Fn(f64) -> (f64, f64),
+    runs: &mut Vec<(bool, f64, f64)>,
+) -> Option<Vec<f64>> {
+    let step = (0.2 / module).clamp(0.01, 0.1);
+    runs.clear();
+    let mut s = 0.0;
+    while s < n as f64 {
+        let (u, v) = line(s);
+        let (x, y) = h.map(u, v)?;
+        let dark = plane_at(plane, Point::new(x as f32, y as f32));
+        match runs.last_mut() {
+            Some(r) if r.0 == dark => r.2 = s + step,
+            _ => runs.push((dark, s, s + step)),
+        }
+        s += step;
+    }
+    // Merge runs shorter than 0.4 module (noise) into their neighbours.
+    while let Some(i) = runs.iter().position(|r| r.2 - r.1 < 0.4) {
+        if runs.len() < 3 {
+            return None;
+        }
+        if i == 0 {
+            runs[1].1 = runs[0].1;
+            runs.remove(0);
+        } else if i == runs.len() - 1 {
+            runs[i - 1].2 = runs[i].2;
+            runs.pop();
+        } else {
+            runs[i - 1].2 = runs[i + 1].2;
+            runs.drain(i..i + 2);
+        }
+    }
+    if runs.len() != n || runs[0].0 != first_dark {
+        return None;
+    }
+    Some(runs.windows(2).map(|w| (w[0].2 + w[1].1) / 2.0).collect())
+}
+
+/// Warp that places every column and row boundary where the clock tracks
+/// show it, for prints whose module pitch drifts by more than a clock
+/// transition can capture (a stretched or compressed axis). Needs the
+/// number of transitions of the top track and the right track to match the
+/// hypothesis exactly; an axis that does not match keeps its pitch.
+pub(crate) fn track_warp(
+    plane: Plane<'_>,
+    h: &Mapper,
+    hyp: &Hypothesis,
+    sc: &mut SampleScratch,
+) -> Option<Warp> {
+    let (rows, cols) = hyp.grid_dims();
+    let module = f64::from(h.module_px(rows, cols));
+    if module < 2.0 {
+        return None;
+    }
+    let top = track_boundaries(
+        plane,
+        h,
+        cols,
+        module,
+        true,
+        |s| (s, 0.5),
+        &mut sc.track_runs,
+    );
+    let right = track_boundaries(
+        plane,
+        h,
+        rows,
+        module,
+        rows % 2 == 1,
+        |s| (cols as f64 - 0.5, s),
+        &mut sc.track_runs,
+    );
+    if top.is_none() && right.is_none() {
+        return None;
+    }
+    let mut du = vec![0.0f32; cols + 1];
+    let mut dv = vec![0.0f32; rows + 1];
+    if let Some(t) = top {
+        for (i, b) in t.iter().enumerate() {
+            du[i + 1] = (b - (i + 1) as f64) as f32;
+        }
+    }
+    if let Some(r) = right {
+        for (i, b) in r.iter().enumerate() {
+            dv[i + 1] = (b - (i + 1) as f64) as f32;
+        }
+    }
+    Some(Warp { du, dv })
+}
+
 /// Reads the module grid through the mapper. Returns false when too many
 /// module centers fall outside the image.
 pub(crate) fn sample_grid(
@@ -1077,10 +1354,11 @@ pub(crate) fn sample_grid(
     cols: usize,
     out: &mut BitMatrix,
 ) -> bool {
-    sample_grid_warped(plane, h, None, rows, cols, out)
+    sample_grid_warped(plane, h, None, rows, cols, out, false)
 }
 
-/// `sample_grid` with the module coordinates first corrected by `warp`.
+/// `sample_grid` with the module coordinates first corrected by `warp`; `strict` also refuses a grid with
+/// any module centre outside the image (the retries that search the geometry never extrapolate).
 pub(crate) fn sample_grid_warped(
     plane: Plane<'_>,
     h: &Mapper,
@@ -1088,6 +1366,7 @@ pub(crate) fn sample_grid_warped(
     rows: usize,
     cols: usize,
     out: &mut BitMatrix,
+    strict: bool,
 ) -> bool {
     out.resize(cols, rows);
     let map = |u: f64, v: f64| {
@@ -1127,7 +1406,7 @@ pub(crate) fn sample_grid_warped(
             }
         }
     }
-    outside * 10 <= rows * cols
+    outside * 10 <= rows * cols && (!strict || outside == 0)
 }
 
 #[cfg(test)]
