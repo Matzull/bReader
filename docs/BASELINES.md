@@ -332,6 +332,20 @@ challenging-images (448): Code 128 41 against 28 (+13), QR Code 229 / 0 against 
 Ranked gaps where breader trails zxing-cpp (reads, Balanced; QR on BarBeR is closed, see [the QR update](#status-2026-10-14-qr-wide-aspect-tier)): Code 39 on BarBeR (-21), ITF on zxing-samples (-13), ITF on BarBeR (-11), PDF417 on BarBeR (-10), GS1 DataBar on zxing-samples (-7), Data Matrix (-6 on zxing-samples, -4 on BarBeR), EAN-13 on zxing-samples (-6), Code 39 on the BarBeR subset (-6). The v1 target "read rate >= zxing-cpp per class" is therefore still not met on real photos for QR Code, Code 39, ITF, PDF417 and Data Matrix; breader leads on Code 128, EAN-13, UPC-A and Aztec on BarBeR and on Code 128 and QR Code on challenging-images, with 0 false positives against zxing-cpp's 91 on BarBeR.
 
 
+## Data Matrix geometry retries (2026-10-22)
+
+[D-055](decisions.md#d-055), on main `0c5773a`, Ryzen 7 3700X, all runs under the heavy lock, `bench --jobs 16`. Data Matrix reads (0 false positives everywhere), main to this change:
+
+| Set | Fast | Balanced | Exhaustive |
+|---|---|---|---|
+| BarBeR full (110) | 93 to 93 | 95 to 98 | 96 to 99 |
+| BarBeR dev subset | 19 to 19 | 19 to 19 | 19 to 19 |
+| challenging-images (50) | 40 to 40 | 45 to 45 | 45 to 45 |
+| zxing samples (97) | 79 to 79 | 87 to 91 | 90 to 92 |
+| skewed-datamatrix (1324) | 729 to 729 | 1012 to 1071 | 1022 to 1081 |
+
+Also: synth 2024 Balanced Data Matrix 59 to 60 of 60, tracker `batch_datamatrix_1080p` 94 to 95 of 100, UPS unchanged (no Data Matrix label). Against zxing-cpp 3.1.1 at Balanced: BarBeR -4 to -1 (level at Exhaustive), zxing samples -6 to -2. Latency, interleaved, 3 rounds, `--jobs 1`, p50 in ms, main against change: challenging-images Balanced 20.47 / 20.61 / 20.50 against 20.66 / 20.41 / 20.54; Fast `batch_datamatrix_1080p` 10.1 / 10.1 / 10.1 against 10.1 / 10.2 / 10.1, `batch_inverted_datamatrix_1080p` 8.4 / 8.5 / 8.5 against 8.5 / 8.5 / 8.4. Proposal (not applied): the retries at Fast read +44 skewed, +3 zxing samples, +2 challenging-images, +4 BarBeR, but `batch_datamatrix_1080p` Fast p50 becomes 11.8 / 12.0 ms. The shared baselines are not rewritten here (the gates report the gains as notices).
+
 ## Status 2026-10-14: Data Matrix Fast level stage, PDF417 row pitch
 
 *Latency in this section was measured on the Ryzen 5 5500U; the 3700X numbers are in [Status 2026-10-20](#status-2026-10-20-new-machine-ryzen-7-3700x).*

@@ -191,3 +191,37 @@ fn reads_the_longest_rectangle() {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].data, m.payload);
 }
+
+/// A symbol whose columns are compressed towards the left (`distorted.png`
+/// of the zxing samples): the homography is more than a module off in the
+/// middle, beyond the capture range of the clock transitions, and only the
+/// retries of Balanced and Exhaustive that place every boundary on the
+/// clock track read it. Fast keeps its single mapping.
+#[test]
+fn reads_a_compressed_axis_with_the_geometry_searches() {
+    let m = encode_size(b"compressed axis", datamatrix::SymbolSize::Square16);
+    let px = 6.0;
+    let side = ((m.cols as f32 + 8.0) * px) as usize;
+    let cols = m.cols as f32;
+    let r = Render {
+        w: side,
+        h: side,
+        quad: similarity_quad(
+            m.rows,
+            m.cols,
+            Point::new(side as f32 / 2.0, side as f32 / 2.0),
+            px,
+            0.0,
+        ),
+        mirrored: false,
+        blur: 0,
+        invert: false,
+    };
+    let luma = r.draw_with(&m, |u, v| (cols * (u / cols).powf(0.8), v));
+    for effort in [Effort::Balanced, Effort::Exhaustive] {
+        let found = scan(&luma, side, side, effort);
+        assert_eq!(found.len(), 1, "{effort:?}");
+        assert_eq!(found[0].data, m.payload, "{effort:?}");
+    }
+    assert!(scan(&luma, side, side, Effort::Fast).is_empty());
+}
