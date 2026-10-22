@@ -397,7 +397,7 @@ fn read_layout(runs: &Runs, j: usize, layout: &Layout, started: &mut bool) -> Op
         weak += usize::from(m.weak);
         read.left[i] = m;
     }
-    runs.note_start(cal.start());
+    runs.note_start(cal.module);
     for i in 0..layout.right {
         let m = read_digit(
             runs,
