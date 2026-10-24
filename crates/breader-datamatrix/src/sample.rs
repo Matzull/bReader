@@ -362,6 +362,52 @@ fn clock_runs(
     ))
 }
 
+/// RANSAC over point pairs far apart along a side: the line `o = c + g x`
+/// through two of the `(x, o)` edge points with the most points within `tol`
+/// (ties broken by the smaller summed error), as `(inliers, c, g, error)`.
+/// The error of a candidate is only summed when it can be kept, that is when
+/// its inlier count reaches the best so far; the count alone decides the
+/// others, so the result is the same as summing for every candidate.
+fn ransac_line(
+    edge: &[(f32, f32)],
+    len: f32,
+    tol: f32,
+    rng: &mut u64,
+) -> Option<(usize, f32, f32, f32)> {
+    let mut best: Option<(usize, f32, f32, f32)> = None;
+    for _ in 0..64 {
+        *rng ^= *rng << 13;
+        *rng ^= *rng >> 7;
+        *rng ^= *rng << 17;
+        let i = (*rng % edge.len() as u64) as usize;
+        let j = ((*rng >> 24) % edge.len() as u64) as usize;
+        let (p, r) = (edge[i], edge[j]);
+        if (p.0 - r.0).abs() < 0.3 * len {
+            continue;
+        }
+        let g = (r.1 - p.1) / (r.0 - p.0);
+        let c = p.1 - g * p.0;
+        let n_in = edge
+            .iter()
+            .filter(|&&(x, o)| (o - (c + g * x)).abs() <= tol)
+            .count();
+        if best.is_some_and(|b| n_in < b.0) {
+            continue;
+        }
+        let mut err = 0.0f32;
+        for &(x, o) in edge {
+            let e = (o - (c + g * x)).abs();
+            if e <= tol {
+                err += e;
+            }
+        }
+        if best.is_none_or(|b| n_in > b.0 || (n_in == b.0 && err < b.3)) {
+            best = Some((n_in, c, g, err));
+        }
+    }
+    best
+}
+
 /// Re-fits the four side lines of a quad to the boundary pixels: for many
 /// positions along a side the first dark pixel walking inwards gives an offset,
 /// and a RANSAC line through those offsets (the tips of the clock modules or
@@ -408,31 +454,7 @@ fn refine_quad(
             return *q;
         }
         // RANSAC over point pairs far apart along the side.
-        let mut best: Option<(usize, f32, f32, f32)> = None;
-        for _ in 0..64 {
-            rng ^= rng << 13;
-            rng ^= rng >> 7;
-            rng ^= rng << 17;
-            let i = (rng % sc.edge.len() as u64) as usize;
-            let j = ((rng >> 24) % sc.edge.len() as u64) as usize;
-            let (p, r) = (sc.edge[i], sc.edge[j]);
-            if (p.0 - r.0).abs() < 0.3 * len {
-                continue;
-            }
-            let g = (r.1 - p.1) / (r.0 - p.0);
-            let c = p.1 - g * p.0;
-            let (mut n_in, mut err) = (0usize, 0.0f32);
-            for &(x, o) in &sc.edge {
-                let e = (o - (c + g * x)).abs();
-                if e <= tol {
-                    n_in += 1;
-                    err += e;
-                }
-            }
-            if best.is_none_or(|b| n_in > b.0 || (n_in == b.0 && err < b.3)) {
-                best = Some((n_in, c, g, err));
-            }
-        }
+        let best = ransac_line(&sc.edge, len, tol, &mut rng);
         let Some((n_in, mut c, mut g, _)) = best else {
             return *q;
         };

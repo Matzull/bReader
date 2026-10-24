@@ -31,14 +31,14 @@ fn otsu_threshold(hist: &[u64; 256], total: u64) -> u8 {
     threshold
 }
 
-/// Four interleaved sub-histograms break the store-to-load dependency chain
+/// Eight interleaved sub-histograms, fed from 64-bit loads, break the store-to-load dependency chain
 /// on repeated values.
 fn histogram(src: ImageView<'_>) -> [u64; 256] {
     const FLUSH_AT: usize = 1 << 30;
     let mut hist = [0u64; 256];
-    let mut sub = [[0u32; 256]; 4];
+    let mut sub = [[0u32; 256]; 8];
     let mut pending = 0usize;
-    let flush = |sub: &mut [[u32; 256]; 4], hist: &mut [u64; 256]| {
+    let flush = |sub: &mut [[u32; 256]; 8], hist: &mut [u64; 256]| {
         for s in sub.iter_mut() {
             for (h, c) in hist.iter_mut().zip(s.iter_mut()) {
                 *h += u64::from(*c);
@@ -47,14 +47,14 @@ fn histogram(src: ImageView<'_>) -> [u64; 256] {
         }
     };
     for row in src.rows() {
-        let mut chunks = row.chunks_exact(4);
-        for c in &mut chunks {
-            sub[0][usize::from(c[0])] += 1;
-            sub[1][usize::from(c[1])] += 1;
-            sub[2][usize::from(c[2])] += 1;
-            sub[3][usize::from(c[3])] += 1;
+        let (chunks, rest) = row.as_chunks::<8>();
+        for c in chunks {
+            let w = u64::from_le_bytes(*c);
+            for (k, s) in sub.iter_mut().enumerate() {
+                s[((w >> (8 * k)) & 0xFF) as usize] += 1;
+            }
         }
-        for &v in chunks.remainder() {
+        for &v in rest {
             sub[0][usize::from(v)] += 1;
         }
         pending += row.len();

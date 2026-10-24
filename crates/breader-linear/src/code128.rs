@@ -57,6 +57,22 @@ static WIDTHS: [[f32; 6]; 107] = {
     t
 };
 
+/// `WIDTHS` by element: `WIDTHS_BY_ELEMENT[r][c]` is element `r` of character
+/// `c`, so that the distances to all characters are computed side by side.
+static WIDTHS_BY_ELEMENT: [[f32; 107]; 6] = {
+    let mut t = [[0.0; 107]; 6];
+    let mut c = 0;
+    while c < 107 {
+        let mut r = 0;
+        while r < 6 {
+            t[r][c] = WIDTHS[c][r];
+            r += 1;
+        }
+        c += 1;
+    }
+    t
+};
+
 /// Minimum quiet zone on each side, in modules (specified: 10).
 const QUIET: f32 = 5.0;
 /// Longest symbol read, in characters between start and stop.
@@ -94,6 +110,51 @@ struct CharMatch {
 /// Largest reduction of a pattern's cost the local bias can buy.
 const MAX_BIAS_GAIN: f32 = (6.0 - LOCAL_BIAS_COST) * LOCAL_BIAS_MAX;
 
+/// Distance of `n` to every character without any bias, the sum of the six
+/// element differences in element order, and the smallest of them. Element by
+/// element over all characters, which the compiler turns into vector code;
+/// the additions run in the same order as a sum per character.
+fn plain_distances(n: &[f32; 6]) -> ([f32; 107], f32) {
+    let t = &WIDTHS_BY_ELEMENT;
+    let mut plain = [0.0f32; 107];
+    for (c, d) in plain.iter_mut().enumerate() {
+        *d = (n[0] - t[0][c]).abs();
+    }
+    for r in 1..6 {
+        for (c, d) in plain.iter_mut().enumerate() {
+            *d += (n[r] - t[r][c]).abs();
+        }
+    }
+    let min_plain = plain.iter().fold(f32::MAX, |m, &d| m.min(d));
+    (plain, min_plain)
+}
+
+/// Number of local print-gain biases tried: `-LOCAL_BIAS_MAX` to
+/// `LOCAL_BIAS_MAX` in steps of `LOCAL_BIAS_STEP`.
+const BIASES: usize = 2 * (LOCAL_BIAS_MAX / LOCAL_BIAS_STEP) as usize + 1;
+
+/// Lowest cost of `n` against the pattern `p` over the local biases: the
+/// penalty of the bias plus the six element differences with the bias
+/// widening bars and narrowing spaces (`sign`). All biases are evaluated
+/// side by side, element by element, with the arithmetic and the addition
+/// order of one bias at a time, so every cost is bit-identical to it.
+fn biased_cost(n: &[f32; 6], p: &[f32; 6], sign: &[f32; 6]) -> f32 {
+    let steps = (BIASES / 2) as i32;
+    let mut bias = [0.0f32; BIASES];
+    let mut cost = [0.0f32; BIASES];
+    for (t, (b, c)) in bias.iter_mut().zip(&mut cost).enumerate() {
+        *b = (t as i32 - steps) as f32 * LOCAL_BIAS_STEP;
+        *c = LOCAL_BIAS_COST * b.abs();
+    }
+    for r in 0..6 {
+        let base = n[r] - p[r];
+        for (c, &b) in cost.iter_mut().zip(&bias) {
+            *c += (base - sign[r] * b).abs();
+        }
+    }
+    cost.iter().fold(f32::MAX, |m, &c| m.min(c))
+}
+
 /// Best and second best pattern cost of widths normalized to 11 modules,
 /// allowing a local print-gain bias that widens bars and narrows spaces.
 /// `None` when no pattern can come within `MAX_CHAR_ERROR`. Patterns that
@@ -105,31 +166,17 @@ fn rank(n: &[f32; 6], first_is_bar: bool) -> Option<(usize, f32, f32)> {
     } else {
         [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
     };
-    let mut plain = [0.0f32; 107];
-    let mut min_plain = f32::MAX;
-    for (c, p) in plain.iter_mut().zip(&WIDTHS) {
-        *c = (0..6).map(|r| (n[r] - p[r]).abs()).sum();
-        min_plain = min_plain.min(*c);
-    }
+    let (plain, min_plain) = plain_distances(n);
     if min_plain - MAX_BIAS_GAIN > MAX_CHAR_ERROR {
         return None;
     }
     let reach = min_plain + MAX_BIAS_GAIN + MIN_MARGIN;
-    let steps = (LOCAL_BIAS_MAX / LOCAL_BIAS_STEP) as i32;
     let (mut best, mut best_i, mut second) = (f32::MAX, 0, f32::MAX);
     for (i, p) in WIDTHS.iter().enumerate() {
         if plain[i] > reach {
             continue;
         }
-        let mut cost = f32::MAX;
-        for t in -steps..=steps {
-            let d = t as f32 * LOCAL_BIAS_STEP;
-            let mut e = LOCAL_BIAS_COST * d.abs();
-            for r in 0..6 {
-                e += (n[r] - p[r] - sign[r] * d).abs();
-            }
-            cost = cost.min(e);
-        }
+        let cost = biased_cost(n, p, &sign);
         if cost < best {
             second = best;
             best = cost;
@@ -841,5 +888,64 @@ mod tests {
     fn disabled_symbology_is_skipped() {
         let o = line_options(|o| o.symbologies = breader_core::SymbologySet::EMPTY);
         assert!(decode_all(&Code128Decoder, &profile(&encode(START_B, "Off"), 3.0), &o).is_empty());
+    }
+
+    /// The distances to all characters as they were computed one character
+    /// at a time (D-056): bit for bit the same, on widths near the patterns
+    /// and on arbitrary ones.
+    #[test]
+    fn plain_distances_match_the_per_character_sum() {
+        let mut rng = crate::testutil::Rng(0xc0de_128);
+        for round in 0..20_000 {
+            let mut n = [0.0f32; 6];
+            if round % 2 == 0 {
+                let c = rng.below(107) as usize;
+                for (r, v) in n.iter_mut().enumerate() {
+                    *v = WIDTHS[c][r] + (rng.unit() - 0.5) * 1.6;
+                }
+            } else {
+                for v in &mut n {
+                    *v = rng.unit() * 6.0;
+                }
+            }
+            let (plain, min_plain) = plain_distances(&n);
+            let mut want_min = f32::MAX;
+            for (c, p) in WIDTHS.iter().enumerate() {
+                let d: f32 = (0..6).map(|r| (n[r] - p[r]).abs()).sum();
+                assert_eq!(plain[c].to_bits(), d.to_bits(), "char {c}");
+                want_min = want_min.min(d);
+            }
+            assert_eq!(min_plain.to_bits(), want_min.to_bits());
+        }
+    }
+
+    /// The lowest biased cost as it was computed one bias at a time (D-056).
+    #[test]
+    fn biased_cost_matches_the_bias_by_bias_loop() {
+        let mut rng = crate::testutil::Rng(0x128_b1a5);
+        for round in 0..20_000 {
+            let c = rng.below(107) as usize;
+            let mut n = [0.0f32; 6];
+            for (r, v) in n.iter_mut().enumerate() {
+                *v = WIDTHS[c][r] + (rng.unit() - 0.5) * if round % 3 == 0 { 3.0 } else { 0.8 };
+            }
+            let sign = if round % 2 == 0 {
+                [1.0, -1.0, 1.0, -1.0, 1.0, -1.0]
+            } else {
+                [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+            };
+            let p = &WIDTHS[rng.below(107) as usize];
+            let steps = (LOCAL_BIAS_MAX / LOCAL_BIAS_STEP) as i32;
+            let mut want = f32::MAX;
+            for t in -steps..=steps {
+                let d = t as f32 * LOCAL_BIAS_STEP;
+                let mut e = LOCAL_BIAS_COST * d.abs();
+                for r in 0..6 {
+                    e += (n[r] - p[r] - sign[r] * d).abs();
+                }
+                want = want.min(e);
+            }
+            assert_eq!(biased_cost(&n, p, &sign).to_bits(), want.to_bits());
+        }
     }
 }

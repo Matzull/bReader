@@ -15,6 +15,10 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-24: Balanced latency (D-056)
+
+Main `26d63c8` against the D-056 change, Ryzen 7 3700X, `--jobs 1`, heavy lock held, interleaved. challenging-images Balanced p50 (ms), 5 rounds, main / D-056 / zxing-cpp 3.1.1: 20.20 / 21.45 / 22.81, 20.30 / 19.47 / 19.65, 20.62 / 19.72 / 19.95, 20.25 / 19.33 / 19.59, 20.59 / 20.62 / 19.65; medians **20.30 / 19.72 / 19.65**, so breader gained about 0.6 ms (3 %) and is level with zxing-cpp on this machine state (the 2026-10-22 margin of 1.4 ms was measured on a busier machine, main 21.2). Nothing got slower: Fast 4.72 / 4.71 / 4.82 to 4.64 / 4.64 / 4.59, Exhaustive 52.94 / 52.59 / 51.99 to 52.38 / 51.45 / 51.88, BarBeR development subset Balanced 24.58 / 24.51 / 25.29 to 23.59 / 24.01 / 23.69, Fast 1080p video median 6.95 / 6.95 / 7.10 to 6.80 / 6.75 / 6.75 and worst 12.2 / 12.3 / 12.7 to 12.2 / 12.1 / 11.9. User instructions on challenging-images Balanced: 33 572 M to 32 135 M (-4.3 %). Gates `--tier a` and `--tier b` pass with no change in any baseline. See [D-056](decisions.md#d-056).
+
 ## Status 2026-10-22: phase 1 combined (D-053, D-054, D-055)
 
 Main `7cfd236` (Ryzen 7 3700X, all runs under the heavy lock). The release tier passed on the combined tree (23 gates, 0 false positives, no read under its baseline); every baseline cell that changed in the rewrite is a read increase.

@@ -39,9 +39,18 @@ pub(crate) struct Pose {
 }
 
 fn template_score(plane: Plane<'_>, c: Point, u: Point) -> i32 {
+    template_score_from(plane, c, u, i32::MIN).unwrap_or(i32::MIN)
+}
+
+/// [`template_score`], or `None` as soon as the rows still to come cannot
+/// lift the agreement to `at_least`. The callers keep a score only when it
+/// reaches the best one so far, so a candidate that falls short is dropped
+/// without reading the rest of its 81 modules; a score that is returned is
+/// the full one.
+fn template_score_from(plane: Plane<'_>, c: Point, u: Point, at_least: i32) -> Option<i32> {
     let v = rot90(u);
     let mut s = 0;
-    for j in -4i32..=4 {
+    for (row, j) in (-4i32..=4).enumerate() {
         for i in -4i32..=4 {
             let r = i.abs().max(j.abs());
             let want = r <= 3 && r != 2;
@@ -51,8 +60,11 @@ fn template_score(plane: Plane<'_>, c: Point, u: Point) -> i32 {
             );
             s += i32::from((dark(plane, p) == Some(true)) == want);
         }
+        if s + 9 * (8 - row as i32) < at_least {
+            return None;
+        }
     }
-    s
+    Some(s)
 }
 
 /// Parameters (angle in degrees, module size, center) with the best
@@ -69,6 +81,14 @@ impl Best {
             score: -1,
             sum: [0.0; 4],
             n: 0.0,
+        }
+    }
+
+    /// Offers the pose at `(c, u)` scored by the template; a candidate that
+    /// cannot reach the best score is not scored to the end.
+    fn offer(&mut self, plane: Plane<'_>, c: Point, u: Point, p: [f32; 4]) {
+        if let Some(score) = template_score_from(plane, c, u, self.score) {
+            self.add(score, p);
         }
     }
 
@@ -108,8 +128,8 @@ pub(crate) fn fit_pose(plane: Plane<'_>, c0: Point, m0: f32) -> Option<(Pose, i3
     let mut best = (-1, 0.0f32);
     for k in 0..15 {
         let a = ((k + 1) / 2) as f32 * 6.0 * if k % 2 == 1 { 1.0 } else { -1.0 };
-        let sc = template_score(plane, c0, unit(a, m0));
-        if sc > best.0 {
+        // Only a strictly better score replaces the best one.
+        if let Some(sc) = template_score_from(plane, c0, unit(a, m0), best.0 + 1) {
             best = (sc, a);
         }
     }
@@ -118,7 +138,7 @@ pub(crate) fn fit_pose(plane: Plane<'_>, c0: Point, m0: f32) -> Option<(Pose, i3
     for da in -5..=5 {
         for ds in [0.9f32, 0.95, 1.0, 1.05, 1.1] {
             let (a, m) = (a1 + da as f32, m0 * ds);
-            b.add(template_score(plane, c0, unit(a, m)), [a, m, c0.x, c0.y]);
+            b.offer(plane, c0, unit(a, m), [a, m, c0.x, c0.y]);
         }
     }
     let [a2, m2, ..] = b.mean();
@@ -128,7 +148,7 @@ pub(crate) fn fit_pose(plane: Plane<'_>, c0: Point, m0: f32) -> Option<(Pose, i3
     for j in -2..=2 {
         for i in -2..=2 {
             let c = axpy(axpy(c0, i as f32 * 0.2, u), j as f32 * 0.2, v);
-            b.add(template_score(plane, c, u), [a2, m2, c.x, c.y]);
+            b.offer(plane, c, u, [a2, m2, c.x, c.y]);
         }
     }
     let [_, _, cx, cy] = b.mean();
@@ -137,7 +157,7 @@ pub(crate) fn fit_pose(plane: Plane<'_>, c0: Point, m0: f32) -> Option<(Pose, i3
     for da in -3..=3 {
         for ds in [0.97f32, 1.0, 1.03] {
             let (a, m) = (a2 + da as f32 * 0.5, m2 * ds);
-            b.add(template_score(plane, c1, unit(a, m)), [a, m, cx, cy]);
+            b.offer(plane, c1, unit(a, m), [a, m, cx, cy]);
         }
     }
     let [a3, m3, ..] = b.mean();
@@ -501,6 +521,89 @@ fn add_boundary_points(plane: Plane<'_>, h: &Homography, d: usize, pts: &mut Vec
                     break;
                 }
                 t += 0.05;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod score_tests {
+    use super::*;
+    use breader_core::BitMatrix;
+
+    /// A noisy plane with a finder pattern of about `module` pixels at
+    /// `(60, 60)` turned by `deg`.
+    fn finder_plane(rng: &mut u64, module: f32, deg: f32, noise: u64) -> BitMatrix {
+        let mut next = move || {
+            *rng ^= *rng << 13;
+            *rng ^= *rng >> 7;
+            *rng ^= *rng << 17;
+            *rng
+        };
+        let mut g = BitMatrix::new(120, 120);
+        let u = unit(deg, module);
+        let v = rot90(u);
+        for y in 0..120 {
+            for x in 0..120 {
+                // Inverse of the pose: module coordinates of the pixel.
+                let (dx, dy) = (x as f32 - 60.0, y as f32 - 60.0);
+                let det = u.x * v.y - u.y * v.x;
+                let i = (dx * v.y - dy * v.x) / det;
+                let j = (dy * u.x - dx * u.y) / det;
+                let r = i.abs().max(j.abs());
+                let mut dark = r < 1.5 || (2.5..3.5).contains(&r);
+                if next() % 100 < noise {
+                    dark = !dark;
+                }
+                g.set(x, y, dark);
+            }
+        }
+        g
+    }
+
+    #[test]
+    fn template_score_from_is_the_full_score_or_none() {
+        let mut rng = 0x1234_5678_9abc_def1u64;
+        let mut cut = 0;
+        for trial in 0..40 {
+            let plane_bits =
+                finder_plane(&mut rng, 3.0 + (trial % 5) as f32, (trial * 9) as f32, 3);
+            let plane = Plane::new(&plane_bits, false);
+            for k in 0..200 {
+                let c = Point::new(55.0 + (k % 11) as f32, 55.0 + (k / 11 % 11) as f32);
+                let u = unit(-30.0 + (k % 7) as f32 * 9.0, 2.5 + (k % 5) as f32);
+                let full = template_score(plane, c, u);
+                for at_least in [i32::MIN, 0, 30, 55, 60, full, full + 1, 81] {
+                    let got = template_score_from(plane, c, u, at_least);
+                    if full >= at_least {
+                        assert_eq!(got, Some(full));
+                    } else {
+                        assert_eq!(got, None);
+                        cut += 1;
+                    }
+                }
+            }
+        }
+        assert!(cut > 1000, "{cut}");
+    }
+
+    #[test]
+    fn offered_poses_leave_the_same_best_as_added_scores() {
+        let mut rng = 0x0bad_cafe_1234_5678u64;
+        for trial in 0..30 {
+            let bits = finder_plane(&mut rng, 3.5, (trial * 11) as f32, 4);
+            let plane = Plane::new(&bits, false);
+            let (mut a, mut b) = (Best::new(), Best::new());
+            for k in 0..120 {
+                let c = Point::new(57.0 + (k % 7) as f32, 57.0 + (k / 7 % 7) as f32);
+                let ang = -20.0 + (k % 13) as f32 * 3.0;
+                let u = unit(ang, 3.0 + (k % 9) as f32 * 0.2);
+                let p = [ang, 3.5, c.x, c.y];
+                a.add(template_score(plane, c, u), p);
+                b.offer(plane, c, u, p);
+                assert_eq!(a.score, b.score);
+                assert_eq!(a.n, b.n);
+                assert_eq!(a.sum.map(f32::to_bits), b.sum.map(f32::to_bits));
             }
         }
     }
