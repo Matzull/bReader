@@ -53,9 +53,10 @@ fn utf32(bytes: &[u8], big_endian: bool) -> Option<String> {
         return None;
     }
     bytes
-        .chunks_exact(4)
-        .map(|c| {
-            let c = [c[0], c[1], c[2], c[3]];
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&c| {
             char::from_u32(if big_endian {
                 u32::from_be_bytes(c)
             } else {

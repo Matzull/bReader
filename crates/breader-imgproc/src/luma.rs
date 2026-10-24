@@ -52,7 +52,7 @@ pub fn to_luma(
         match format {
             PixelFormat::Rgb8 => {
                 let src = &data[start..start + width * 3];
-                for (o, px) in out.iter_mut().zip(src.chunks_exact(3)) {
+                for (o, px) in out.iter_mut().zip(src.as_chunks::<3>().0) {
                     *o = luma_bt601(px[0], px[1], px[2]);
                 }
             }

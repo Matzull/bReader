@@ -4,13 +4,12 @@ use crate::simd::lt_mask64;
 /// end stay zero.
 #[inline]
 pub(crate) fn pack_row_with(row: &[u8], thresholds: &[u8], words: &mut [u64]) {
-    let mut vs = row.chunks_exact(64);
-    let mut ts = thresholds.chunks_exact(64);
+    let (vs, v) = row.as_chunks::<64>();
+    let (ts, t) = thresholds.as_chunks::<64>();
     let mut ws = words.iter_mut();
-    for ((v, t), word) in (&mut vs).zip(&mut ts).zip(&mut ws) {
-        *word = lt_mask64(v.try_into().unwrap(), t.try_into().unwrap());
+    for ((v, t), word) in vs.iter().zip(ts).zip(&mut ws) {
+        *word = lt_mask64(v, t);
     }
-    let (v, t) = (vs.remainder(), ts.remainder());
     if let (false, Some(word)) = (v.is_empty(), ws.next()) {
         let (mut vb, mut tb) = ([u8::MAX; 64], [0u8; 64]);
         vb[..v.len()].copy_from_slice(v);
@@ -23,12 +22,11 @@ pub(crate) fn pack_row_with(row: &[u8], thresholds: &[u8], words: &mut [u64]) {
 #[inline]
 pub(crate) fn pack_row(row: &[u8], threshold: u8, words: &mut [u64]) {
     let tb = [threshold; 64];
-    let mut vs = row.chunks_exact(64);
+    let (vs, v) = row.as_chunks::<64>();
     let mut ws = words.iter_mut();
-    for (v, word) in (&mut vs).zip(&mut ws) {
-        *word = lt_mask64(v.try_into().unwrap(), &tb);
+    for (v, word) in vs.iter().zip(&mut ws) {
+        *word = lt_mask64(v, &tb);
     }
-    let v = vs.remainder();
     if let (false, Some(word)) = (v.is_empty(), ws.next()) {
         let mut vb = [u8::MAX; 64];
         vb[..v.len()].copy_from_slice(v);

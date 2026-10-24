@@ -66,7 +66,7 @@ pub(crate) fn luma4_row(src: &[u8], dst: &mut [u8], w0: u16, w2: u16) {
 
 #[inline]
 pub(crate) fn luma4_row_scalar(src: &[u8], dst: &mut [u8], w0: u16, w2: u16) {
-    for (o, px) in dst.iter_mut().zip(src.chunks_exact(4)) {
+    for (o, px) in dst.iter_mut().zip(src.as_chunks::<4>().0) {
         *o = ((w0 * u16::from(px[0]) + 150 * u16::from(px[1]) + w2 * u16::from(px[2]) + 128) >> 8)
             as u8;
     }
@@ -139,9 +139,15 @@ mod x86 {
     #[inline]
     pub(super) fn lt_mask64(v: &[u8; 64], t: &[u8; 64]) -> u64 {
         let mut acc = 0u64;
-        for (i, (vc, tc)) in v.chunks_exact(16).zip(t.chunks_exact(16)).enumerate() {
+        for (i, (vc, tc)) in v
+            .as_chunks::<16>()
+            .0
+            .iter()
+            .zip(t.as_chunks::<16>().0)
+            .enumerate()
+        {
             // SAFETY: SSE2 is part of the x86_64 baseline. `vc` and `tc` are
-            // exactly 16 readable bytes (chunks_exact(16) of 64-byte arrays)
+            // exactly 16 readable bytes (16-byte chunks of 64-byte arrays)
             // and `_mm_loadu_si128` has no alignment requirement.
             let m = unsafe {
                 let vv: __m128i = _mm_loadu_si128(vc.as_ptr().cast());
@@ -156,7 +162,11 @@ mod x86 {
     }
     /// Converts whole blocks of 16 pixels and returns the pixel count done.
     pub(super) fn luma4_blocks(src: &[u8], dst: &mut [u8], w0: u16, w2: u16) -> usize {
-        let blocks = src.chunks_exact(64).zip(dst.chunks_exact_mut(16));
+        let blocks = src
+            .as_chunks::<64>()
+            .0
+            .iter()
+            .zip(dst.as_chunks_mut::<16>().0);
         let mut done = 0;
         for (s, d) in blocks {
             // SAFETY: SSE2 is part of the x86_64 baseline. `s` is 64

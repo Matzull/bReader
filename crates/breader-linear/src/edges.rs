@@ -445,7 +445,7 @@ impl EdgeDetector {
         }
         let flat_limit = FLAT_BLOCK * f32::from(hi - lo);
         self.block_noise.clear();
-        for (b, chunk) in p.chunks_exact(BLOCK).enumerate() {
+        for (b, chunk) in p.as_chunks::<BLOCK>().0.iter().enumerate() {
             if f32::from(self.block_max[b] - self.block_min[b]) > flat_limit {
                 continue;
             }

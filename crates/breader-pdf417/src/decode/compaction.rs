@@ -180,7 +180,7 @@ fn byte_run(cws: &[u16], start: usize) -> Result<ByteRun, Reject> {
 fn flush_bytes(run: &[u16], whole_groups: bool, out: &mut Vec<u8>) -> Result<(), Reject> {
     let singles = single_bytes(run.len(), whole_groups)?;
     let (groups, singles) = run.split_at(run.len() - singles);
-    for g in groups.chunks_exact(5) {
+    for g in groups.as_chunks::<5>().0 {
         let v = g.iter().fold(0u64, |acc, &c| acc * 900 + u64::from(c));
         // Six bytes hold 48 bits; five base-900 digits reach further.
         if v >> 48 != 0 {

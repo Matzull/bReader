@@ -895,7 +895,7 @@ mod tests {
     /// and on arbitrary ones.
     #[test]
     fn plain_distances_match_the_per_character_sum() {
-        let mut rng = crate::testutil::Rng(0xc0de_128);
+        let mut rng = crate::testutil::Rng(0x0c0d_e128);
         for round in 0..20_000 {
             let mut n = [0.0f32; 6];
             if round % 2 == 0 {
@@ -922,7 +922,7 @@ mod tests {
     /// The lowest biased cost as it was computed one bias at a time (D-056).
     #[test]
     fn biased_cost_matches_the_bias_by_bias_loop() {
-        let mut rng = crate::testutil::Rng(0x128_b1a5);
+        let mut rng = crate::testutil::Rng(0x0128_b1a5);
         for round in 0..20_000 {
             let c = rng.below(107) as usize;
             let mut n = [0.0f32; 6];

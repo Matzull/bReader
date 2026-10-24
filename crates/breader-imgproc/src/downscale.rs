@@ -101,7 +101,7 @@ fn reduce_row<const F: usize>(src: ImageView<'_>, oy: usize, out: &mut [u8], vsu
             *s += u16::from(v);
         }
     }
-    for (o, group) in out.iter_mut().zip(vsum.chunks_exact(F)) {
+    for (o, group) in out.iter_mut().zip(vsum.as_chunks::<F>().0) {
         let sum: u32 = group.iter().map(|&v| u32::from(v)).sum();
         *o = ((sum + half) / area) as u8;
     }
