@@ -15,6 +15,14 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-24: round 2 combined (D-056, D-057)
+
+Main after the merge of D-057 (`b66c519`) plus the clippy 1.99 fixes (rust 1.99.1 is now the installed toolchain). Clippy, the workspace tests and the release tier (23 gates) pass; the baseline rewrite raised 57 read cells and lowered none, with 0 false positives.
+
+Latency, `--jobs 1`, p50 in ms, interleaved. challenging-images Balanced, 5 rounds: breader 20.62 / 19.97 / 21.20 / 21.90 / 20.74 (median 20.74) against zxing-cpp 21.30 / 19.77 / 21.89 / 20.14 / 21.29 (median 21.29). The round-to-round spread (about 2 ms on both engines) is larger than the difference; D-056 measured the two level (19.72 against 19.65), so breader and zxing-cpp are level on this set within the noise of this machine. Fast 1080p video, 3 rounds: median video 6.95 / 7.10 / 7.05, worst video `batch_code39_1080p` 12.5 / 12.3 / 12.9 (targets 10 and 13; the worst-video margin is thin).
+
+Remaining gaps to zxing-cpp at Balanced (from the D-057 measurements): BarBeR Code 39 -8, ITF -1; zxing samples EAN-13 -3, Codabar -2, Code 93 -2, Code 39 -1, Code 128 -1. Most zxing-sample gaps are owner defaults (margins, Full ASCII, the ITF length list), see [D-057](decisions.md#d-057).
+
 ## Status 2026-10-24: 1D round 2 ([D-057](decisions.md#d-057))
 
 Main `26d63c8` against the D-057 tree (3700X, Rust `bench --jobs 16`, heavy lock; latency `--jobs 1`, interleaved). 0 false positives on every set and effort, no read below main anywhere; tiers a and b pass (read increases are notices; the shared baselines were not rewritten).
