@@ -118,6 +118,15 @@ const MODULE_AGREEMENT: f32 = 0.15;
 /// Upper bound on hits kept per pass, a guard against pathological input.
 const MAX_HITS: usize = 4096;
 
+/// EAN-13 and UPC-A share one layout, so a probe of one is met by the other.
+fn same_family(a: Symbology, b: Symbology) -> bool {
+    a == b
+        || matches!(
+            (a, b),
+            (Symbology::Ean13, Symbology::UpcA) | (Symbology::UpcA, Symbology::Ean13)
+        )
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Settings {
     pub min_agreement: u16,
@@ -336,7 +345,7 @@ impl Aggregator {
     ) -> bool {
         self.hits
             .iter()
-            .filter(|h| h.symbology == symbology && h.from.distance(at) < radius)
+            .filter(|h| same_family(h.symbology, symbology) && h.from.distance(at) < radius)
             .any(|h| self.seed_met(h, settings))
     }
 

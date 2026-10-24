@@ -128,3 +128,22 @@ Measured on main `0c5773a` (Balanced, breader against zxing-cpp 3.1.1, per image
 | Total | 6105 | 6431 | 6466 |
 
 Still open: 15 InventBar Code 39 labels with 1.1 to 1.4 px per module (rows decode with integer widths, not with ours), ITF C4 and the aggregation-limited labels, the zxing-sample items listed above (all owner defaults or border geometry).
+
+## 8. Round 2: triage and outcome ([D-057](decisions.md#d-057))
+
+Measured on main `26d63c8` against this change (Balanced, per image against zxing-cpp 3.1.1, black box). With the ITF quiet zone at 6 modules (owner approved on 0 false positives; 0 found) ITF reads 49 to 58 of 72 on BarBeR (zxing-cpp 59), so C4 (boxed SKUU labels with a tight margin) was mostly the quiet zone, not the pair decoding. The ITF labels zxing-cpp still reads alone are `20140607_201410` (invalid check digit, C5), `201416` (bearer bars; a tape square 6 modules from the start), `201505` and `202722` (aggregation, C3).
+
+**Code 39 (17 InventBar labels left, 141 against 149).** Per-row analysis (every row of the image, three edge variants, both directions): `ProductBarcode475` 14 rows decode, `374` 14, `327_0` 12, `392` 11, `176` 5, `334_0` 2, `313` 2, `147_0` 3, `202` 1, `127` 2 of 40, and `151`, `193`, `259`, `281_0`, `295`, `420`, `483_0` none (probes only or not even those). The first four are read at Exhaustive: the Balanced plan has 2 or 3 lines through a 30 px symbol, one hit appears and its refinement stopped after 3 consecutive misses (now 8: `475` is read, +1 on BarBeR full). The rest fail on the elements: in `127` the bars are about half a pixel thinner than the spaces, widths scatter by a quarter of a module (1.0, 2.0 and 3.0 px quantised) and a character shows a merged or missing element (`fail idx=4 read=8973 w=[1.3, 3.6, 3.3, 1.7, 3.3, 1.7, 1.3, 1.7, 3.3]`, four wide elements). Not recovered by a binarising edge variant, by 3 or 5 row averages, or by probes after fewer characters.
+
+**EAN-13 (zxing samples 9, BarBeR many).** `ean13-4/12` (1.6 px per module, focus falling along the rows): 511 failed guard calibrations in 140 rows, rows 53 to 55 decode. A near miss left no probe and the sparse plan lines were too few; EAN-13 probes (+23 on a quarter of BarBeR, +1 on the zxing samples) and extra lines on frames of 100 000 pixels or less (+5 to +6 on the zxing samples) are D-057.
+
+| Class, set (Balanced, reads) | zxing-cpp | `26d63c8` | D-057 |
+|---|---|---|---|
+| ITF, BarBeR | 59 | 49 | 58 |
+| ITF, zxing samples | 20 | 7 | 12 |
+| ITF, challenging-images | 4 | 3 | 4 |
+| Code 39, BarBeR | 149 | 140 | 141 |
+| EAN-13, BarBeR | 3826 | 4021 | 4061 |
+| EAN-13, zxing samples | 45 | 39 | 42 |
+| EAN-8, zxing samples | 9 | 8 | 9 |
+| GS1 DataBar, zxing samples | 17 | 16 | 17 |

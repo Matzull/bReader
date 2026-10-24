@@ -17,7 +17,7 @@ use crate::itf::ItfDecoder;
 use crate::marks::{self, Mark, MarkSet, RawMark};
 use crate::plan::{ScanPlan, Scanline, clip_line};
 use crate::profile::{self, Oblique, ObliqueWork};
-use crate::runs::Runs;
+use crate::runs::{Runs, THIN_START_MODULE};
 
 /// Decoders tried on every scanline, composed statically.
 type Decoders = (
@@ -67,6 +67,8 @@ struct Work {
     seeds: Vec<PlacedHit>,
     column_xs: Vec<usize>,
     oblique_lines: Vec<Scanline>,
+    /// Lines of the denser plan of a small frame (see `scan_dense`).
+    dense_lines: Vec<Scanline>,
     oblique_work: ObliqueWork,
     stage: Stage,
 }
@@ -108,6 +110,14 @@ fn edge_variants(effort: Effort) -> &'static [EdgeParams] {
 /// Scanlines added around a lone hit stop after this many consecutive
 /// lines without a matching hit, or at `REFINE_MAX_LINES` per side.
 const REFINE_MISSES: usize = 3;
+/// Frames of at most this many pixels get the extra lines of a plan
+/// `DENSE_FACTOR` times as dense (Balanced and Exhaustive): a small frame costs
+/// little per line, and a symbol of 1.5 px per module decodes on a few rows
+/// only. The extra lines count as lines added around a hit, not as plan lines.
+const DENSE_MAX_PIXELS: usize = 100_000;
+const DENSE_FACTOR: f32 = 4.0;
+/// Misses before the refinement of a thin Code 39 hit stops (D-057).
+const THIN_REFINE_MISSES: usize = 8;
 const REFINE_MAX_LINES: usize = 24;
 const REFINE_MAX_SEEDS: usize = 48;
 /// Lines of a probe's refinement without a hit or probe before it stops: a
@@ -274,6 +284,43 @@ fn scan_line(
         profile::sample(img, line, false, profile);
         scan_profile(&DECODERS, profile, line, index, step, sources.opts, stage);
     }
+}
+
+/// Scans the lines of a denser plan that the plan itself lacks, numbered after
+/// it; returns how many there were.
+fn scan_dense(
+    img: &ImageView<'_>,
+    plan: ScanPlan,
+    base: &[Scanline],
+    first_index: u32,
+    opts: &LineOptions,
+    work: &mut Work,
+) -> u32 {
+    let mut extra = std::mem::take(&mut work.dense_lines);
+    plan.denser(DENSE_FACTOR).lines(&mut extra);
+    let same = |a: &Scanline, b: &Scanline| {
+        (a.from.x - b.from.x).abs() < 0.02
+            && (a.from.y - b.from.y).abs() < 0.02
+            && (a.to.x - b.to.x).abs() < 0.02
+            && (a.to.y - b.to.y).abs() < 0.02
+    };
+    let mut count = 0;
+    for line in extra.iter().filter(|l| !base.iter().any(|b| same(b, l))) {
+        profile::sample(img, line, false, &mut work.profile);
+        let step = plan.line_spacing(line);
+        scan_profile(
+            &DECODERS,
+            &work.profile,
+            line,
+            first_index + count,
+            step,
+            opts,
+            &mut work.stage,
+        );
+        count += 1;
+    }
+    work.dense_lines = extra;
+    count
 }
 
 fn scan_lines(
@@ -445,11 +492,24 @@ fn refine<D: LinearDecoder>(
                 misses = 0;
             } else {
                 misses += 1;
-                if misses >= if probe { PROBE_MISSES } else { REFINE_MISSES } {
+                if misses >= miss_limit(seed, probe) {
                     break;
                 }
             }
         }
+    }
+}
+
+/// Consecutive refinement lines without a match after which the refinement
+/// around `seed` stops. A thin Code 39 symbol decodes on a third of its rows
+/// at best, so its refinement goes on through longer runs of misses.
+fn miss_limit(seed: &PlacedHit, probe: bool) -> usize {
+    if probe {
+        PROBE_MISSES
+    } else if seed.symbology == Symbology::Code39 && seed.module <= THIN_START_MODULE {
+        THIN_REFINE_MISSES
+    } else {
+        REFINE_MISSES
     }
 }
 
@@ -664,6 +724,12 @@ impl LinearReader {
             scan_lines(&img, &lines, &sources, &mut work.profile, &mut work.stage);
         }
         let plan_lines = lines.len() as u32;
+        let dense_lines =
+            if effort != Effort::Fast && img.width() * img.height() <= DENSE_MAX_PIXELS {
+                scan_dense(&img, plan, &lines, plan_lines, &opts, work)
+            } else {
+                0
+            };
         let settings = Settings {
             min_agreement: min_line_agreement,
             plan_lines,
@@ -672,7 +738,7 @@ impl LinearReader {
             across_pad: plan.spacing(0.0).min(plan.spacing(90.0)) / 2.0,
             scale,
         };
-        let mut next_index = plan_lines;
+        let mut next_index = plan_lines + dense_lines;
         let mut seeds = std::mem::take(&mut work.seeds);
         work.stage.aggregator.seeds(&settings, &mut seeds);
         for seed in seeds.iter().take(REFINE_MAX_SEEDS) {
@@ -783,6 +849,81 @@ mod tests {
             SymbolMeta::Linear(m) => m,
             other => panic!("unexpected meta {other:?}"),
         }
+    }
+
+    fn seed(symbology: Symbology, module: f32) -> PlacedHit {
+        PlacedHit {
+            symbology,
+            text: b"1".to_vec(),
+            addon: None,
+            from: Point::new(0.0, 0.0),
+            to: Point::new(10.0, 0.0),
+            line: 0,
+            step: 2.0,
+            module,
+            quality: 0.5,
+            aim: *b"]A0",
+            checksum_verified: false,
+            short_quiet: false,
+            inverted: false,
+            start_stop: None,
+            segments: 0,
+            thin: false,
+            part: false,
+        }
+    }
+
+    #[test]
+    fn thin_code_39_refinement_survives_longer_runs_of_misses() {
+        assert_eq!(
+            miss_limit(&seed(Symbology::Code39, 1.4), false),
+            THIN_REFINE_MISSES
+        );
+        assert_eq!(
+            miss_limit(&seed(Symbology::Code39, 3.0), false),
+            REFINE_MISSES
+        );
+        assert_eq!(
+            miss_limit(&seed(Symbology::Code128, 1.4), false),
+            REFINE_MISSES
+        );
+        assert_eq!(miss_limit(&seed(Symbology::Ean13, 1.4), true), PROBE_MISSES);
+    }
+
+    #[test]
+    fn dense_lines_are_extra_lines_numbered_after_the_plan() {
+        let img = blank(200, 150, 230);
+        let view = img.view();
+        let mut base = Vec::new();
+        let plan = ScanPlan::new(200, 150, Effort::Balanced);
+        plan.lines(&mut base);
+        let opts = LineOptions::from(&ScanOptions::default());
+        let mut work = Work::default();
+        let n = scan_dense(&view, plan, &base, base.len() as u32, &opts, &mut work);
+        let mut dense = Vec::new();
+        plan.denser(DENSE_FACTOR).lines(&mut dense);
+        assert!(n > 2 * base.len() as u32, "{n} {}", base.len());
+        // Every line of the plan is in the denser one and is not scanned again.
+        assert!(n as usize <= dense.len() - base.len() + 4, "{n}");
+    }
+
+    #[test]
+    fn a_small_symbol_in_a_gap_of_the_plan_is_read_with_the_dense_lines() {
+        // Two rows high and between the lines of the plan: no plan line
+        // crosses it and the refinement needs a hit first, so only the extra
+        // lines of a small frame read it.
+        let modules = ean13_modules(TEXT);
+        let mut img = blank(220, 120, 230);
+        let place = Placement {
+            module_px: 1.6,
+            height_px: 2.0,
+            center: (110.0, 60.0),
+            angle_deg: 0.0,
+        };
+        draw_symbol(&mut img, &modules, place, 30);
+        let found = scan(&img, &ScanOptions::default());
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].data, TEXT.as_bytes());
     }
 
     #[test]
@@ -1196,10 +1337,14 @@ mod tests {
         // 20 digits are not on the default list.
         let img = wide_picture(&itf_modules("12345678901234567890", 3), 2.6, 0.0);
         assert!(scan(&img, &defaults).is_empty());
-        // A quiet zone below 10 modules rejects the symbol whatever the length.
-        let tight = with_neighbours(&itf_modules("123456789012", 3), 8, 8);
+        // A quiet zone below 6 modules (D-057) rejects the symbol whatever the
+        // length, one of 8 modules does not.
+        let tight = with_neighbours(&itf_modules("123456789012", 3), 5, 5);
         let img = wide_picture(&tight, 2.6, 0.0);
         assert!(scan(&img, &defaults).is_empty());
+        let tight = with_neighbours(&itf_modules("123456789012", 3), 8, 8);
+        let img = wide_picture(&tight, 2.6, 0.0);
+        assert_eq!(scan(&img, &defaults).len(), 1);
     }
 
     #[test]

@@ -98,6 +98,8 @@ pub struct ScanPlan {
     width: usize,
     height: usize,
     effort: Effort,
+    /// Multiplier of the line count; above 1 the spacing may go down to 1 px.
+    dense: f32,
 }
 
 impl ScanPlan {
@@ -106,6 +108,16 @@ impl ScanPlan {
             width,
             height,
             effort,
+            dense: 1.0,
+        }
+    }
+
+    /// The same plan with `factor` times as many lines per direction, down to
+    /// a spacing of one pixel.
+    pub fn denser(self, factor: f32) -> Self {
+        Self {
+            dense: factor,
+            ..self
         }
     }
 
@@ -118,6 +130,10 @@ impl ScanPlan {
             d.diagonal
         }
         .max(1);
+        if self.dense > 1.0 {
+            return (self.extent(angle_deg) / (count as f32 * self.dense))
+                .clamp(1.0, max_spacing(self.effort, angle_deg));
+        }
         (self.extent(angle_deg) / count as f32).clamp(2.0, max_spacing(self.effort, angle_deg))
     }
 
@@ -270,6 +286,37 @@ mod tests {
             .map(|l| (l.from.y - 239.5).abs())
             .collect();
         assert!(d.windows(3).all(|w| w[2] + 0.01 >= w[0]));
+    }
+
+    #[test]
+    fn a_denser_plan_has_more_lines_down_to_one_pixel_and_keeps_the_plan() {
+        let mut base = Vec::new();
+        let plan = ScanPlan::new(240, 200, Effort::Balanced);
+        plan.lines(&mut base);
+        let mut dense = Vec::new();
+        plan.denser(4.0).lines(&mut dense);
+        assert!(
+            dense.len() > 3 * base.len(),
+            "{} {}",
+            dense.len(),
+            base.len()
+        );
+        assert!(plan.denser(4.0).spacing(0.0) >= 1.0);
+        assert!(plan.denser(4.0).spacing(0.0) <= plan.spacing(0.0) / 3.0);
+        // Rows of the plan are rows of the denser plan (the reader skips them).
+        for l in base.iter().filter(|l| l.from.y == l.to.y) {
+            assert!(
+                dense
+                    .iter()
+                    .any(|d| d.from.y == l.from.y && d.to.y == l.to.y),
+                "{l:?}"
+            );
+        }
+        // Not by default.
+        assert_eq!(
+            ScanPlan::new(240, 200, Effort::Balanced).spacing(0.0),
+            plan.spacing(0.0)
+        );
     }
 
     #[test]

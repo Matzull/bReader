@@ -15,6 +15,33 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-24: 1D round 2 ([D-057](decisions.md#d-057))
+
+Main `26d63c8` against the D-057 tree (3700X, Rust `bench --jobs 16`, heavy lock; latency `--jobs 1`, interleaved). 0 false positives on every set and effort, no read below main anywhere; tiers a and b pass (read increases are notices; the shared baselines were not rewritten).
+
+| Set, effort | Class | Before | After |
+|---|---|---|---|
+| BarBeR full, Balanced (6475 to 6529) | EAN-13 | 4021 | 4061 |
+| | UPC-A | 272 | 276 |
+| | ITF | 49 | 58 |
+| | Code 39 | 140 | 141 |
+| BarBeR full, Exhaustive (6672 to 6705) | EAN-13 | 4125 | 4146 |
+| | UPC-A | 280 | 281 |
+| | ITF | 52 | 61 |
+| | Code 39 / Code 128 | 145 / 689 | 146 / 690 |
+| BarBeR dev subset | Fast 1509 to 1514 (ITF 21 to 26); Balanced 1780 to 1793 (EAN-13 1166 to 1174, UPC-A 79 to 80, ITF 22 to 26); Exhaustive 1835 to 1843 (EAN-13 1199 to 1204, ITF 25 to 28) | | |
+| challenging-images | Fast 333 to 334, Balanced 411 to 413 (ITF 3 to 4, UPC-A 71 to 72), Exhaustive 425 to 426 (ITF 3 to 4) | | |
+| zxing samples | Fast 639 to 643 (ITF 5 to 9); Balanced 758 to 769 (EAN-13 39 to 42, EAN-8 8 to 9, UPC-A 53 to 54, ITF 7 to 12, GS1 DataBar 16 to 17); Exhaustive 765 to 775 (EAN-13 40 to 42, EAN-8 8 to 9, UPC-E 22 to 23, ITF 7 to 12, GS1 DataBar 16 to 17) | | |
+| synth seeds 1 and 2024, UPS | all efforts unchanged | | |
+
+ITF quiet zone 6 modules, per set and effort (Fast / Balanced / Exhaustive reads, 0 false positives): challenging-images 3 to 4 / 3 to 4 / 3 to 4 of 4; BarBeR dev 21 to 26 / 22 to 26 / 25 to 28 of 34; zxing samples 5 to 9 / 7 to 12 / 7 to 12 of 20; BarBeR full Balanced 49 to 58, Exhaustive 52 to 61 of 72; synth seed 1 16 / 23 / 23 and seed 2024 64 / 74 / 75 unchanged. Applied.
+
+Gaps to zxing-cpp at Balanced after the change: BarBeR Code 39 141 vs 149 (-8), ITF 58 vs 59 (-1); zxing samples EAN-13 42 vs 45 (-3), Codabar -2, Code 93 -2, Code 39 and Code 128 -1 each; challenging-images level except EAN-13 `retail-1`.
+
+Latency, challenging-images Balanced p50, 7 interleaved rounds, main against D-057: medians 20.93 and 20.45 ms (-2.3 percent; rounds 20.81 / 21.55 / 21.03 / 20.93 / 21.23 / 20.98 / 20.90 against 20.57 / 20.36 / 21.74 / 20.68 / 20.45 / 20.41 / 20.33). Fast 1080p video, 3 rounds: median video 7.50 (main) against 7.55 ms; worst `batch_code39_1080p` 13.0 against 13.3 ms, `batch_rotated_small_pdf417_1080p` 13.0 against 12.7 (the machine was slower than on 2026-10-22: main measures 13.0 where 12.5 was recorded). Measured, not applied: extra lines up to 262 144 pixels (BarBeR full Balanced 6565, +36, challenging-images p50 +0.9 to +3 percent in noisy rounds).
+
+Baseline cells that need `--write-baseline` (read increases only): `dynamsoft-challenging-{fast,balanced,exhaustive}`, `zxing-samples-{fast,balanced,exhaustive}`, `barber-dev-{fast,balanced,exhaustive}`, `barber-{balanced,exhaustive}` (full) and, after a full Fast run, `barber-fast`.
+
 ## Status 2026-10-24: Balanced latency (D-056)
 
 Main `26d63c8` against the D-056 change, Ryzen 7 3700X, `--jobs 1`, heavy lock held, interleaved. challenging-images Balanced p50 (ms), 5 rounds, main / D-056 / zxing-cpp 3.1.1: 20.20 / 21.45 / 22.81, 20.30 / 19.47 / 19.65, 20.62 / 19.72 / 19.95, 20.25 / 19.33 / 19.59, 20.59 / 20.62 / 19.65; medians **20.30 / 19.72 / 19.65**, so breader gained about 0.6 ms (3 %) and is level with zxing-cpp on this machine state (the 2026-10-22 margin of 1.4 ms was measured on a busier machine, main 21.2). Nothing got slower: Fast 4.72 / 4.71 / 4.82 to 4.64 / 4.64 / 4.59, Exhaustive 52.94 / 52.59 / 51.99 to 52.38 / 51.45 / 51.88, BarBeR development subset Balanced 24.58 / 24.51 / 25.29 to 23.59 / 24.01 / 23.69, Fast 1080p video median 6.95 / 6.95 / 7.10 to 6.80 / 6.75 / 6.75 and worst 12.2 / 12.3 / 12.7 to 12.2 / 12.1 / 11.9. User instructions on challenging-images Balanced: 33 572 M to 32 135 M (-4.3 %). Gates `--tier a` and `--tier b` pass with no change in any baseline. See [D-056](decisions.md#d-056).
