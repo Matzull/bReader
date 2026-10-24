@@ -55,6 +55,18 @@ Decision: [D-053](../decisions.md#d-053). Two additions for symbols of 1.1 to 2.
 
 **Gaps.** About 15 of the 26 InventBar Code 39 labels that zxing-cpp reads stay unread: at 1.1 to 1.4 px per module the element widths of a row scatter by more than half a module and the separation or ratio test fails on most rows. A probe never makes a symbol; ITF has no probe yet.
 
+## Near-miss probes and small frames (D-057)
+
+Decision: [D-057](../decisions.md#d-057). Three additions after the plan scan, all with the acceptance rules of each symbology unchanged (the only rule that moved is the approved ITF quiet zone, below).
+
+**EAN-13 and UPC-A probes.** `ean.rs::read_layout` keeps a `Near` (digits read, the run past the last one, module, parities of the left digits). When the EAN-13 layout fails after the guards, the quiet zone and at least 3 left digits, `EanDecoder::decode` returns a `LineHit` with empty text (the probe of D-053) spanning what was read. `Near::is_probe` also requires the parities of the left digits to be the start of the parity pattern of some first digit: the other reading direction of a valid symbol reads its right half as G digits and so is no probe. `refine_probes` treats EAN-13 and UPC-A as one family (`aggregate.rs::same_family`) when it skips probes next to a symbol that has its agreement. No module limit: the gain is at 4 px and above too. Fast does not refine probes.
+
+**Extra lines on small frames.** `reader.rs::scan_dense`: frames of at most 100 000 pixels at Balanced and Exhaustive also scan the lines of `ScanPlan::denser(4.0)` (spacing down to 1 px) that the plan lacks. They are numbered after the plan lines, so a group they back needs one more agreeing line than `min_line_agreement` unless two plan lines agree, and the independence rule of Code 39 and ITF still uses the plan spacing as the step. The line buffer lives in `Work`. 262 144 pixels reads 36 more on BarBeR full Balanced and costs challenging-images Balanced p50 (proposal, see D-057).
+
+**Thin Code 39 refinement.** The refinement around a hit of a Code 39 symbol with at most 2.4 samples per module stops after 8 consecutive misses (`reader.rs::miss_limit`), not 3: a thin symbol decodes on a third of its rows at best.
+
+**ITF quiet zone.** `itf.rs::QUIET` is 6 modules (10 before; the specification asks for 10, cropped labels have 6). The margin up to the profile border still counts as measured. 0 false positives on every set and effort; ITF reads 49 to 58 (BarBeR Balanced), 7 to 12 of 20 (zxing samples), 3 to 4 of 4 (challenging-images).
+
 ## Codabar
 
 Decision and scope: [D-036](../decisions.md#d-036). Specification: ANSI/AIM BC3 and EN 798; the 20 element patterns are transcribed from the specification table and cross-checked against an independent encoder (the `barcoders` dev-dependency, which draws `+` wrongly and is skipped for that character).

@@ -374,7 +374,42 @@ struct Read {
     digits: usize,
 }
 
-fn read_layout(runs: &Runs, j: usize, layout: &Layout, started: &mut bool) -> Option<Read> {
+/// How far a read got before it failed: the evidence for a probe (see
+/// `LineHit::text`).
+#[derive(Debug, Clone, Copy, Default)]
+struct Near {
+    /// Digits read before the failure.
+    digits: usize,
+    /// Run just past the last digit read.
+    end_run: usize,
+    module: f32,
+    /// Parity (G set) of the left digits read, first digit highest.
+    parity: u8,
+    left: usize,
+}
+
+impl Near {
+    /// A failed read is a probe when it got far enough and its left digits
+    /// have a parity pattern some first digit has: the other direction of a
+    /// symbol reads its right half as G digits and is no probe.
+    fn is_probe(&self) -> bool {
+        let left = self.left.min(6);
+        self.digits >= PROBE_DIGITS
+            && left >= PROBE_DIGITS
+            && EAN13_FIRST.iter().any(|&m| m >> (6 - left) == self.parity)
+    }
+}
+
+/// Digits an EAN-13 read needs before it failing counts as a probe.
+const PROBE_DIGITS: usize = 3;
+
+fn read_layout(
+    runs: &Runs,
+    j: usize,
+    layout: &Layout,
+    started: &mut bool,
+    near: &mut Near,
+) -> Option<Read> {
     let cal = calibrate(runs, j, layout.guards)?;
     *started = true;
     let last = j + layout.total - 1;
@@ -396,6 +431,13 @@ fn read_layout(runs: &Runs, j: usize, layout: &Layout, started: &mut bool) -> Op
         read.margin_sum += m.margin;
         weak += usize::from(m.weak);
         read.left[i] = m;
+        *near = Near {
+            digits: i + 1,
+            end_run: j + 3 + 4 * (i + 1),
+            module: cal.module,
+            parity: (near.parity << 1) | u8::from(m.g),
+            left: i + 1,
+        };
     }
     runs.note_start(cal.module);
     for i in 0..layout.right {
@@ -409,6 +451,12 @@ fn read_layout(runs: &Runs, j: usize, layout: &Layout, started: &mut bool) -> Op
         read.margin_sum += m.margin;
         weak += usize::from(m.weak);
         read.right[i] = m;
+        *near = Near {
+            digits: layout.left + i + 1,
+            end_run: j + layout.right_at + 4 * (i + 1),
+            module: cal.module,
+            ..*near
+        };
     }
     (weak <= 1).then_some(read)
 }
@@ -464,6 +512,28 @@ fn upce_to_upca(ns: u8, d: &[u8; 6], check: u8) -> [u8; 12] {
 }
 
 impl EanDecoder {
+    /// An EAN-13 or UPC-A symbol that started properly (guards, quiet zone,
+    /// digits) and failed part-way: where to look again with more lines.
+    fn probe(runs: &Runs, j: usize, near: &Near) -> LineHit {
+        LineHit {
+            symbology: Symbology::Ean13,
+            text: Vec::new(),
+            addon: None,
+            start: runs.start(j),
+            end: runs.end(near.end_run - 1),
+            module: near.module,
+            quality: 0.0,
+            aim: *b"]E0",
+            checksum_verified: false,
+            short_quiet: false,
+            inverted: false,
+            start_stop: None,
+            segments: 0,
+            thin: false,
+            part: false,
+        }
+    }
+
     fn hit(
         runs: &Runs,
         j: usize,
@@ -501,13 +571,19 @@ impl EanDecoder {
         }
     }
 
-    fn ean13(runs: &Runs, j: usize, opts: &LineOptions, started: &mut bool) -> Option<LineHit> {
+    fn ean13(
+        runs: &Runs,
+        j: usize,
+        opts: &LineOptions,
+        started: &mut bool,
+        near: &mut Near,
+    ) -> Option<LineHit> {
         let upca = opts.symbologies.contains(Symbology::UpcA);
         let ean13 = opts.symbologies.contains(Symbology::Ean13);
         if !upca && !ean13 {
             return None;
         }
-        let read = read_layout(runs, j, &EAN13, started)?;
+        let read = read_layout(runs, j, &EAN13, started, near)?;
         let first = EAN13_FIRST
             .iter()
             .position(|&m| m == parity_mask(&read.left))? as u8;
@@ -534,7 +610,7 @@ impl EanDecoder {
         if !opts.symbologies.contains(Symbology::Ean8) {
             return None;
         }
-        let read = read_layout(runs, j, &EAN8, started)?;
+        let read = read_layout(runs, j, &EAN8, started, &mut Near::default())?;
         if parity_mask(&read.left[..4]) != 0 {
             return None;
         }
@@ -561,7 +637,7 @@ impl EanDecoder {
         if !opts.symbologies.contains(Symbology::UpcE) {
             return None;
         }
-        let read = read_layout(runs, j, &UPCE, started)?;
+        let read = read_layout(runs, j, &UPCE, started, &mut Near::default())?;
         // The last bar of a half-read EAN-13 is the first bar of a digit,
         // clipped where a slanted scanline leaves the bars.
         let last = j + UPCE.total - 1;
@@ -618,7 +694,12 @@ impl LinearDecoder for EanDecoder {
         while j + UPCE.total <= n {
             if plausible_start(runs, j) {
                 if want13 && j + EAN13.total <= n {
-                    out.extend(Self::ean13(runs, j, opts, &mut started));
+                    let mut near = Near::default();
+                    let hit = Self::ean13(runs, j, opts, &mut started, &mut near);
+                    if hit.is_none() && near.is_probe() {
+                        out.push(Self::probe(runs, j, &near));
+                    }
+                    out.extend(hit);
                 }
                 if want8 && j + EAN8.total <= n {
                     out.extend(Self::ean8(runs, j, opts, &mut started));
@@ -721,6 +802,8 @@ mod tests {
         let mut out = Vec::new();
         EanDecoder.decode(&runs, opts, &mut out);
         EanDecoder.decode(&rev, opts, &mut out);
+        // Probes are not symbols (`all_hits` has them).
+        out.retain(|h| !h.text.is_empty());
         out
     }
 
@@ -836,9 +919,95 @@ mod tests {
         let runs = runs_with(&p, &EdgeParams::fine());
         let mut out = Vec::new();
         assert!(EanDecoder.decode(&runs, &opts(), &mut out));
-        assert!(out.is_empty());
+        assert!(
+            out.iter().all(|h| h.text.is_empty()),
+            "no symbol, only a probe"
+        );
         let blank = Runs::from_widths(true, &[40.0, 30.0], 50.0, 50.0);
         assert!(!EanDecoder.decode(&blank, &opts(), &mut out));
+    }
+
+    /// Hits with the probes `decode_all` leaves out.
+    fn all_hits(profile: &[u8]) -> Vec<LineHit> {
+        crate::testutil::decode_all_parts(&EanDecoder, profile, &opts())
+    }
+
+    /// Both reading directions, probes included.
+    fn decode_with_probes(profile: &[u8]) -> Vec<LineHit> {
+        all_hits(profile)
+    }
+
+    fn probes(hits: &[LineHit]) -> Vec<&LineHit> {
+        hits.iter().filter(|h| h.text.is_empty()).collect()
+    }
+
+    #[test]
+    fn an_ean13_that_fails_after_its_digits_leaves_a_probe() {
+        // A wrong check digit: all twelve digits were read.
+        for px in [1.6, 2.0, 3.0] {
+            let p = Render::px(px).profile(&ean13_modules("5901234123458"));
+            let hits = all_hits(&p);
+            let found = probes(&hits);
+            assert!(!found.is_empty() && found.len() == hits.len(), "{hits:?}");
+            for h in &found {
+                assert_eq!(h.symbology, Symbology::Ean13);
+                assert!((h.end - h.start).abs() > 80.0 * px && h.module > 1.0);
+                assert!(!h.thin && !h.part && !h.checksum_verified);
+            }
+            assert!(decode_all(&EanDecoder, &p, &opts()).is_empty());
+        }
+    }
+
+    #[test]
+    fn a_probe_needs_three_digits_and_a_parity_some_first_digit_has() {
+        let near = |digits, left, parity| Near {
+            digits,
+            left,
+            parity,
+            end_run: 10,
+            module: 2.0,
+        };
+        assert!(near(12, 6, 0b011001).is_probe());
+        assert!(near(3, 3, 0b001).is_probe());
+        assert!(!near(2, 2, 0b00).is_probe(), "two digits");
+        assert!(!near(0, 0, 0).is_probe());
+        // G digits first: the other direction of a symbol, no first digit.
+        assert!(!near(12, 6, 0b111111).is_probe());
+        assert!(!near(5, 5, 0b11111).is_probe());
+        assert!(!near(6, 6, 0b100000).is_probe());
+    }
+
+    #[test]
+    fn a_symbol_read_the_other_way_round_is_no_probe() {
+        for px in [1.6, 3.0] {
+            let p = Render::px(px).profile(&ean13_modules("5901234123457"));
+            let hits = decode_with_probes(&p);
+            assert_eq!(hits.len(), 1, "{hits:?}");
+            assert_eq!(hits[0].text, b"5901234123457");
+        }
+    }
+
+    #[test]
+    fn probes_need_a_start_pattern() {
+        // A bar right before the start: its quiet zone is no quiet zone.
+        let mut m = vec![true, false, true, false];
+        m.extend(ean13_modules("5901234123458"));
+        let p = Render::px(2.0).profile(&m);
+        assert!(probes(&all_hits(&p)).is_empty());
+        let mut rng = Rng(5);
+        let mut p = vec![200u8; 400];
+        for v in &mut p[40..360] {
+            *v = if rng.unit() < 0.5 { 30 } else { 200 };
+        }
+        assert!(probes(&all_hits(&p)).is_empty());
+    }
+
+    #[test]
+    fn a_symbol_that_reads_is_not_a_probe_at_its_own_position() {
+        let p = Render::px(3.0).profile(&ean13_modules("5901234123457"));
+        let hits = all_hits(&p);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text, b"5901234123457");
     }
 
     #[test]
@@ -971,6 +1140,7 @@ mod tests {
             let runs = Runs::from_widths(true, &w, 60.0, 60.0);
             let mut out = Vec::new();
             EanDecoder.decode(&runs, &opts(), &mut out);
+            out.retain(|h| !h.text.is_empty());
             out
         };
         assert_eq!(decode_with_weak(&[]).len(), 1);

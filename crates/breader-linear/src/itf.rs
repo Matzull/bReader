@@ -41,8 +41,9 @@ static DIGIT_BY_MASK: [u8; 32] = {
     t
 };
 
-/// Minimum quiet zone on each side, in narrow element widths.
-const QUIET: f32 = 10.0;
+/// Minimum quiet zone on each side, in narrow element widths (6 since D-057,
+/// 10 before; the specification asks for 10, tightly cropped labels have 6).
+const QUIET: f32 = 6.0;
 /// Accepted ratio between the mean wide and the mean narrow element of
 /// a digit.
 const RATIO: (f32, f32) = (1.6, 3.4);
@@ -359,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn quiet_zone_of_ten_narrow_widths_is_required() {
+    fn quiet_zone_of_six_narrow_widths_is_required() {
         let text = with_gs1_check("1234567890123");
         let modules = itf_modules(&text, 3);
         let at = |left: f32, right: f32| {
@@ -371,8 +372,11 @@ mod tests {
             decode_all(&ItfDecoder, &r.profile(&modules), &opts()).len()
         };
         assert_eq!(at(11.0, 11.0), 1);
-        assert_eq!(at(8.0, 14.0), 0);
-        assert_eq!(at(14.0, 8.0), 0);
+        // D-057: 6 modules (10 before), the margin of tightly cropped labels.
+        assert_eq!(at(6.5, 6.5), 1);
+        assert_eq!(at(7.0, 14.0), 1);
+        assert_eq!(at(5.0, 14.0), 0);
+        assert_eq!(at(14.0, 5.0), 0);
     }
 
     /// Unlike the other symbologies, ITF keeps its full quiet zone when the
@@ -383,7 +387,7 @@ mod tests {
     fn a_margin_ending_at_the_border_does_not_open_the_quiet_zone() {
         let text = with_gs1_check("1234567890123");
         let modules = itf_modules(&text, 3);
-        for (left, right) in [(1.0, 14.0), (14.0, 1.0), (4.0, 4.0), (9.0, 9.0)] {
+        for (left, right) in [(1.0, 14.0), (14.0, 1.0), (4.0, 4.0), (5.0, 5.0)] {
             let r = Render {
                 quiet_left: left,
                 quiet_right: right,
