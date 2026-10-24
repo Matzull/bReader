@@ -792,6 +792,8 @@ struct QuadScratch {
     keep: Vec<bool>,
     stack: Vec<(usize, usize)>,
     on: Vec<(f32, f32)>,
+    proj: Vec<f32>,
+    elen: Vec<f32>,
 }
 
 /// Douglas-Peucker simplification of a closed polygon.
@@ -905,6 +907,34 @@ fn sweep_table() -> &'static [(f32, f32); SWEEP] {
 /// Directions of the 1 degree style sweep of `enclosing_quad`.
 const SWEEP: usize = 72;
 
+/// Support line of `poly` in the direction `(c, s)` and the length of the
+/// polygon edges (`elen`, in order) that lie within `t` of it, as
+/// `(cover, offset)`. `proj` is a buffer of one value per polygon point: each
+/// projection is computed once and read for the offset and for both ends of
+/// the edges, with the expression and the summation order of the plain
+/// version, so the result is bit-identical to it.
+fn cover_along(
+    poly: &[(f32, f32)],
+    elen: &[f32],
+    proj: &mut [f32],
+    s: f32,
+    c: f32,
+    t: f32,
+) -> (f32, f32) {
+    for (q, p) in proj.iter_mut().zip(poly) {
+        *q = p.0 * c + p.1 * s;
+    }
+    let off = proj.iter().copied().fold(f32::MIN, f32::max);
+    let mut cover = 0.0;
+    let hp = poly.len();
+    for (j, &len) in elen.iter().enumerate() {
+        if off - proj[j] <= t && off - proj[(j + 1) % hp] <= t {
+            cover += len;
+        }
+    }
+    (cover, off)
+}
+
 /// Quad bounded by the four hull sides that are best supported by hull edges
 /// (a side is a line carrying hull edges: the tips of a clock track, a solid
 /// finder edge), with turns between consecutive sides of 55 to 125 degrees.
@@ -916,6 +946,8 @@ fn enclosing_quad(
     poly: &[(f32, f32)],
     sides: &mut Vec<Side>,
     on: &mut Vec<(f32, f32)>,
+    proj: &mut Vec<f32>,
+    elen: &mut Vec<f32>,
 ) -> Option<[(f32, f32); 4]> {
     let h = pts.len();
     let hp = poly.len();
@@ -929,21 +961,15 @@ fn enclosing_quad(
         .sum();
     let t = tol(perimeter / 4.0);
     // Coverage of the support line at every angle: hull edge length lying
-    // within the tolerance of the line.
-    let cover_at = |s: f32, c: f32| {
-        let off = poly
-            .iter()
-            .map(|p| p.0 * c + p.1 * s)
-            .fold(f32::MIN, f32::max);
-        let mut cover = 0.0;
-        for j in 0..hp {
-            let (u, v) = (poly[j], poly[(j + 1) % hp]);
-            if off - (u.0 * c + u.1 * s) <= t && off - (v.0 * c + v.1 * s) <= t {
-                cover += hyp(v.0 - u.0, v.1 - u.1);
-            }
-        }
-        (cover, off)
-    };
+    // within the tolerance of the line. The edge lengths are measured once.
+    elen.clear();
+    elen.extend((0..hp).map(|j| {
+        let (u, v) = (poly[j], poly[(j + 1) % hp]);
+        hyp(v.0 - u.0, v.1 - u.1)
+    }));
+    proj.clear();
+    proj.resize(hp, 0.0);
+    let mut cover_at = |s: f32, c: f32| cover_along(poly, elen, proj, s, c, t);
     // Candidate directions: a 1 degree sweep plus the direction of each hull
     // edge; keep the best-covered, mutually distinct ones.
     for (k, &(s, c)) in sweep_table().iter().enumerate() {
@@ -980,11 +1006,15 @@ fn enclosing_quad(
     let mut kept = 0;
     for i in 0..sides.len() {
         let cand = sides[i];
-        let dup = sides[..kept].iter().any(|q| {
-            let d = normalize_angle(q.phi - cand.phi + std::f32::consts::PI) - std::f32::consts::PI;
-            d.abs() < 4.0f32.to_radians()
-        });
-        if !dup && cand.cover > 0.0 {
+        // Sides that carry no hull edge are dropped whatever their angle, so
+        // the (costlier) angle test is only made for the others.
+        if cand.cover > 0.0
+            && !sides[..kept].iter().any(|q| {
+                let d =
+                    normalize_angle(q.phi - cand.phi + std::f32::consts::PI) - std::f32::consts::PI;
+                d.abs() < 4.0f32.to_radians()
+            })
+        {
             sides[kept] = cand;
             kept += 1;
         }
@@ -1229,7 +1259,14 @@ fn fit_quad(
             hyp(b.0 - a.0, b.1 - a.1)
         })
         .sum();
-    let main = enclosing_quad(chain, &scratch.poly, sides, &mut scratch.on);
+    let main = enclosing_quad(
+        chain,
+        &scratch.poly,
+        sides,
+        &mut scratch.on,
+        &mut scratch.proj,
+        &mut scratch.elen,
+    );
     if let Some(corners) = main {
         let qa = area_f(&corners);
         if qa > 0.0 && quad_sides(&corners).is_some() {

@@ -468,3 +468,87 @@ fn track_warp_places_the_boundaries_of_a_compressed_axis() {
     assert!(plain_agreement < 0.9, "{plain_agreement}");
     assert!(warped_agreement >= 0.97, "{warped_agreement}");
 }
+
+/// The RANSAC line pick as it was written before the error was summed only
+/// for candidates that can be kept (D-056).
+fn ransac_reference(
+    edge: &[(f32, f32)],
+    len: f32,
+    tol: f32,
+    rng: &mut u64,
+) -> Option<(usize, f32, f32, f32)> {
+    let mut best: Option<(usize, f32, f32, f32)> = None;
+    for _ in 0..64 {
+        *rng ^= *rng << 13;
+        *rng ^= *rng >> 7;
+        *rng ^= *rng << 17;
+        let i = (*rng % edge.len() as u64) as usize;
+        let j = ((*rng >> 24) % edge.len() as u64) as usize;
+        let (p, r) = (edge[i], edge[j]);
+        if (p.0 - r.0).abs() < 0.3 * len {
+            continue;
+        }
+        let g = (r.1 - p.1) / (r.0 - p.0);
+        let c = p.1 - g * p.0;
+        let (mut n_in, mut err) = (0usize, 0.0f32);
+        for &(x, o) in edge {
+            let e = (o - (c + g * x)).abs();
+            if e <= tol {
+                n_in += 1;
+                err += e;
+            }
+        }
+        if best.is_none_or(|b| n_in > b.0 || (n_in == b.0 && err < b.3)) {
+            best = Some((n_in, c, g, err));
+        }
+    }
+    best
+}
+
+#[test]
+fn ransac_line_matches_the_summing_reference() {
+    let mut s = 0x1357_9bdf_2468_ace0u64;
+    let mut next = move || {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        (s >> 40) as f32 / (1u64 << 24) as f32
+    };
+    let mut some = 0;
+    for round in 0..3000 {
+        let len = 40.0 + next() * 200.0;
+        let count = 12 + (next() * 117.0) as usize;
+        let slope = (next() - 0.5) * 0.1;
+        let off = next() * 2.0 - 1.0;
+        let outliers = [0.0, 0.2, 0.5, 0.8][round % 4];
+        let edge: Vec<(f32, f32)> = (0..count)
+            .map(|i| {
+                let x = len * (i as f32 + 0.5) / count as f32;
+                let o = if next() < outliers {
+                    next() * 6.0 - 2.0
+                } else {
+                    off + slope * x + (next() - 0.5) * 0.4
+                };
+                (x, o)
+            })
+            .collect();
+        let tol = 0.7 + next();
+        let seed = 0x2545_F491_4F6C_DD1Du64 ^ round as u64;
+        let (mut ra, mut rb) = (seed, seed);
+        let want = ransac_reference(&edge, len, tol, &mut ra);
+        let got = ransac_line(&edge, len, tol, &mut rb);
+        assert_eq!(ra, rb);
+        match (want, got) {
+            (None, None) => {}
+            (Some(w), Some(g)) => {
+                some += 1;
+                assert_eq!(w.0, g.0);
+                assert_eq!(w.1.to_bits(), g.1.to_bits());
+                assert_eq!(w.2.to_bits(), g.2.to_bits());
+                assert_eq!(w.3.to_bits(), g.3.to_bits());
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    assert!(some > 2000, "{some}");
+}

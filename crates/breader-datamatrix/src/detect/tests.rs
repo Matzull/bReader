@@ -236,3 +236,62 @@ fn morphology_matches_naive() {
         }
     }
 }
+
+/// The support-line coverage of `enclosing_quad` as it was computed before
+/// the projections and edge lengths were shared (D-056).
+fn cover_reference(poly: &[(f32, f32)], s: f32, c: f32, t: f32) -> (f32, f32) {
+    let hp = poly.len();
+    let off = poly
+        .iter()
+        .map(|p| p.0 * c + p.1 * s)
+        .fold(f32::MIN, f32::max);
+    let mut cover = 0.0;
+    for j in 0..hp {
+        let (u, v) = (poly[j], poly[(j + 1) % hp]);
+        if off - (u.0 * c + u.1 * s) <= t && off - (v.0 * c + v.1 * s) <= t {
+            cover += hyp(v.0 - u.0, v.1 - u.1);
+        }
+    }
+    (cover, off)
+}
+
+#[test]
+fn shared_projections_give_the_coverage_bit_for_bit() {
+    let mut rng = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = || {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        (rng >> 40) as f32 / (1u64 << 24) as f32
+    };
+    let (mut proj, mut elen) = (Vec::new(), Vec::new());
+    let mut covered = 0;
+    for _ in 0..400 {
+        let hp = 2 + (next() * 30.0) as usize;
+        let poly: Vec<(f32, f32)> = (0..hp)
+            .map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / hp as f32;
+                let r = 20.0 + next() * 120.0;
+                (300.0 + r * a.cos(), 200.0 + r * a.sin())
+            })
+            .collect();
+        elen.clear();
+        elen.extend((0..hp).map(|j| {
+            let (u, v) = (poly[j], poly[(j + 1) % hp]);
+            hyp(v.0 - u.0, v.1 - u.1)
+        }));
+        proj.clear();
+        proj.resize(hp, 0.0);
+        for k in 0..90 {
+            let a = k as f32 * 0.07 + next() * 0.05;
+            let (s, c) = a.sin_cos();
+            let t = 1.2 + 6.0 * next();
+            let want = cover_reference(&poly, s, c, t);
+            let got = cover_along(&poly, &elen, &mut proj, s, c, t);
+            assert_eq!(got.0.to_bits(), want.0.to_bits());
+            assert_eq!(got.1.to_bits(), want.1.to_bits());
+            covered += usize::from(want.0 > 0.0);
+        }
+    }
+    assert!(covered > 2000, "{covered}");
+}
