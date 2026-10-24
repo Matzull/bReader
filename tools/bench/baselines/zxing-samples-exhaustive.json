@@ -132,7 +132,7 @@
     "ean13-2": {
       "EAN-13": {
         "expected": 16,
-        "read": 7,
+        "read": 8,
         "false_positives": 0
       }
     },
@@ -146,7 +146,7 @@
     "ean13-4": {
       "EAN-13": {
         "expected": 20,
-        "read": 8,
+        "read": 9,
         "false_positives": 0
       }
     },
@@ -160,7 +160,7 @@
     "ean8-1": {
       "EAN-8": {
         "expected": 9,
-        "read": 8,
+        "read": 9,
         "false_positives": 0
       }
     },
@@ -169,7 +169,7 @@
     "itf-1": {
       "ITF": {
         "expected": 14,
-        "read": 7,
+        "read": 12,
         "false_positives": 0
       }
     },
@@ -266,7 +266,7 @@
     "rss14-1": {
       "GS1 DataBar": {
         "expected": 13,
-        "read": 10,
+        "read": 11,
         "false_positives": 0
       }
     },
@@ -365,7 +365,7 @@
     "upce-2": {
       "UPC-E": {
         "expected": 15,
-        "read": 13,
+        "read": 14,
         "false_positives": 0
       }
     },

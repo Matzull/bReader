@@ -183,7 +183,7 @@
       },
       "ITF": {
         "expected": 27,
-        "read": 17,
+        "read": 20,
         "false_positives": 0
       },
       "QR Code": {
@@ -227,7 +227,7 @@
       },
       "ITF": {
         "expected": 5,
-        "read": 3,
+        "read": 5,
         "false_positives": 0
       },
       "PDF417": {

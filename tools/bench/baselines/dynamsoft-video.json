@@ -38,7 +38,7 @@
     "batch_EAN13_1080p": {
       "balanced": {
         "expected": 28,
-        "read": 25,
+        "read": 26,
         "false_positives": 0
       },
       "fast": {

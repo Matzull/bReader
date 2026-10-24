@@ -10,12 +10,12 @@
       },
       "EAN-13": {
         "expected": 125,
-        "read": 91,
+        "read": 93,
         "false_positives": 0
       },
       "UPC-A": {
         "expected": 4,
-        "read": 2,
+        "read": 3,
         "false_positives": 0
       }
     },
@@ -41,7 +41,7 @@
       },
       "EAN-13": {
         "expected": 715,
-        "read": 600,
+        "read": 602,
         "false_positives": 0
       },
       "EAN-8": {
@@ -90,7 +90,7 @@
       },
       "EAN-13": {
         "expected": 42,
-        "read": 39,
+        "read": 40,
         "false_positives": 0
       },
       "EAN-8": {
@@ -107,7 +107,7 @@
     "Muenster": {
       "EAN-13": {
         "expected": 322,
-        "read": 262,
+        "read": 264,
         "false_positives": 0
       },
       "EAN-8": {
@@ -183,7 +183,7 @@
       },
       "ITF": {
         "expected": 27,
-        "read": 18,
+        "read": 20,
         "false_positives": 0
       },
       "QR Code": {
@@ -222,12 +222,12 @@
       },
       "EAN-13": {
         "expected": 76,
-        "read": 60,
+        "read": 61,
         "false_positives": 0
       },
       "ITF": {
         "expected": 5,
-        "read": 3,
+        "read": 5,
         "false_positives": 0
       },
       "PDF417": {

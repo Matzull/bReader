@@ -30,7 +30,7 @@
       },
       "ITF": {
         "expected": 4,
-        "read": 3,
+        "read": 4,
         "false_positives": 0
       },
       "PDF417": {
@@ -45,7 +45,7 @@
       },
       "UPC-A": {
         "expected": 74,
-        "read": 71,
+        "read": 72,
         "false_positives": 0
       }
     }

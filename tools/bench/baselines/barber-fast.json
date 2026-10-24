@@ -95,7 +95,7 @@
       },
       "Code 39": {
         "expected": 147,
-        "read": 39,
+        "read": 42,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -228,7 +228,7 @@
       },
       "ITF": {
         "expected": 49,
-        "read": 31,
+        "read": 38,
         "false_positives": 0
       },
       "QR Code": {
@@ -282,7 +282,7 @@
       },
       "ITF": {
         "expected": 20,
-        "read": 13,
+        "read": 17,
         "false_positives": 0
       },
       "PDF417": {
