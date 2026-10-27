@@ -43,7 +43,7 @@ fuzz_target!(|data: &[u8]| {
     };
     let mut set = SymbologySet::EMPTY;
     for (i, s) in Symbology::ALL.iter().enumerate() {
-        if subset >> i & 1 == 1 {
+        if subset >> (i % 8) & 1 == 1 {
             set = set.with(*s);
         }
     }

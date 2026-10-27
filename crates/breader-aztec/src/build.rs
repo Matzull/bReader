@@ -49,6 +49,11 @@ pub(crate) fn stuff(bits: &[bool], w: usize) -> Vec<u16> {
 /// The smallest layout whose data codewords can hold `words` words of size
 /// `w(layout)` plus `min_ec` check words. `bits` is stuffed per layout.
 pub(crate) fn fit(bits: &[bool], min_ec: usize) -> Option<(Layout, Vec<u16>)> {
+    // The mode message counts the data codewords less one: a symbol holds at
+    // least one.
+    if bits.is_empty() {
+        return None;
+    }
     let layouts = (1..=4)
         .map(|layers| Layout {
             compact: true,

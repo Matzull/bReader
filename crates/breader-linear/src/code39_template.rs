@@ -93,7 +93,7 @@ const LUT_STEPS: f32 = 32.0;
 const LUT_LEN: usize = (2.0 * REACH * LUT_STEPS) as usize + 1;
 
 /// The 44 characters as (character, mask of wide elements).
-const TEMPLATES: [(u8, u16); 44] = {
+pub(crate) const TEMPLATES: [(u8, u16); 44] = {
     let mut t = [(0u8, 0u16); 44];
     let mut k = 0;
     let mut mask = 0;
