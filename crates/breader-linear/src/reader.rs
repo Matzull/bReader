@@ -7,6 +7,7 @@ use breader_core::{
 use crate::aggregate::{Aggregator, PlacedHit, Settings};
 use crate::codabar::CodabarDecoder;
 use crate::code39::Code39Decoder;
+use crate::code39_template;
 use crate::code93::Code93Decoder;
 use crate::code128::Code128Decoder;
 use crate::databar::DataBarDecoder;
@@ -54,6 +55,7 @@ struct Stage {
     edge_params: Vec<EdgeParams>,
     marks: Vec<Mark>,
     raw_marks: Vec<RawMark>,
+    template: code39_template::Scratch,
 }
 
 /// Buffers and decode state of one `scan` call.
@@ -83,6 +85,7 @@ impl Work {
         let stage = &mut self.stage;
         stage.hits.clear();
         stage.aggregator.reset();
+        stage.template.new_scan();
         stage.probes.clear();
         stage.edge_params.clear();
         stage.marks.clear();
@@ -155,7 +158,9 @@ fn scan_profile<D: LinearDecoder>(
     let mut retry = false;
     let mut decoded = false;
     let mut thin_seen = false;
-    for (variant, params) in stage.edge_params.iter().enumerate() {
+    stage.template.clear();
+    for variant in 0..stage.edge_params.len() {
+        let params = stage.edge_params[variant];
         // The later variants only matter when an earlier one saw a start
         // pattern it could not decode; the last one, the crossing detector,
         // only on a line where no symbol was read and a decoder found the start
@@ -168,7 +173,7 @@ fn scan_profile<D: LinearDecoder>(
         if skip {
             continue;
         }
-        stage.detector.detect(profile, params, &mut stage.edges);
+        stage.detector.detect(profile, &params, &mut stage.edges);
         Runs::from_edges(&stage.edges, &mut stage.runs);
         if stage.runs.is_empty() {
             continue;
@@ -193,38 +198,63 @@ fn scan_profile<D: LinearDecoder>(
             }
         }
         thin_seen |= stage.runs.thin_start() || stage.reversed.thin_start();
-        for hit in stage.hits.drain(..) {
-            let probe = hit.text.is_empty();
-            if probe && stage.probes.len() >= MAX_PROBES {
-                continue;
-            }
-            let placed = PlacedHit {
-                symbology: hit.symbology,
-                text: hit.text,
-                addon: hit.addon,
-                from: line.point_at(hit.start),
-                to: line.point_at(hit.end),
-                line: index,
-                step,
-                module: hit.module,
-                quality: hit.quality,
-                aim: hit.aim,
-                checksum_verified: hit.checksum_verified,
-                short_quiet: hit.short_quiet,
-                inverted: hit.inverted,
-                start_stop: hit.start_stop,
-                segments: hit.segments,
-                thin: hit.thin,
-                part: hit.part,
-            };
-            if probe {
-                stage.probes.push(placed);
-            } else {
-                decoded = true;
-                stage.aggregator.push(placed);
-            }
+        stage.template.note(&stage.runs, false, profile.len());
+        stage.template.note(&stage.reversed, true, profile.len());
+        decoded |= absorb_hits(stage, line, index, step);
+    }
+    // Last resort for thin Code 39: templates against the grey profile
+    // (D-058), where nothing was read on the line and a start of a small
+    // Code 39 symbol is possible. Not at Fast.
+    if !decoded && !opts.single_variant && opts.symbologies.contains(Symbology::Code39) {
+        stage
+            .template
+            .note_stretches(&stage.runs, false, profile.len());
+        stage
+            .template
+            .note_stretches(&stage.reversed, true, profile.len());
+        let hits = &mut stage.hits;
+        hits.clear();
+        code39_template::read_line(profile, opts, &mut stage.template, hits);
+        absorb_hits(stage, line, index, step);
+    }
+}
+
+/// Moves the hits of one line into the aggregator and the probes; true when a
+/// symbol (not a probe) was among them.
+fn absorb_hits(stage: &mut Stage, line: &Scanline, index: u32, step: f32) -> bool {
+    let mut decoded = false;
+    for hit in stage.hits.drain(..) {
+        let probe = hit.text.is_empty();
+        if probe && stage.probes.len() >= MAX_PROBES {
+            continue;
+        }
+        let placed = PlacedHit {
+            symbology: hit.symbology,
+            text: hit.text,
+            addon: hit.addon,
+            from: line.point_at(hit.start),
+            to: line.point_at(hit.end),
+            line: index,
+            step,
+            module: hit.module,
+            quality: hit.quality,
+            aim: hit.aim,
+            checksum_verified: hit.checksum_verified,
+            short_quiet: hit.short_quiet,
+            inverted: hit.inverted,
+            start_stop: hit.start_stop,
+            segments: hit.segments,
+            thin: hit.thin,
+            part: hit.part,
+        };
+        if probe {
+            stage.probes.push(placed);
+        } else {
+            decoded = true;
+            stage.aggregator.push(placed);
         }
     }
+    decoded
 }
 
 /// Pre-sampled profiles of the column and oblique lines of a plan.
@@ -871,6 +901,48 @@ mod tests {
             thin: false,
             part: false,
         }
+    }
+
+    /// The modules of a Code 39 symbol at four times the resolution, every bar
+    /// eroded by a quarter of a module on each side: a print that is too thin
+    /// for the element widths of a line to be trusted.
+    fn thin_bar_modules(text: &str) -> Vec<bool> {
+        let fine: Vec<bool> = code39_modules(text, 2, 1)
+            .into_iter()
+            .flat_map(|m| [m; 4])
+            .collect();
+        (0..fine.len())
+            .map(|i| fine[i] && i > 0 && fine[i - 1] && i + 1 < fine.len() && fine[i + 1] || false)
+            .collect()
+    }
+
+    #[test]
+    fn thin_bars_read_through_the_template_fallback_but_not_at_fast() {
+        // 1.35 samples per module; the template fallback is Balanced and
+        // Exhaustive only (D-058).
+        let modules = thin_bar_modules("9033296");
+        let mut balanced = 0;
+        for phase in 0..6 {
+            let mut img = blank(900, 600, 230);
+            let place = Placement {
+                module_px: 1.35 / 4.0,
+                height_px: 80.0,
+                center: (450.0 + phase as f32 * 0.17, 300.0),
+                angle_deg: 0.0,
+            };
+            draw_symbol(&mut img, &modules, place, 30);
+            for effort in [Effort::Fast, Effort::Balanced, Effort::Exhaustive] {
+                for s in scan(&img, &ScanOptions::with_effort(effort)) {
+                    assert_eq!(
+                        (s.symbology, &s.data[..]),
+                        (Symbology::Code39, &b"9033296"[..])
+                    );
+                    assert_ne!(effort, Effort::Fast, "{phase}");
+                    balanced += usize::from(effort == Effort::Balanced);
+                }
+            }
+        }
+        assert!(balanced >= 3, "{balanced}");
     }
 
     #[test]
