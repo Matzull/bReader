@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use crate::edges::Edges;
 
@@ -18,10 +18,16 @@ pub struct Runs {
     /// A decoder found a start pattern of a symbol with a narrow element of
     /// at most `THIN_START_MODULE` samples (see [`Runs::note_start`]).
     thin_start: Cell<bool>,
+    /// Runs where a Code 39 start character of a small symbol passed the
+    /// width-based tests (see [`Runs::note_thin_start`]).
+    thin_starts: RefCell<Vec<usize>>,
 }
 
 /// Largest module, in samples, of a start pattern that [`Runs::note_start`] reports.
 pub const THIN_START_MODULE: f32 = 2.4;
+
+/// Thin Code 39 starts kept per runs.
+const MAX_THIN_STARTS: usize = 8;
 
 /// Smallest margin to the profile border, in samples, that is trusted as a
 /// light area rather than as the border cutting through an element.
@@ -30,6 +36,7 @@ const OPEN_MARGIN: f32 = 1.0;
 impl Runs {
     pub fn from_edges(edges: &Edges, out: &mut Self) {
         out.thin_start.set(false);
+        out.thin_starts.get_mut().clear();
         out.widths.clear();
         out.edges.clear();
         let items = edges.as_slice();
@@ -50,6 +57,7 @@ impl Runs {
     /// Fills `self` with `src` read from the other end.
     pub fn reverse_from(src: &Self, out: &mut Self) {
         out.thin_start.set(false);
+        out.thin_starts.get_mut().clear();
         out.widths.clear();
         out.edges.clear();
         out.widths.extend(src.widths.iter().rev());
@@ -66,6 +74,21 @@ impl Runs {
         if module <= THIN_START_MODULE {
             self.thin_start.set(true);
         }
+    }
+
+    /// Records that run `i` begins a Code 39 start character of a small symbol
+    /// that the width-based decoder did not read to its end (at most
+    /// `MAX_THIN_STARTS` are kept). The template fallback tries these.
+    pub fn note_thin_start(&self, i: usize) {
+        let mut starts = self.thin_starts.borrow_mut();
+        if starts.len() < MAX_THIN_STARTS {
+            starts.push(i);
+        }
+    }
+
+    /// The runs recorded by [`Runs::note_thin_start`].
+    pub fn thin_starts(&self) -> std::cell::Ref<'_, Vec<usize>> {
+        self.thin_starts.borrow()
     }
 
     /// Whether [`Runs::note_start`] saw a small module since these runs were built.
@@ -95,6 +118,7 @@ impl Runs {
             lead,
             trail,
             thin_start: Cell::new(false),
+            thin_starts: RefCell::new(Vec::new()),
         }
     }
 
@@ -310,5 +334,28 @@ mod tests {
         rev.note_start(1.0);
         Runs::from_edges(&edges, &mut rev);
         assert!(!rev.thin_start());
+    }
+
+    #[test]
+    fn thin_code_39_starts_are_kept_up_to_a_limit_until_the_runs_are_rebuilt() {
+        let runs = Runs::from_widths(true, &[1.0; 40], 10.0, 10.0);
+        assert!(runs.thin_starts().is_empty());
+        for i in 0..2 * MAX_THIN_STARTS {
+            runs.note_thin_start(i);
+        }
+        assert_eq!(runs.thin_starts().len(), MAX_THIN_STARTS);
+        assert_eq!(runs.thin_starts()[0], 0);
+        let mut out = Runs::default();
+        Runs::reverse_from(&runs, &mut out);
+        assert!(out.thin_starts().is_empty());
+        out.note_thin_start(3);
+        let mut edges = Edges::default();
+        EdgeDetector::default().detect(
+            &[200, 200, 20, 20, 200, 200, 20, 200],
+            &EdgeParams::fine(),
+            &mut edges,
+        );
+        Runs::from_edges(&edges, &mut out);
+        assert!(out.thin_starts().is_empty());
     }
 }

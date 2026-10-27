@@ -147,3 +147,25 @@ Measured on main `26d63c8` against this change (Balanced, per image against zxin
 | EAN-13, zxing samples | 45 | 39 | 42 |
 | EAN-8, zxing samples | 9 | 8 | 9 |
 | GS1 DataBar, zxing samples | 17 | 16 | 17 |
+
+## 9. Round 3: thin Code 39 by templates ([D-058](decisions.md#d-058))
+
+Measured on main `afcf9b8` against this change (Balanced, per image against zxing-cpp 3.1.1, black box through `py_bench.py`; no source of either was read). Section 8 left 17 InventBar labels whose rows fail on the elements, with the template match of the profile (the blur and scale of the start character) as the untried step. D-058 is that step.
+
+**Triage.** 16 labels were read by zxing-cpp and not by breader (`ProductBarcode127`, `147_0`, `151`, `176`, `193`, `202`, `259`, `281_0`, `295`, `313`, `327_0`, `334_0`, `374`, `392`, `420`, `483_0`; 640 x 480, 7 digits). The rows of `127` (every row of the image, grey values) have crisp edges, dark 12 to 30 against light 170 to 190, so this is not blur: the bars are about 0.75 sample wide and the spaces 2.5, a print gain of about -0.5 sample per side at 1.65 samples per module, and the sampling phase decides whether a one-sample bar is a minimum of 80 or one of 20. Edges placed on such a profile scatter by a quarter of a module and elements merge (section 8), which is why the widths of a character are the wrong thing to classify. A correlation of the profile with the ideal profile of each of the 44 characters (bars of the print model, a Gaussian blur, a print gain), fitted on the start character, reads the symbol on 5 of 9 sampled rows of `127` where the widths decode 2 of 40.
+
+**Outcome (Balanced).** Code 39 on BarBeR 141 to 154 of 198 (zxing-cpp 149; Exhaustive 146 to 154), InventBar 103 to 114 of 147 (zxing-cpp 118), 0 false positives on every set and effort, challenging-images Balanced p50 +1.2 percent, Fast untouched. Images with new reads: `127`, `176`, `183`, `185_0`, `250`, `285`, `309_0`, `360_0`, `392`, `395_0`, `510`, `Special_0055` (BarBeR +13 labels). Still unread although zxing-cpp reads them (13): `147_0`, `151`, `193`, `202`, `259`, `281_0`, `295`, `313`, `327_0`, `334_0`, `374`, `420`, `483_0`. For these the start fit or the margin rule decides: `259` and `374` were read by intermediate versions of the fit and not by the final one; `281_0` is tilted by 4.5 degrees at about 1.1 samples per module; the others were not analysed further. Breader reads 8 ZVZ-real labels and 9 InventBar labels that zxing-cpp does not.
+
+| Class, set (Balanced, reads) | zxing-cpp | `afcf9b8` | D-058 |
+|---|---|---|---|
+| Code 39, BarBeR | 149 | 141 | 154 |
+| Code 39, InventBar | 118 | 103 | 114 |
+| Code 39, zxing samples | 14 | 11 | 11 |
+| ITF, zxing samples (open length list, proposal) | 20 | 12 | 18 |
+
+**What the margin means.** At 1.35 samples per module a narrow bar that moves by one module changes the correlation of its character by a few percent, so a damaged character can be read as its nearest valid neighbour. The existing test `code_39_that_fails_part_way_is_never_reported` showed it (six inverted modules at 2 samples per module read as `ABC0821`) and led to the rule that the centre of every inter-character gap must be light. Characters stay a risk the margin (0.02 over the second best) and the 4 independent lines of D-043 only reduce; no false positive was seen on 8748 BarBeR images, the zxing samples, challenging-images, the synthetic sets with negatives and UPS.
+
+**Free gains in the zxing samples (Code 39 `1`, `2`, `wide`).** `1` ("TEST-SHEET") is cut by the border; `2` ("12ab") and `wide` ("Aa-1234") are Full ASCII labels, an owner default. None is reachable without a default.
+
+**Owner proposals measured on this tree (not applied).** ITF accepts any even length of 6 or more: zxing samples ITF 9 to 15 / 12 to 18 / 12 to 18 of 20 (Fast / Balanced / Exhaustive), every other set unchanged, 0 false positives; of 4 or more the same reads and 1 false positive (`code128-2/37.webp` read as ITF `9004`). Code 93 quiet zone 4 (now) to 3: no change; to 2: zxing samples Code 93 1 to 2 of 3, 0 false positives. `DENSE_MAX_PIXELS` 262 144: +1 read on BarBeR full Balanced for +8 percent challenging-images p50. Details in D-058 (6).
+

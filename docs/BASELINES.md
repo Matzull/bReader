@@ -15,6 +15,25 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-27: Code 39 template fallback ([D-058](decisions.md#d-058))
+
+Main `afcf9b8` against the D-058 tree (3700X, Rust `bench --jobs 16`, heavy lock; latency `--jobs 1`, interleaved). 0 false positives on every set and effort, no read below main anywhere. The shared baselines were not rewritten (the orchestrator does that); read increases are notices.
+
+| Set, effort | Reads before to after | Code 39 |
+|---|---|---|
+| BarBeR full, Balanced | 6529 to 6542 | 141 to 154 (zxing-cpp 149) |
+| BarBeR full, Exhaustive | 6705 to 6713 | 146 to 154 |
+| BarBeR development subset | Fast 1514 (22 Code 39), Balanced 1793 to 1796, Exhaustive 1843 to 1845 | Fast 22 to 22, Balanced 35 to 38, Exhaustive 35 to 37 |
+| challenging-images | Fast 334, Balanced 413, Exhaustive 426 | unchanged |
+| zxing samples | Fast 643, Balanced 769, Exhaustive 775 | unchanged (Code 39 7 / 11 / 11 of 14) |
+| synth seeds 1 and 2024, UPS | all efforts unchanged | unchanged |
+
+Latency, challenging-images Balanced p50, `--jobs 1`, 7 interleaved rounds, main against D-058: 20.46 / 19.58 / 19.55 / 19.63 / 20.04 / 19.76 / 19.56 against 20.08 / 19.81 / 20.05 / 19.81 / 19.86 / 19.89 / 19.83 ms (medians 19.63 and 19.86, +1.2 percent); mean scan time over the 68 images 44.2 against 44.6 ms (+1.2 percent). Fast 1080p videos (`video-bench --engines fast --filter 1080p`), 3 rounds interleaved: median video p50 8.1 against 8.2 ms, worst `batch_code39_1080p` 12.1 against 12.1 ms (13 ms target), reads equal on every video; Fast does not run the fallback.
+
+Proposals for the owner, measured as separate builds on top of this tree and reverted (D-058 (6)): ITF with any even length of 6 or more, zxing samples ITF 9 to 15 / 12 to 18 / 12 to 18 of 20 (Fast / Balanced / Exhaustive), 0 false positives, every other set unchanged; ITF of 4 or more: the same reads and 1 false positive (`code128-2/37.webp` as ITF `9004`); Code 93 quiet zone 4 (current) to 3: no change, to 2: zxing samples Code 93 1 to 2 of 3 and BarBeR full EAN-13 +2 Balanced, 0 false positives; `DENSE_MAX_PIXELS` 262 144: BarBeR full Balanced 6542 to 6543, challenging-images Balanced p50 19.86 to 21.46 ms (+8 percent, 6 interleaved rounds).
+
+Gaps to zxing-cpp at Balanced after the change: BarBeR Code 39 ahead (154 against 149), ITF 58 against 59 (-1); zxing samples EAN-13 -3, Codabar -2, Code 93 -2, Code 39 and Code 128 -1 each (owner defaults and Full ASCII, see D-057 and D-058).
+
 ## Status 2026-10-24: round 2 combined (D-056, D-057)
 
 Main after the merge of D-057 (`b66c519`) plus the clippy 1.99 fixes (rust 1.99.1 is now the installed toolchain). Clippy, the workspace tests and the release tier (23 gates) pass; the baseline rewrite raised 57 read cells and lowered none, with 0 false positives.

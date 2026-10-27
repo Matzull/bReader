@@ -6,6 +6,7 @@ mod aggregate;
 mod codabar;
 mod code128;
 mod code39;
+mod code39_template;
 mod code93;
 mod common;
 mod databar;

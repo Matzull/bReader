@@ -43,7 +43,7 @@ const SPACE_TRIPLES: [(u8, [u8; 3]); 4] = [
 const STAR: u8 = b'*';
 
 /// Character for each 9-bit mask of wide elements, 0 where none exists.
-static BY_MASK: [u8; 512] = {
+pub(crate) static BY_MASK: [u8; 512] = {
     let mut t = [0u8; 512];
     let mut k = 0;
     while k < 40 {
@@ -61,7 +61,7 @@ static BY_MASK: [u8; 512] = {
     t
 };
 
-const STAR_MASK: u16 = (1 << 1) | (1 << 4) | (1 << 6);
+pub(crate) const STAR_MASK: u16 = (1 << 1) | (1 << 4) | (1 << 6);
 
 /// Minimum quiet zone on each side, in narrow element widths. The standard
 /// asks for 10; printed labels often have 4 to 7 because of a cell border.
@@ -70,10 +70,10 @@ const QUIET: f32 = 4.0;
 /// aggregator wants an additional agreeing line.
 const FULL_QUIET: f32 = 7.0;
 /// Quiet zone of a symbol read with the relaxed rules, measured, never open.
-const THIN_QUIET: f32 = 7.0;
+pub(crate) const THIN_QUIET: f32 = 7.0;
 /// Relaxed rules apply to symbols whose narrow element is at most this many
 /// samples wide, and only where the normal ones failed.
-const THIN_MAX_MODULE: f32 = 2.4;
+pub(crate) const THIN_MAX_MODULE: f32 = 2.4;
 /// Relaxed separation of the smallest wide over the largest narrow element.
 const THIN_SEPARATION: f32 = 1.12;
 /// Cheap first screen: the quiet zone as a fraction of the start character's
@@ -272,6 +272,58 @@ fn expand_full_ascii(chars: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// The hit of a symbol whose data characters (start and stop left out) were
+/// read, with the check character, Full ASCII and length options applied;
+/// `None` when they reject it. `span` is the position of the first and the
+/// last bar edge.
+pub(crate) fn make_hit(
+    chars: &[u8],
+    opts: &LineOptions,
+    span: (f32, f32),
+    module: f32,
+    quality: f32,
+    short_quiet: bool,
+    thin: bool,
+) -> Option<LineHit> {
+    let mut data = chars;
+    let checked = opts.code39_checksum;
+    if checked {
+        if !check_ok(data) {
+            return None;
+        }
+        data = &data[..data.len() - 1];
+    }
+    let text = if opts.code39_full_ascii {
+        expand_full_ascii(data)
+    } else {
+        Some(data.to_vec())
+    }?;
+    if text.len() < opts.code39_min_length || text.is_empty() {
+        return None;
+    }
+    Some(LineHit {
+        symbology: Symbology::Code39,
+        text,
+        addon: None,
+        start: span.0,
+        end: span.1,
+        module,
+        quality,
+        aim: [
+            b']',
+            b'A',
+            b'0' + [0, 3, 4, 7][usize::from(opts.code39_full_ascii) * 2 + usize::from(checked)],
+        ],
+        checksum_verified: checked,
+        short_quiet,
+        inverted: false,
+        start_stop: None,
+        segments: 0,
+        thin,
+        part: false,
+    })
+}
+
 impl LinearDecoder for Code39Decoder {
     fn decode(&self, runs: &Runs, opts: &LineOptions, out: &mut Vec<LineHit>) -> bool {
         if !opts.symbologies.contains(Symbology::Code39) {
@@ -286,7 +338,11 @@ impl LinearDecoder for Code39Decoder {
             let mut read = read_symbol(runs, j, &mut started, false, &mut probe);
             if read.is_none() {
                 let mut thin_probe = None;
-                read = read_symbol(runs, j, &mut false, true, &mut thin_probe);
+                let mut thin_started = false;
+                read = read_symbol(runs, j, &mut thin_started, true, &mut thin_probe);
+                if read.is_none() && thin_started {
+                    runs.note_thin_start(j);
+                }
                 thin = read.is_some();
                 probe = probe.or(thin_probe);
             }
@@ -312,47 +368,23 @@ impl LinearDecoder for Code39Decoder {
                 });
             }
             if let Some(read) = read {
-                let mut data = &read.chars[..read.len];
-                let checked = opts.code39_checksum;
-                if checked {
-                    if !check_ok(data) {
+                let count = read.count as f32;
+                let hit = make_hit(
+                    &read.chars[..read.len],
+                    opts,
+                    (runs.start(j), runs.end(read.last_bar)),
+                    read.narrow_sum / count,
+                    ((read.separation_sum / count - 1.0) / 2.0).clamp(0.0, 1.0),
+                    read.short_quiet,
+                    thin,
+                );
+                match hit {
+                    Some(hit) => out.push(hit),
+                    None if opts.code39_checksum => {
                         j += 2;
                         continue;
                     }
-                    data = &data[..data.len() - 1];
-                }
-                let text = if opts.code39_full_ascii {
-                    expand_full_ascii(data)
-                } else {
-                    Some(data.to_vec())
-                };
-                if let Some(text) = text
-                    && text.len() >= opts.code39_min_length
-                    && !text.is_empty()
-                {
-                    let count = read.count as f32;
-                    out.push(LineHit {
-                        symbology: Symbology::Code39,
-                        text,
-                        addon: None,
-                        start: runs.start(j),
-                        end: runs.end(read.last_bar),
-                        module: read.narrow_sum / count,
-                        quality: ((read.separation_sum / count - 1.0) / 2.0).clamp(0.0, 1.0),
-                        aim: [
-                            b']',
-                            b'A',
-                            b'0' + [0, 3, 4, 7]
-                                [usize::from(opts.code39_full_ascii) * 2 + usize::from(checked)],
-                        ],
-                        checksum_verified: checked,
-                        short_quiet: read.short_quiet,
-                        inverted: false,
-                        start_stop: None,
-                        segments: 0,
-                        thin,
-                        part: false,
-                    });
+                    None => {}
                 }
             }
             j += 2;
@@ -935,5 +967,34 @@ mod tests {
         let mut out = Vec::new();
         Code39Decoder.decode(&runs, &opts(), &mut out);
         assert!(runs.thin_start(), "{out:?}");
+    }
+
+    #[test]
+    fn a_thin_start_that_leads_nowhere_is_noted_for_the_template_fallback() {
+        use crate::edges::{EdgeDetector, EdgeParams, Edges};
+        let runs_of = |p: &[u8]| {
+            let mut edges = Edges::default();
+            EdgeDetector::default().detect(p, &EdgeParams::fine(), &mut edges);
+            let mut runs = Runs::default();
+            Runs::from_edges(&edges, &mut runs);
+            runs
+        };
+        let mut hits = Vec::new();
+        // 1.6 samples per module with a block of six modules inverted: the start passes the
+        // thin rules, the symbol does not.
+        let mut modules = code39_modules("ABC4821", 2, 1);
+        for m in &mut modules[60..66] {
+            *m = !*m;
+        }
+        let runs = runs_of(&Render::px(1.6).profile(&modules));
+        Code39Decoder.decode(&runs, &opts(), &mut hits);
+        assert_eq!(*runs.thin_starts(), [0]);
+        // A symbol that reads, and a start that is not thin, are not noted.
+        let runs = runs_of(&prof("ABC4821", 2, 1.6));
+        Code39Decoder.decode(&runs, &opts(), &mut hits);
+        assert!(runs.thin_starts().is_empty());
+        let runs = runs_of(&Render::px(3.0).profile(&modules));
+        Code39Decoder.decode(&runs, &opts(), &mut hits);
+        assert!(runs.thin_starts().is_empty());
     }
 }
