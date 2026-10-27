@@ -58,7 +58,7 @@ symbols = reader.scan(raw_bytes, width=640, height=480, format="nv12")
 | `code39_full_ascii` | `False` | Decode Code 39 Full ASCII |
 | `code39_checksum` | `False` | Require a valid mod-43 check character |
 | `code39_min_length` | `3` | Minimum Code 39 length |
-| `itf_lengths` | `(14, 8, 10, 12, 16, 18)` | Accepted ITF digit counts (empty = any even length) |
+| `itf_lengths` | `()` | Accepted ITF digit counts; empty = any even length of at least `itf_min_length`, every one but 14 needing one more agreeing scanline |
 | `itf_min_length` | `6` | Minimum ITF length |
 
 ## Threading and performance

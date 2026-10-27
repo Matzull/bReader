@@ -61,24 +61,20 @@ impl Default for Code39Options {
 /// Interleaved 2 of 5 decoding options.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ItfOptions {
-    /// Accepted payload lengths in digits. Empty means any even length >= `min_length`.
+    /// Accepted payload lengths in digits. Empty (the default) means any even
+    /// length >= `min_length`, where every length other than 14 (GTIN-14) needs
+    /// one more agreeing scanline (decisions D-041 and D-059). An explicit list
+    /// is chosen by the caller: every listed length then needs the plain ITF
+    /// agreement.
     pub allowed_lengths: Vec<usize>,
     /// Minimum number of digits.
     pub min_length: usize,
 }
 
-impl ItfOptions {
-    /// Default lengths: 14 (GTIN-14), then 8, 10, 12, 16 and 18, which need one
-    /// more agreeing scanline than 14 (decision D-041). Any other
-    /// explicit list is chosen by the caller: every listed length then needs
-    /// the plain ITF agreement.
-    pub const DEFAULT_LENGTHS: [usize; 6] = [14, 8, 10, 12, 16, 18];
-}
-
 impl Default for ItfOptions {
     fn default() -> Self {
         Self {
-            allowed_lengths: Self::DEFAULT_LENGTHS.to_vec(),
+            allowed_lengths: Vec::new(),
             min_length: 6,
         }
     }

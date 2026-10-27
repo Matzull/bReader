@@ -1,4 +1,4 @@
-use breader_core::{EanAddonPolicy, ItfOptions, ScanOptions, Symbology, SymbologySet};
+use breader_core::{EanAddonPolicy, ScanOptions, Symbology, SymbologySet};
 
 use crate::runs::Runs;
 
@@ -55,8 +55,8 @@ pub(crate) struct LineOptions {
     /// Bit `n` set: `n` digits accepted. Only meaningful when `itf_any` is false.
     pub(crate) itf_lengths: u128,
     pub(crate) itf_any: bool,
-    /// Bit `n` set: `n` digits need one more agreeing line (the added default
-    /// lengths while the list is the default one).
+    /// Bit `n` set: `n` digits need one more agreeing line (every length but
+    /// 14 while no list is given; bit 127 stands for 127 digits and more).
     pub(crate) itf_strict: u128,
     /// Read dark-on-light symbols.
     pub normal: bool,
@@ -87,11 +87,8 @@ impl From<&ScanOptions> for LineOptions {
                 lengths |= 1 << n;
             }
         }
-        let default = ItfOptions::DEFAULT_LENGTHS
-            .iter()
-            .fold(0u128, |m, &n| m | 1 << n);
-        let itf_strict = if lengths == default {
-            default & !(1 << 14)
+        let itf_strict = if o.itf.allowed_lengths.is_empty() {
+            !(1u128 << 14)
         } else {
             0
         };
@@ -177,14 +174,10 @@ mod tests {
     fn itf_length_list_becomes_a_bitset() {
         let mut o = ScanOptions::default();
         let opts = LineOptions::from(&o);
-        for n in [8, 10, 12, 14, 16, 18] {
+        for n in [6, 8, 10, 12, 14, 16, 18, 20, 128] {
             assert!(opts.itf_length_ok(n), "{n}");
         }
-        assert!(!opts.itf_length_ok(6) && !opts.itf_length_ok(20));
-        assert_eq!(
-            opts.itf_strict,
-            (1 << 8) | (1 << 10) | (1 << 12) | (1 << 16) | (1 << 18)
-        );
+        assert_eq!(opts.itf_strict, !(1 << 14), "every length but 14 is strict");
         o.itf.allowed_lengths = vec![6, 10, 500];
         let opts = LineOptions::from(&o);
         assert!(opts.itf_length_ok(6) && opts.itf_length_ok(10) && !opts.itf_length_ok(14));
@@ -194,6 +187,7 @@ mod tests {
         assert!(!opts.itf_length_ok(500) && !opts.itf_length_ok(usize::MAX));
         o.itf.allowed_lengths.clear();
         assert!(LineOptions::from(&o).itf_length_ok(usize::MAX));
+        assert_eq!(LineOptions::from(&o).itf_strict, !(1 << 14));
     }
 
     #[test]

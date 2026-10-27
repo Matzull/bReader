@@ -156,7 +156,7 @@ def test_default_options():
     o = Reader().options
     assert o["effort"] == "balanced" and o["escalation"] is None and o["upscale_max_side"] is None
     assert o["symbologies"] == ["qr", "ean13", "ean8", "upca", "upce", "code128", "code39", "itf", "datamatrix", "pdf417", "aztec", "codabar", "micro-qr", "rmqr", "databar", "databar-limited", "databar-expanded", "code93"]
-    assert o["itf_lengths"] == (14, 8, 10, 12, 16, 18) and o["min_line_agreement"] == 2
+    assert o["itf_lengths"] == () and o["min_line_agreement"] == 2
     o["effort"] = "x"
     assert Reader().options["effort"] == "balanced"
 

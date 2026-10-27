@@ -176,7 +176,7 @@
     "itf-2": {
       "ITF": {
         "expected": 6,
-        "read": 0,
+        "read": 6,
         "false_positives": 0
       }
     },

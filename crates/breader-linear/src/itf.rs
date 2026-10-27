@@ -310,7 +310,8 @@ mod tests {
     fn length_rules() {
         let t12 = "123456789012";
         let t14 = with_gs1_check("1234567890123");
-        for n in [8, 10, 12, 14, 16, 18] {
+        // The default is any even length of 6 or more (D-059).
+        for n in [6, 8, 10, 12, 14, 16, 18, 20] {
             let t = if n == 14 {
                 t14.clone()
             } else {
@@ -319,13 +320,12 @@ mod tests {
             assert_eq!(
                 decode_all(&ItfDecoder, &prof(&t, 3, 3.0), &opts()).len(),
                 1,
-                "default list, {n} digits"
+                "default, {n} digits"
             );
         }
-        for n in [6, 20] {
-            let t = &"12345678901234567890"[..n];
-            assert!(decode_all(&ItfDecoder, &prof(t, 3, 3.0), &opts()).is_empty());
-        }
+        assert!(decode_all(&ItfDecoder, &prof("1234", 3, 3.0), &opts()).is_empty());
+        let only_14 = line_options(|o| o.itf.allowed_lengths = vec![14]);
+        assert!(decode_all(&ItfDecoder, &prof(t12, 3, 3.0), &only_14).is_empty());
         let any = decode_all(&ItfDecoder, &prof(t12, 3, 3.0), &any_length());
         assert_eq!(texts(&any), [t12.as_bytes().to_vec()]);
         assert_eq!(&any[0].aim, b"]I0");

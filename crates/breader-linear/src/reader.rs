@@ -1390,7 +1390,15 @@ mod tests {
     #[test]
     fn itf_default_lengths_beyond_14_read_with_four_lines_and_a_clear_margin() {
         let defaults = ScanOptions::default();
-        for digits in ["12345678", "1234567890", "123456789012", "1234567890123456"] {
+        // Any even length of 6 or more (D-059); every one but 14 needs 4 lines.
+        for digits in [
+            "123456",
+            "12345678",
+            "1234567890",
+            "123456789012",
+            "1234567890123456",
+            "12345678901234567890",
+        ] {
             let img = wide_picture(&itf_modules(digits, 3), 2.6, 0.0);
             let found = scan(&img, &defaults);
             assert_eq!(found.len(), 1, "{digits}");
@@ -1406,8 +1414,8 @@ mod tests {
             ..ScanOptions::default()
         };
         assert_eq!(scan(&img, &own).len(), 1);
-        // 20 digits are not on the default list.
-        let img = wide_picture(&itf_modules("12345678901234567890", 3), 2.6, 0.0);
+        // Below the minimum of 6 digits nothing is read.
+        let img = wide_picture(&itf_modules("1234", 3), 2.6, 0.0);
         assert!(scan(&img, &defaults).is_empty());
         // A quiet zone below 6 modules (D-057) rejects the symbol whatever the
         // length, one of 8 modules does not.

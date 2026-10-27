@@ -15,6 +15,10 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-27: ITF lengths by default ([D-059](decisions.md#d-059))
+
+Owner decision on the D-058 proposals: ITF reads any even length of 6 or more by default. Release tier on main `533577f` and on this change (23 gates, 0 false positives); the baseline rewrite raised 3 cells, zxing samples ITF `itf-2` 0 to 6 of 6 at Fast, Balanced and Exhaustive, and changed nothing else. The D-058 baselines were rewritten in `533577f` (7 BarBeR cells raised). The Code 93 quiet zone (4 modules) and `DENSE_MAX_PIXELS` (100 000) stay.
+
 ## Status 2026-10-27: Code 39 template fallback ([D-058](decisions.md#d-058))
 
 Main `afcf9b8` against the D-058 tree (3700X, Rust `bench --jobs 16`, heavy lock; latency `--jobs 1`, interleaved). 0 false positives on every set and effort, no read below main anywhere. The shared baselines were not rewritten (the orchestrator does that); read increases are notices.

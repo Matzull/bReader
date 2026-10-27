@@ -394,7 +394,7 @@ impl Aggregator {
             Symbology::Itf => {
                 min = min.max(ITF_MIN_AGREEMENT);
                 let digits = self.hits[members[0]].text.len();
-                if digits < 128 && settings.itf_strict >> digits & 1 == 1 {
+                if settings.itf_strict >> digits.min(127) & 1 == 1 {
                     min += 1;
                 }
             }
