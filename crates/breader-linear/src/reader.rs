@@ -365,14 +365,20 @@ fn scan_lines(
         slanted: 0,
     };
     for (i, line) in lines.iter().enumerate() {
+        if i % BUDGET_LINES == 0 {
+            stage.template.new_block();
+        }
         scan_line(img, line, i as u32, cursor, sources, profile, stage);
         cursor.advance(line);
     }
 }
 
+/// Plan lines that share a budget of template fits (D-058); a block is
+/// scanned the same way on one thread or as one parallel work item.
+const BUDGET_LINES: usize = 16;
 /// Lines per parallel work item.
 #[cfg(feature = "rayon")]
-const PAR_LINES: usize = 16;
+const PAR_LINES: usize = BUDGET_LINES;
 /// Frames below this many pixels are scanned on the calling thread.
 #[cfg(feature = "rayon")]
 const PAR_MIN_PIXELS: usize = 1 << 19;
@@ -385,6 +391,17 @@ fn parallel_worthwhile(img: &ImageView<'_>, lines: usize) -> bool {
         && !breader_core::parallel::is_sequential()
 }
 
+/// What a chunk of lines, or all of them, left in its stage.
+#[cfg(feature = "rayon")]
+#[derive(Default)]
+struct ChunkScan {
+    hits: Vec<PlacedHit>,
+    marks: Vec<Mark>,
+    probes: Vec<PlacedHit>,
+    /// The template fallback read a symbol on a line.
+    template_read: bool,
+}
+
 /// Scans the lines in fixed chunks on the rayon pool. Every chunk collects
 /// its hits on its own; they are returned in line order, so the
 /// caller sees the same sequence as `scan_lines` would push.
@@ -394,7 +411,7 @@ fn scan_lines_parallel(
     lines: &[Scanline],
     sources: &Sources<'_>,
     template: &Stage,
-) -> (Vec<PlacedHit>, Vec<Mark>, Vec<PlacedHit>) {
+) -> ChunkScan {
     use rayon::prelude::*;
     let mut starts = Vec::with_capacity(lines.len().div_ceil(PAR_LINES));
     let mut cursor = Cursor {
@@ -408,38 +425,40 @@ fn scan_lines_parallel(
         }
     }
     let edge_params = &template.edge_params;
+    let lifted = template.template.lifted();
     let fresh = || {
         let mut stage = Stage::default();
         stage.edge_params.clone_from(edge_params);
         (stage, Vec::new())
     };
-    let per_chunk: Vec<(Vec<PlacedHit>, Vec<Mark>, Vec<PlacedHit>)> = lines
+    let per_chunk: Vec<ChunkScan> = lines
         .par_chunks(PAR_LINES)
         .zip(starts.par_iter())
         .enumerate()
         .map_init(fresh, |(stage, profile), (c, (chunk, start))| {
             let mut cursor = *start;
+            stage.template.new_chunk(lifted);
             for (k, line) in chunk.iter().enumerate() {
                 let index = (c * PAR_LINES + k) as u32;
                 scan_line(img, line, index, cursor, sources, profile, stage);
                 cursor.advance(line);
             }
-            (
-                stage.aggregator.take_hits(),
-                std::mem::take(&mut stage.marks),
-                std::mem::take(&mut stage.probes),
-            )
+            ChunkScan {
+                hits: stage.aggregator.take_hits(),
+                marks: std::mem::take(&mut stage.marks),
+                probes: std::mem::take(&mut stage.probes),
+                template_read: stage.template.read(),
+            }
         })
         .collect();
-    let mut hits = Vec::new();
-    let mut marks = Vec::new();
-    let mut probes = Vec::new();
-    for (h, m, p) in per_chunk {
-        hits.extend(h);
-        marks.extend(m);
-        probes.extend(p);
+    let mut all = ChunkScan::default();
+    for chunk in per_chunk {
+        all.hits.extend(chunk.hits);
+        all.marks.extend(chunk.marks);
+        all.probes.extend(chunk.probes);
+        all.template_read |= chunk.template_read;
     }
-    (hits, marks, probes)
+    all
 }
 
 /// Parallel lines on both sides of `seed`, stopping per side once the
@@ -733,6 +752,7 @@ impl LinearReader {
             offsets: &work.offsets,
             opts: &opts,
         };
+        work.stage.template.new_pass();
         #[cfg(feature = "rayon")]
         let parallel = parallel_worthwhile(&img, lines.len());
         #[cfg(not(feature = "rayon"))]
@@ -740,19 +760,21 @@ impl LinearReader {
         if parallel {
             #[cfg(feature = "rayon")]
             {
-                let (hits, marks, probes) =
-                    scan_lines_parallel(&img, &lines, &sources, &work.stage);
-                for hit in hits {
+                let all = scan_lines_parallel(&img, &lines, &sources, &work.stage);
+                for hit in all.hits {
                     work.stage.aggregator.push(hit);
                 }
-                work.stage.marks.extend(marks);
+                work.stage.marks.extend(all.marks);
                 work.stage
                     .probes
-                    .extend(probes.into_iter().take(MAX_PROBES));
+                    .extend(all.probes.into_iter().take(MAX_PROBES));
+                work.stage.template.add_reads(all.template_read);
             }
         } else {
             scan_lines(&img, &lines, &sources, &mut work.profile, &mut work.stage);
         }
+        // The dense and refinement lines share one more block.
+        work.stage.template.new_last_block();
         let plan_lines = lines.len() as u32;
         let dense_lines =
             if effort != Effort::Fast && img.width() * img.height() <= DENSE_MAX_PIXELS {

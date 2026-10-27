@@ -115,7 +115,7 @@ fn scan_with(profile: &[u8], opts: &LineOptions) -> Vec<FuzzHit> {
     let mut detector = EdgeDetector::default();
     let mut edges = Edges::default();
     let mut template = code39_template::Scratch::default();
-    template.new_scan();
+    template.new_block();
     template.clear();
     let mut hits: Vec<LineHit> = Vec::new();
     let mut runs = Runs::default();
