@@ -80,7 +80,7 @@
       },
       "Code 39": {
         "expected": 38,
-        "read": 24,
+        "read": 25,
         "false_positives": 0
       },
       "Data Matrix": {
@@ -212,7 +212,7 @@
       },
       "Code 39": {
         "expected": 15,
-        "read": 11,
+        "read": 13,
         "false_positives": 0
       },
       "Data Matrix": {
