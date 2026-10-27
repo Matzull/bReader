@@ -131,13 +131,13 @@ Still open: 15 InventBar Code 39 labels with 1.1 to 1.4 px per module (rows deco
 
 ## 8. Round 2: triage and outcome ([D-057](decisions.md#d-057))
 
-Measured on main `26d63c8` against this change (Balanced, per image against zxing-cpp 3.1.1, black box). With the ITF quiet zone at 6 modules (owner approved on 0 false positives; 0 found) ITF reads 49 to 58 of 72 on BarBeR (zxing-cpp 59), so C4 (boxed SKUU labels with a tight margin) was mostly the quiet zone, not the pair decoding. The ITF labels zxing-cpp still reads alone are `20140607_201410` (invalid check digit, C5), `201416` (bearer bars; a tape square 6 modules from the start), `201505` and `202722` (aggregation, C3).
+Measured on main `001dec3` against this change (Balanced, per image against zxing-cpp 3.1.1, black box). With the ITF quiet zone at 6 modules (owner approved on 0 false positives; 0 found) ITF reads 49 to 58 of 72 on BarBeR (zxing-cpp 59), so C4 (boxed SKUU labels with a tight margin) was mostly the quiet zone, not the pair decoding. The ITF labels zxing-cpp still reads alone are `20140607_201410` (invalid check digit, C5), `201416` (bearer bars; a tape square 6 modules from the start), `201505` and `202722` (aggregation, C3).
 
 **Code 39 (17 InventBar labels left, 141 against 149).** Per-row analysis (every row of the image, three edge variants, both directions): `ProductBarcode475` 14 rows decode, `374` 14, `327_0` 12, `392` 11, `176` 5, `334_0` 2, `313` 2, `147_0` 3, `202` 1, `127` 2 of 40, and `151`, `193`, `259`, `281_0`, `295`, `420`, `483_0` none (probes only or not even those). The first four are read at Exhaustive: the Balanced plan has 2 or 3 lines through a 30 px symbol, one hit appears and its refinement stopped after 3 consecutive misses (now 8: `475` is read, +1 on BarBeR full). The rest fail on the elements: in `127` the bars are about half a pixel thinner than the spaces, widths scatter by a quarter of a module (1.0, 2.0 and 3.0 px quantised) and a character shows a merged or missing element (`fail idx=4 read=8973 w=[1.3, 3.6, 3.3, 1.7, 3.3, 1.7, 1.3, 1.7, 3.3]`, four wide elements). Not recovered by a binarising edge variant, by 3 or 5 row averages, or by probes after fewer characters.
 
 **EAN-13 (zxing samples 9, BarBeR many).** `ean13-4/12` (1.6 px per module, focus falling along the rows): 511 failed guard calibrations in 140 rows, rows 53 to 55 decode. A near miss left no probe and the sparse plan lines were too few; EAN-13 probes (+23 on a quarter of BarBeR, +1 on the zxing samples) and extra lines on frames of 100 000 pixels or less (+5 to +6 on the zxing samples) are D-057.
 
-| Class, set (Balanced, reads) | zxing-cpp | `26d63c8` | D-057 |
+| Class, set (Balanced, reads) | zxing-cpp | `001dec3` | D-057 |
 |---|---|---|---|
 | ITF, BarBeR | 59 | 49 | 58 |
 | ITF, zxing samples | 20 | 7 | 12 |
@@ -150,13 +150,13 @@ Measured on main `26d63c8` against this change (Balanced, per image against zxin
 
 ## 9. Round 3: thin Code 39 by templates ([D-058](decisions.md#d-058))
 
-Measured on main `afcf9b8` against this change (Balanced, per image against zxing-cpp 3.1.1, black box through `py_bench.py`; no source of either was read). Section 8 left 17 InventBar labels whose rows fail on the elements, with the template match of the profile (the blur and scale of the start character) as the untried step. D-058 is that step.
+Measured on main `75ae8c2` against this change (Balanced, per image against zxing-cpp 3.1.1, black box through `py_bench.py`; no source of either was read). Section 8 left 17 InventBar labels whose rows fail on the elements, with the template match of the profile (the blur and scale of the start character) as the untried step. D-058 is that step.
 
 **Triage.** 16 labels were read by zxing-cpp and not by breader (`ProductBarcode127`, `147_0`, `151`, `176`, `193`, `202`, `259`, `281_0`, `295`, `313`, `327_0`, `334_0`, `374`, `392`, `420`, `483_0`; 640 x 480, 7 digits). The rows of `127` (every row of the image, grey values) have crisp edges, dark 12 to 30 against light 170 to 190, so this is not blur: the bars are about 0.75 sample wide and the spaces 2.5, a print gain of about -0.5 sample per side at 1.65 samples per module, and the sampling phase decides whether a one-sample bar is a minimum of 80 or one of 20. Edges placed on such a profile scatter by a quarter of a module and elements merge (section 8), which is why the widths of a character are the wrong thing to classify. A correlation of the profile with the ideal profile of each of the 44 characters (bars of the print model, a Gaussian blur, a print gain), fitted on the start character, reads the symbol on 5 of 9 sampled rows of `127` where the widths decode 2 of 40.
 
 **Outcome (Balanced).** Code 39 on BarBeR 141 to 154 of 198 (zxing-cpp 149; Exhaustive 146 to 154), InventBar 103 to 114 of 147 (zxing-cpp 118), 0 false positives on every set and effort, challenging-images Balanced p50 +1.2 percent, Fast untouched. Images with new reads: `127`, `176`, `183`, `185_0`, `250`, `285`, `309_0`, `360_0`, `392`, `395_0`, `510`, `Special_0055` (BarBeR +13 labels). Still unread although zxing-cpp reads them (13): `147_0`, `151`, `193`, `202`, `259`, `281_0`, `295`, `313`, `327_0`, `334_0`, `374`, `420`, `483_0`. For these the start fit or the margin rule decides: `259` and `374` were read by intermediate versions of the fit and not by the final one; `281_0` is tilted by 4.5 degrees at about 1.1 samples per module; the others were not analysed further. Breader reads 8 ZVZ-real labels and 9 InventBar labels that zxing-cpp does not.
 
-| Class, set (Balanced, reads) | zxing-cpp | `afcf9b8` | D-058 |
+| Class, set (Balanced, reads) | zxing-cpp | `75ae8c2` | D-058 |
 |---|---|---|---|
 | Code 39, BarBeR | 149 | 141 | 154 |
 | Code 39, InventBar | 118 | 103 | 114 |

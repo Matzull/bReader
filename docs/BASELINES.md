@@ -17,7 +17,7 @@ Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python pac
 
 ## Status 2026-10-27: v1 accuracy close (D-053 to D-060)
 
-Main `e84f344` plus the aarch64 test fix (`tile_stats8` has a vector kernel on x86-64 only; its test now expects 0 tiles elsewhere, which failed the ARM CI jobs since D-044). Fmt, clippy, the workspace tests and the release tier (23 gates) pass. The phase 2 fuzz campaign ([D-060](decisions.md#d-060)) found no decoder or reader crash.
+Main `cf3fb25` plus the aarch64 test fix (`tile_stats8` has a vector kernel on x86-64 only; its test now expects 0 tiles elsewhere, which failed the ARM CI jobs since D-044). Fmt, clippy, the workspace tests and the release tier (23 gates) pass. The phase 2 fuzz campaign ([D-060](decisions.md#d-060)) found no decoder or reader crash.
 
 Per class at Balanced, reads / false positives (Rust `bench` for breader; zxing-cpp 3.1.1 and zbar through `py_bench.py`, zbar with every symbology named):
 
@@ -47,11 +47,11 @@ Latency, challenging-images Balanced, `--jobs 1`, 5 interleaved rounds: breader 
 
 ## Status 2026-10-27: ITF lengths by default ([D-059](decisions.md#d-059))
 
-Owner decision on the D-058 proposals: ITF reads any even length of 6 or more by default. Release tier on main `533577f` and on this change (23 gates, 0 false positives); the baseline rewrite raised 3 cells, zxing samples ITF `itf-2` 0 to 6 of 6 at Fast, Balanced and Exhaustive, and changed nothing else. The D-058 baselines were rewritten in `533577f` (7 BarBeR cells raised). The Code 93 quiet zone (4 modules) and `DENSE_MAX_PIXELS` (100 000) stay.
+Owner decision on the D-058 proposals: ITF reads any even length of 6 or more by default. Release tier on main `04bd201` and on this change (23 gates, 0 false positives); the baseline rewrite raised 3 cells, zxing samples ITF `itf-2` 0 to 6 of 6 at Fast, Balanced and Exhaustive, and changed nothing else. The D-058 baselines were rewritten in `04bd201` (7 BarBeR cells raised). The Code 93 quiet zone (4 modules) and `DENSE_MAX_PIXELS` (100 000) stay.
 
 ## Status 2026-10-27: Code 39 template fallback ([D-058](decisions.md#d-058))
 
-Main `afcf9b8` against the D-058 tree (3700X, Rust `bench --jobs 16`, heavy lock; latency `--jobs 1`, interleaved). 0 false positives on every set and effort, no read below main anywhere. The shared baselines were not rewritten (the orchestrator does that); read increases are notices.
+Main `75ae8c2` against the D-058 tree (3700X, Rust `bench --jobs 16`, heavy lock; latency `--jobs 1`, interleaved). 0 false positives on every set and effort, no read below main anywhere. The shared baselines were not rewritten (the orchestrator does that); read increases are notices.
 
 | Set, effort | Reads before to after | Code 39 |
 |---|---|---|
@@ -70,7 +70,7 @@ Gaps to zxing-cpp at Balanced after the change: BarBeR Code 39 ahead (154 agains
 
 ## Status 2026-10-24: round 2 combined (D-056, D-057)
 
-Main after the merge of D-057 (`b66c519`) plus the clippy 1.99 fixes (rust 1.99.1 is now the installed toolchain). Clippy, the workspace tests and the release tier (23 gates) pass; the baseline rewrite raised 57 read cells and lowered none, with 0 false positives.
+Main after the merge of D-057 (`5da95b4`) plus the clippy 1.99 fixes (rust 1.99.1 is now the installed toolchain). Clippy, the workspace tests and the release tier (23 gates) pass; the baseline rewrite raised 57 read cells and lowered none, with 0 false positives.
 
 Latency, `--jobs 1`, p50 in ms, interleaved. challenging-images Balanced, 5 rounds: breader 20.62 / 19.97 / 21.20 / 21.90 / 20.74 (median 20.74) against zxing-cpp 21.30 / 19.77 / 21.89 / 20.14 / 21.29 (median 21.29). The round-to-round spread (about 2 ms on both engines) is larger than the difference; D-056 measured the two level (19.72 against 19.65), so breader and zxing-cpp are level on this set within the noise of this machine. Fast 1080p video, 3 rounds: median video 6.95 / 7.10 / 7.05, worst video `batch_code39_1080p` 12.5 / 12.3 / 12.9 (targets 10 and 13; the worst-video margin is thin).
 
@@ -78,7 +78,7 @@ Remaining gaps to zxing-cpp at Balanced (from the D-057 measurements): BarBeR Co
 
 ## Status 2026-10-24: 1D round 2 ([D-057](decisions.md#d-057))
 
-Main `26d63c8` against the D-057 tree (3700X, Rust `bench --jobs 16`, heavy lock; latency `--jobs 1`, interleaved). 0 false positives on every set and effort, no read below main anywhere; tiers a and b pass (read increases are notices; the shared baselines were not rewritten).
+Main `001dec3` against the D-057 tree (3700X, Rust `bench --jobs 16`, heavy lock; latency `--jobs 1`, interleaved). 0 false positives on every set and effort, no read below main anywhere; tiers a and b pass (read increases are notices; the shared baselines were not rewritten).
 
 | Set, effort | Class | Before | After |
 |---|---|---|---|
@@ -105,11 +105,11 @@ Baseline cells that need `--write-baseline` (read increases only): `dynamsoft-ch
 
 ## Status 2026-10-24: Balanced latency (D-056)
 
-Main `26d63c8` against the D-056 change, Ryzen 7 3700X, `--jobs 1`, heavy lock held, interleaved. challenging-images Balanced p50 (ms), 5 rounds, main / D-056 / zxing-cpp 3.1.1: 20.20 / 21.45 / 22.81, 20.30 / 19.47 / 19.65, 20.62 / 19.72 / 19.95, 20.25 / 19.33 / 19.59, 20.59 / 20.62 / 19.65; medians **20.30 / 19.72 / 19.65**, so breader gained about 0.6 ms (3 %) and is level with zxing-cpp on this machine state (the 2026-10-22 margin of 1.4 ms was measured on a busier machine, main 21.2). Nothing got slower: Fast 4.72 / 4.71 / 4.82 to 4.64 / 4.64 / 4.59, Exhaustive 52.94 / 52.59 / 51.99 to 52.38 / 51.45 / 51.88, BarBeR development subset Balanced 24.58 / 24.51 / 25.29 to 23.59 / 24.01 / 23.69, Fast 1080p video median 6.95 / 6.95 / 7.10 to 6.80 / 6.75 / 6.75 and worst 12.2 / 12.3 / 12.7 to 12.2 / 12.1 / 11.9. User instructions on challenging-images Balanced: 33 572 M to 32 135 M (-4.3 %). Gates `--tier a` and `--tier b` pass with no change in any baseline. See [D-056](decisions.md#d-056).
+Main `001dec3` against the D-056 change, Ryzen 7 3700X, `--jobs 1`, heavy lock held, interleaved. challenging-images Balanced p50 (ms), 5 rounds, main / D-056 / zxing-cpp 3.1.1: 20.20 / 21.45 / 22.81, 20.30 / 19.47 / 19.65, 20.62 / 19.72 / 19.95, 20.25 / 19.33 / 19.59, 20.59 / 20.62 / 19.65; medians **20.30 / 19.72 / 19.65**, so breader gained about 0.6 ms (3 %) and is level with zxing-cpp on this machine state (the 2026-10-22 margin of 1.4 ms was measured on a busier machine, main 21.2). Nothing got slower: Fast 4.72 / 4.71 / 4.82 to 4.64 / 4.64 / 4.59, Exhaustive 52.94 / 52.59 / 51.99 to 52.38 / 51.45 / 51.88, BarBeR development subset Balanced 24.58 / 24.51 / 25.29 to 23.59 / 24.01 / 23.69, Fast 1080p video median 6.95 / 6.95 / 7.10 to 6.80 / 6.75 / 6.75 and worst 12.2 / 12.3 / 12.7 to 12.2 / 12.1 / 11.9. User instructions on challenging-images Balanced: 33 572 M to 32 135 M (-4.3 %). Gates `--tier a` and `--tier b` pass with no change in any baseline. See [D-056](decisions.md#d-056).
 
 ## Status 2026-10-22: phase 1 combined (D-053, D-054, D-055)
 
-Main `7cfd236` (Ryzen 7 3700X, all runs under the heavy lock). The release tier passed on the combined tree (23 gates, 0 false positives, no read under its baseline); every baseline cell that changed in the rewrite is a read increase.
+Main `c5fe7c2` (Ryzen 7 3700X, all runs under the heavy lock). The release tier passed on the combined tree (23 gates, 0 false positives, no read under its baseline); every baseline cell that changed in the rewrite is a read increase.
 
 Reads at Balanced, breader / zxing-cpp 3.1.1 (zxing-cpp figures from the 2026-10-21 scoreboard below; the only label change since is the `ean13-2/23.webp` override of D-053, which zxing-cpp does not read). Classes not listed are as in that scoreboard.
 
@@ -119,7 +119,7 @@ Reads at Balanced, breader / zxing-cpp 3.1.1 (zxing-cpp figures from the 2026-10
 | challenging-images | 411 / 0 | ITF 3 vs 4 (-1) |
 | zxing samples | 758 / 0 (was 753) | ITF -13, EAN-13 -6, Data Matrix 91 vs 93 (-2), Codabar -2, Code 93 -2, Code 128, GS1 DataBar, Code 39, EAN-8 -1 each; PDF417 58 vs 58 |
 
-Latency, `--jobs 1`, p50 in ms. Phase 1 cost, interleaved builds of the first-parent merges, 5 rounds of challenging-images Balanced (medians): `0c5773a` (before) 21.24, `3f7e1d8` (D-054) 21.49, `6e97712` (D-055) 21.31, `e55dd60` (D-053) 21.56, so about +0.3 ms (+1.5 %). Fast `batch_` videos, 3 rounds, identical at the four points (worst `batch_code39` 12.2, `batch_datamatrix` 10.2). Full Fast video run on `e55dd60`, 3 rounds: median video 6.9 to 7.1, worst 12.5 (targets 10 and 13).
+Latency, `--jobs 1`, p50 in ms. Phase 1 cost, interleaved builds of the first-parent merges, 5 rounds of challenging-images Balanced (medians): `0c5773a` (before) 21.24, `3f7e1d8` (D-054) 21.49, `6e97712` (D-055) 21.31, `0b6b5a1` (D-053) 21.56, so about +0.3 ms (+1.5 %). Fast `batch_` videos, 3 rounds, identical at the four points (worst `batch_code39` 12.2, `batch_datamatrix` 10.2). Full Fast video run on `0b6b5a1`, 3 rounds: median video 6.9 to 7.1, worst 12.5 (targets 10 and 13).
 
 Against zxing-cpp, interleaved: challenging-images Balanced, 5 rounds, breader 21.28 / 21.52 / 21.29 / 21.89 / 21.57 (median 21.52) against zxing-cpp 19.71 / 19.88 / 20.24 / 20.13 / 20.48 (median 20.13): **breader trails by 1.4 ms (7 %)**. The same build of `0c5773a` that measured 20.16 in the 2026-10-21 margin table measures 21.24 today, and zxing-cpp measures below its single-run 20.62, so the earlier "2.2 % faster" was within the run-to-run spread of the zxing-cpp side and breader already trailed before phase 1. BarBeR development subset Balanced, 3 rounds: breader 25.41 / 27.28 / 25.23 against zxing-cpp 30.56 / 30.42 / 30.40 (16 % faster). The challenging-images Balanced objective is not met; recovering it is latency work, not a revert of phase 1.
 
