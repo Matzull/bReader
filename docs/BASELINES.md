@@ -15,6 +15,36 @@ Datasets are described in [datasets.md](datasets.md); the gates that use them in
 
 Engines: rxing (`TryHarder`, multi), rqrr (QR only), zxing-cpp 3.1.1 (Python package, default options), zbar 0.23 (through pyzbar 0.1.9, default settings; see [zbar](#zbar-2026-10-13)).
 
+## Status 2026-10-27: v1 accuracy close (D-053 to D-060)
+
+Main `e84f344` plus the aarch64 test fix (`tile_stats8` has a vector kernel on x86-64 only; its test now expects 0 tiles elsewhere, which failed the ARM CI jobs since D-044). Fmt, clippy, the workspace tests and the release tier (23 gates) pass. The phase 2 fuzz campaign ([D-060](decisions.md#d-060)) found no decoder or reader crash.
+
+Per class at Balanced, reads / false positives (Rust `bench` for breader; zxing-cpp 3.1.1 and zbar through `py_bench.py`, zbar with every symbology named):
+
+| Set | breader | zxing-cpp | zbar |
+|---|---|---|---|
+| BarBeR full (8585 labels) | 6542 / 0 | 6105 / 84 | 5613 / 198 |
+| challenging-images (448) | 413 / 0 | 389 / 0 | 170 / 5 |
+| zxing samples (865) | 775 / 0 | 716 / 69 | 434 / 73 |
+
+Classes below zxing-cpp:
+
+| Set | Class | breader / zxing-cpp | Cause |
+|---|---|---|---|
+| BarBeR | Data Matrix | 98 / 99 | geometry; D-055 recovered 95 to 98 |
+| BarBeR | ITF | 58 / 59 | `20140607_201410` and three aggregation or bearer-bar cases (D-057 (7)) |
+| zxing samples | Data Matrix | 91 / 93 | geometry, as above |
+| zxing samples | EAN-13 | 42 / 45 | blurred small frames; one-digit repair needs an owner rule (D-057 (7)) |
+| zxing samples | ITF | 18 / 20 | `1-slanted`, and 4-digit labels below the minimum length of 6 (owner decision, D-059) |
+| zxing samples | Codabar | 12 / 14 | no margin, 3-module margin (quiet zone policy) |
+| zxing samples | Code 93 | 1 / 3 | quiet zone of 4 modules (owner decision, D-059) and aliased edges |
+| zxing samples | Code 39 | 11 / 12 | border cut, Full ASCII off (owner default, D-020) |
+| zxing samples | Code 128 | 21 / 22 | `06` (D-057 (2)) |
+
+Every other class is level or ahead; on BarBeR Code 39 (154 against 149), Code 128 (619 against 447), EAN-13 (4061 against 3826), PDF417, Aztec and UPC-A are ahead.
+
+Latency, challenging-images Balanced, `--jobs 1`, 5 interleaved rounds: breader 19.75 / 19.48 / 20.17 / 19.95 / 19.60 (median 19.75) against zxing-cpp 19.62 / 19.18 / 21.15 / 19.45 / 19.77 ms (median 19.62): level within the noise. Fast 1080p video, 3 rounds: median video 6.25 / 6.2 / 6.2 ms, worst `batch_code39_1080p` 11.5 / 11.6 / 11.7 ms (targets 10 and 13).
+
 ## Status 2026-10-27: ITF lengths by default ([D-059](decisions.md#d-059))
 
 Owner decision on the D-058 proposals: ITF reads any even length of 6 or more by default. Release tier on main `533577f` and on this change (23 gates, 0 false positives); the baseline rewrite raised 3 cells, zxing samples ITF `itf-2` 0 to 6 of 6 at Fast, Balanced and Exhaustive, and changed nothing else. The D-058 baselines were rewritten in `533577f` (7 BarBeR cells raised). The Code 93 quiet zone (4 modules) and `DENSE_MAX_PIXELS` (100 000) stay.

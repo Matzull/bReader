@@ -224,7 +224,14 @@ mod tests {
                     let (mut mins, mut maxs, mut sums) =
                         (vec![7u8; tiles], vec![7u8; tiles], vec![7u64; tiles]);
                     let done = tile_stats8(&rows, &mut mins, &mut maxs, &mut sums);
-                    assert_eq!(done, width / 16 * 2);
+                    // Only x86-64 has the vector kernel; elsewhere every tile is
+                    // left to the caller's scalar loop.
+                    let expected = if cfg!(target_arch = "x86_64") {
+                        width / 16 * 2
+                    } else {
+                        0
+                    };
+                    assert_eq!(done, expected, "w={width} h={height}");
                     for tx in 0..done {
                         let cells = rows
                             .iter()
