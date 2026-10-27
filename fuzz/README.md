@@ -21,7 +21,8 @@ cargo install cargo-fuzz --locked
 | `rmqr_grid`        | rMQR `decode_grid` on arbitrary module grids (the 32 sizes and off-size grids)    |
 | `linear_runs`      | every 1D decoder (EAN/UPC, Code 128, Code 39, ITF, Codabar, GS1 DataBar, Code 93) on arbitrary run-width sequences, both directions and polarities |
 | `code93_runs`      | the Code 93 decoder alone: arbitrary run widths, and well-formed symbols around arbitrary character values (checks computed, so the Full ASCII layer is reached); a symbol must read as exactly the text it stands for, or not at all |
-| `linear_profile`   | edge detection plus all 1D decoders on arbitrary gray-level profiles              |
+| `linear_profile`   | edge detection plus all 1D decoders and the Code 39 template fallback (D-058) on arbitrary gray-level profiles |
+| `code39_template`  | thin Code 39 symbols (module 0.8 to 2.4 samples) drawn from fuzzed blur, gain, noise and options, read through the width decoders and the template fallback; a clean drawing must read as the text drawn |
 | `dm_grid`          | Data Matrix grid and codeword-stream decoding on arbitrary input                  |
 | `gs1_parse`        | `gs1::parse` / `gs1::hri`                                                         |
 | `charset_decode`   | `charset::decode` for every `Charset`, including arbitrary ECI numbers            |
@@ -57,6 +58,8 @@ Baseline (5 minutes each, `-rss_limit_mb=2048 -timeout=10`, no findings):
 `pipeline` 60k execs (~200/s), `charset_decode` 30M, `content_pipeline` 13M,
 `gs1_parse` 5.4M, `linear_runs` 1.7M, `rs_decode` 1.4M, `linear_profile` 1.4M,
 `qr_grid` 0.5M.
+
+Phase 2 campaign ([D-060](../docs/decisions.md#d-060)): 1200 s or 300 s per target with `-jobs=8 -workers=8`; execution counts per target are in the decision. `-jobs` leaves `fuzz-N.log` files in `fuzz/`; delete them.
 
 Coverage: `cargo +nightly fuzz coverage <target> <corpus dir>`.
 

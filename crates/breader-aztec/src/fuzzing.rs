@@ -150,4 +150,14 @@ mod tests {
         assert_eq!(decode_grid(0, &[], false), None);
         assert_eq!(decode_grid(161, &[], false), None);
     }
+
+    /// Fuzz artifacts: an empty stream has no symbol (the mode message counts
+    /// the data codewords less one), it must not underflow in the builder.
+    #[test]
+    fn an_empty_stream_builds_no_symbol() {
+        assert!(fit(&[], 3).is_none());
+        assert_eq!(decode_stream(None, 4, &[]), None);
+        assert_eq!(scan_image(true, 0, 0, &[], &[]), 0);
+        assert_eq!(scan_image(true, 2, 0, &[0x6c], &[]), 0);
+    }
 }

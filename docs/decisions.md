@@ -49,6 +49,7 @@ Product-level defaults and scope are owner decisions ([contributing](contributin
 | [D-057](#d-057) | 2026-10-24 | 1D round 2: ITF quiet zone 6 modules (owner approved, 0 false positives), EAN-13 and UPC-A probes around near misses, extra lines of a denser plan on frames of at most 100 000 pixels, longer refinement of thin Code 39; BarBeR Balanced 6475 to 6529, ITF 49 to 58, EAN-13 4021 to 4061, zxing samples 758 to 769, 0 false positives |
 | [D-058](#d-058) | 2026-10-27 | Thin Code 39 read by templates: where the width-based read fails, the grey profile of a candidate start is fitted (module, ratio, blur, print gain) and every character is chosen among the 44 templates by correlation, with a margin; Balanced and Exhaustive only; BarBeR Balanced Code 39 141 to 154 (zxing-cpp 149), Exhaustive 146 to 154, 0 false positives on every set and effort, challenging-images Balanced p50 +1.2 percent, Fast untouched; owner proposals measured (open ITF lengths, Code 93 quiet zone, 262 144 pixel dense lines) |
 | [D-059](#d-059) | 2026-10-27 | Owner decisions on the D-058 proposals: ITF accepts any even length of 6 or more by default (every length but 14 needs 4 agreeing lines), zxing samples ITF +6 at every effort, 0 false positives; the Code 93 quiet zone stays 4 modules and `DENSE_MAX_PIXELS` stays 100 000 |
+| [D-060](#d-060) | 2026-10-27 | Phase 2 fuzz campaign: 19 targets (new `code39_template`; `linear_profile` now runs the D-058 fallback), 8 at 20 min and 11 at 5 min after the owner shortened it, 8 workers; no crash in a decoder or in the reader, 3 harness bugs fixed (probes from `decode_runs`, a u8 shift in `pipeline`, an empty Aztec stream in the symbol builder) |
 
 ## D-001
 
@@ -309,3 +310,39 @@ Recommendation of the measurement: the ITF list of 6 or more (0 false positives,
 ## D-059
 
 2026-10-27. **Owner decisions on the measured proposals of D-058 (6): ITF accepts any even length of 6 or more by default; the Code 93 quiet zone and the dense-line limit stay.** (1) ITF: `ItfOptions::default().allowed_lengths` is empty (any even length of at least `min_length`, which stays 6) instead of the list 14, 8, 10, 12, 16, 18 of [D-041](#d-041) (`ItfOptions::DEFAULT_LENGTHS` is removed). While no list is given every length but 14 (GTIN-14, check digit verified) needs one more agreeing line, 4 instead of 3 (`LineOptions::itf_strict` is every bit but 14; bit 127 stands for longer payloads in the aggregator), as 8 to 18 did before. An explicit list is the caller's choice and keeps the plain agreement for every listed length; an empty list set by a caller is the default and is strict. Minimum of 4 digits: rejected (1 false positive, `code128-2/37.webp` read as ITF `9004`, D-058 (6)). Measured on main `533577f` against this change (release tier, every gate, then the baseline rewrite): zxing samples ITF +6 at Fast, Balanced and Exhaustive (`itf-2` 0 to 6 of 6), no other read cell changed on any set or effort, 0 false positives everywhere; no latency cost (the length test runs after the symbol is read). Tests: `itf::tests::length_rules` (6 to 20 digits read by default, 4 not, a list of 14 rejects 12), `decoder::tests::itf_length_list_becomes_a_bitset`, `reader::tests::itf_default_lengths_beyond_14_read_with_four_lines_and_a_clear_margin` (6 to 20 digits each need 4 agreeing lines, 4 digits are not read), the Python default (`itf_lengths == ()`). (2) Code 93 quiet zone: stays 4 modules (2 would read 1 more zxing sample; judged too permissive for one read). (3) `DENSE_MAX_PIXELS`: stays 100 000 (262 144 measured +1 read for +8 percent Balanced p50 on the D-058 tree). See [GUIDE](GUIDE.md#scanoptions), [BASELINES](BASELINES.md#status-2026-10-27-itf-lengths-by-default-d-059).
+
+## D-060
+
+2026-10-27. **Phase 2 fuzz campaign (19 targets): no crash in a decoder or in the reader; three harness bugs fixed; one target added, one extended.** Main `23cf0ee`, `cargo +nightly fuzz` with `-timeout=10 -rss_limit_mb=2048 -jobs=8 -workers=8` (`-max_len=70000` for `pipeline`) under the heavy lock, `nice -n 10`, corpus seeded from the main checkout (not versioned). Time: the first 8 targets ran 1200 s each; the owner then shortened the campaign and the other 11 ran 300 s (no second pass). Executions are the sum of the 8 workers; cov is the highest coverage counter (edges) of a worker at the end, the corpus is the number of files in `fuzz/corpus/<target>` afterwards (it started from the seeded corpus and is shared by the workers).
+
+| Target | Time | Execs | Cov | Corpus | Crashes |
+|---|---|---|---|---|---|
+| `code39_template` (new) | 1200 s | 2.4 M | 1986 | 10 513 | 0 |
+| `linear_profile` | 1200 s | 2.8 M | 3918 | 19 125 | 0 |
+| `code93_runs` | 1200 s | 102.7 M | 510 | 20 652 | 0 |
+| `qr_grid` | 1200 s | 16.8 M | 585 | 4 246 | 0 |
+| `microqr_grid` | 1200 s | 606.5 M | 401 | 1 157 | 0 |
+| `rmqr_grid` | 1200 s | 288.9 M | 462 | 2 823 | 0 |
+| `dm_grid` | 1200 s | 5.9 M | 1007 | 7 956 | 0 |
+| `gs1_parse` | 1200 s | 85.4 M | 333 | 9 156 | 0 |
+| `charset_decode` | 300 s | 192.2 M | 1564 | 31 097 | 0 |
+| `rs_decode` | 300 s | 7.1 M | 326 | 573 | 0 |
+| `rs929_decode` | 300 s | 1.4 M | 320 | 1 436 | 0 |
+| `rs2m_decode` | 300 s | 80 k | 1442 | 946 | 0 |
+| `aztec_grid` | 300 s | 3.4 M | 1726 | 5 444 | 0 (1 harness bug, below) |
+| `aztec_scan` | 300 s | 0.5 M | 3622 | 3 280 | 0 (same bug) |
+| `pdf417_codewords` | 300 s | 9.4 M | 793 | 10 965 | 0 |
+| `pdf417_line` | 300 s | 37.4 M | 1012 | 15 944 | 0 |
+| `content_pipeline` | 300 s | 90.1 M | 2200 | 17 343 | 0 |
+| `linear_runs` | 300 s | 1.6 M | 2245 | 10 006 | 0 (1 harness bug) |
+| `pipeline` | 300 s | 30 k | 13752 | 2 153 | 0 (1 harness bug) |
+
+**Template fallback reach.** No target reached `code39_template` before: `fuzzing::scan_profile` ran the width decoders only, and a random profile has neither the 32 runs nor the thin start the fallback needs. (1) `fuzzing::scan_profile` now follows `reader::scan_profile`: both edge parameter sets, every decoder, `note` on each variant, and, when no symbol was read and Code 39 is enabled and `single_variant` is false, `note_stretches` and `code39_template::read_line`; so `linear_profile` can reach it. (2) New entry `fuzzing::thin_code39` and target `code39_template`: a Code 39 symbol of 0 to 15 characters drawn at 0.8 to 2.4 samples per module with fuzzed blur, print gain, offset, wide-to-narrow ratio, noise and flags (reversed, light on dark, Full ASCII, check character, minimum length), read through the same path. When the drawing is clean (noise at most 2 grey levels, sigma at most 0.7, module at least 1.1, gain at most 0.3, no Full ASCII or check character) every hit must read the text that was drawn, else it is a misread. Test `fuzzing::tests::thin_code39_reaches_the_template_fallback`: over 256 inputs, more than 20 symbols are read and each equals the text drawn. The ITF change of D-059 is covered by `linear_runs` and `linear_profile` (options bit 14 picks an explicit list, otherwise any even length of 6 or more).
+
+**Findings.** All three were in the harness, none in a decoder or in the reader.
+1. `linear_runs`: `fuzzing::decode_runs` returned the probes (empty-text hits of D-053 and D-057) and the target asserts non-empty text. The entry now drops them, as the reader does for the hits of a run. Test `fuzzing::tests::decode_runs_hands_out_no_probes` (the 148 byte input of the artifact).
+2. `pipeline`: `subset >> i` on a `u8` for the 18 entries of `Symbology::ALL` overflows the shift for `i >= 8` (debug assertions are on in the fuzz build). The target now shifts by `i % 8`, so bit `k` selects symbologies `k`, `k + 8` and `k + 16`, and the first 8 keep their meaning for the old corpus. No unit test (the bug is in the target file).
+3. `aztec_grid` and `aztec_scan`: a valid-symbol input with no stream bytes (`94`; `ff 6c 7a`) made `build::fit` return a layout with 0 data codewords, and `build::mode_message` computed `data_words - 1` (attempt to subtract with overflow). `fit` returns `None` for an empty bit string (a symbol holds at least one codeword). Test `fuzzing::tests::an_empty_stream_builds_no_symbol` (`fit`, `decode_stream`, `scan_image`).
+Each fixed target was run again for 300 s from the seeded corpus with no finding.
+
+**Not done.** No second pass (owner's decision), so the changes to `linear_profile` and `linear_runs` got 20 and 5 minutes. `rs2m_decode` and `pipeline` execute slowly (80 k and 30 k executions in 5 minutes at 8 workers); they deserve longer runs in the nightly job. No change to decoder code, so no gate baselines changed.

@@ -149,3 +149,10 @@ path = "fuzz_targets/code93_runs.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "code39_template"
+path = "fuzz_targets/code39_template.rs"
+test = false
+doc = false
+bench = false
