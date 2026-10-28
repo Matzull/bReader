@@ -7,7 +7,7 @@ import re, os, sys
 root = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..")
 files = []
 for d, ds, fs in os.walk(root):
-    ds[:] = [x for x in ds if x not in ('target', '.git', 'data', '.claude', 'node_modules', '.venv')]
+    ds[:] = [x for x in ds if x not in ('target', '.git', 'data', '.claude', 'node_modules', '.venv', 'pkg', 'pkg-node')]
     for f in fs:
         if f.endswith('.md'):
             files.append(os.path.join(d, f))
