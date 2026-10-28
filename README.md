@@ -49,6 +49,29 @@ breader scan --format json --jobs 0 photos/ # JSON Lines, directories searched r
 
 Exit status 0 when a symbol was found, 1 when none was, 2 on a usage error or an unreadable input. See [crates/breader-cli/README.md](crates/breader-cli/README.md).
 
+## C
+
+```
+cargo build --release -p breader-ffi   # target/release/libbreader.so and .a (.dylib, .dll elsewhere)
+```
+
+```c
+#include "breader.h"
+
+BreaderReader *reader = breader_reader_new(NULL);
+BreaderResults *results = NULL;
+if (breader_scan(reader, pixels, len, width, height, stride, BREADER_PIXEL_LUMA8, &results) == BREADER_OK) {
+    for (size_t i = 0; i < breader_results_count(results); i++) {
+        const char *text = breader_result_text(results, i, NULL);   /* NULL for binary payloads */
+        if (text) puts(text);
+    }
+}
+breader_results_free(results);
+breader_reader_free(reader);
+```
+
+See [crates/breader-ffi/README.md](crates/breader-ffi/README.md).
+
 ## Documentation
 
 Start at [docs/README.md](docs/README.md): status, a map of all documents by audience, and the design, testing, dataset and contribution guides. Common entry points:

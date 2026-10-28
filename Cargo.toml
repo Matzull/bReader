@@ -12,6 +12,7 @@ members = [
     "crates/breader-content",
     "crates/breader",
     "crates/breader-cli",
+    "crates/breader-ffi",
     "tools/bench",
     "tools/video-bench",
     "tools/synth",

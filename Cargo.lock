@@ -253,6 +253,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "breader-ffi"
+version = "0.1.0"
+dependencies = [
+ "breader",
+ "qrcode",
+]
+
+[[package]]
 name = "breader-imgproc"
 version = "0.1.0"
 dependencies = [

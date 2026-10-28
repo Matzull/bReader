@@ -1,0 +1,41 @@
+[package]
+name = "breader-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "C interface to the breader barcode reader"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+# `libbreader.so` / `.dylib` / `.dll` and `libbreader.a` for C. The library shares the facade's
+# name, so it builds no rlib and no documentation of its own (the two `breader` rlibs, and the two
+# `breader` doc pages, would collide in the workspace); the C header is its documentation.
+name = "breader"
+crate-type = ["cdylib", "staticlib"]
+doctest = false
+doc = false
+
+[features]
+# `breader_scan_file` needs the facade's `image` feature (PNG and JPEG decoding); without it the
+# function stays in the ABI and returns BREADER_UNSUPPORTED.
+default = ["image"]
+image = ["breader/image"]
+
+[dependencies]
+breader.workspace = true
+
+[dev-dependencies]
+qrcode = { version = "0.14", default-features = false }
+
+# This crate is the only one allowed to use unsafe code (D-064): the C ABI needs raw pointers.
+# The other workspace lints apply unchanged.
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[lints.rust]
+missing_debug_implementations = "warn"
