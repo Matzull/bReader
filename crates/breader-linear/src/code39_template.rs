@@ -13,6 +13,7 @@
 //! start and stop, the same options for the check character and Full ASCII,
 //! and the aggregator's 4 independent agreeing lines.
 
+use std::ops::Range;
 use std::sync::OnceLock;
 
 use crate::code39::{BY_MASK, STAR_MASK, THIN_MAX_MODULE, THIN_QUIET, make_hit};
@@ -53,11 +54,13 @@ const MIN_CROSSINGS: usize = 22;
 /// Lines with fewer runs hold no symbol of 4 characters (a start, 4 characters and a stop have
 /// about 50 elements and the edge detectors miss up to a third of the thin ones).
 const MIN_LINE_RUNS: usize = 32;
-/// Candidate starts without evidence from the width-based decoder fitted per block of lines
-/// (`reader.rs::BUDGET_LINES`), before one is read.
-const FIT_BUDGET: usize = 32;
+/// Candidate starts without evidence from the width-based decoder fitted per scan, before one is read.
+const FIT_BUDGET: usize = 80;
 /// Candidate starts fitted per line.
 const MAX_FITS: usize = 8;
+/// Lines read by the width-based decoder after which no line is fitted (see
+/// `Scratch::widths_suffice`); the agreement of a thin symbol.
+const WIDTH_LINES: usize = 4;
 /// Characters of a symbol, start and stop included.
 const MAX_CHARS: usize = 40;
 /// Smallest contrast, in grey levels, between bars and spaces.
@@ -127,65 +130,82 @@ pub(crate) struct Scratch {
     edges: Vec<f32>,
     /// Candidate starts of the line, in the order they were noted.
     starts: Vec<Start>,
+    /// Candidate starts of the plan lines put off until the plan is scanned
+    /// (see `defer`), line after line.
+    deferred: Vec<Start>,
     /// Fits of candidates without evidence from the width-based decoder that
-    /// this block of lines may still make; unlimited once a symbol was read.
+    /// this scan may still make; unlimited once a symbol was read.
     budget: usize,
-    /// A symbol was read since `new_scan`.
-    read: bool,
-    /// A symbol was read before the current pass began: no limit in it.
-    lifted: bool,
+    /// Lines on which the width-based decoder read Code 39 in this scan.
+    width_lines: usize,
+}
+
+/// What a parallel chunk of plan lines put aside (see `Scratch::take_deferred`).
+#[cfg(feature = "rayon")]
+#[derive(Debug)]
+pub(crate) struct Deferred {
+    starts: Vec<Start>,
+    width_lines: usize,
 }
 
 impl Scratch {
-    /// Starts a scan.
+    /// Starts a scan: the budget of fits is full again.
     pub(crate) fn new_scan(&mut self) {
-        self.read = false;
-        self.lifted = false;
+        self.budget = FIT_BUDGET;
+        self.width_lines = 0;
+        self.deferred.clear();
     }
 
-    /// Starts the plan lines of a pass, which are scanned in blocks
-    /// (`reader.rs::BUDGET_LINES`), on one thread or in parallel; a read in
-    /// one block does not lift the limit of the next, so both ways agree.
-    pub(crate) fn new_pass(&mut self) {
-        self.lifted = self.read;
+    /// The width-based decoder read Code 39 on a line.
+    pub(crate) fn note_width_read(&mut self) {
+        self.width_lines += 1;
     }
 
-    /// Starts a block of plan lines: the budget of fits is full again.
-    pub(crate) fn new_block(&mut self) {
-        self.budget = if self.lifted { usize::MAX } else { FIT_BUDGET };
+    /// Whether the width-based decoder has read Code 39 on enough lines of
+    /// this scan that the templates have nothing to add (D-062): those lines
+    /// agree on their own (D-043), and the fits of the lines where the widths
+    /// fail cost most where a symbol is read but damaged on some lines.
+    pub(crate) fn widths_suffice(&self) -> bool {
+        self.width_lines >= WIDTH_LINES
     }
 
-    /// Starts the block of the lines after the plan (dense and refinement
-    /// lines): unlimited once a symbol was read in this scan.
-    pub(crate) fn new_last_block(&mut self) {
-        self.budget = if self.read { usize::MAX } else { FIT_BUDGET };
+    /// Puts the candidate starts of the line aside; returns where they are
+    /// kept, for `recall`.
+    pub(crate) fn defer(&mut self) -> Range<usize> {
+        let from = self.deferred.len();
+        self.deferred.extend_from_slice(&self.starts);
+        from..self.deferred.len()
     }
 
-    /// Whether the current pass has no limit (see `new_pass`).
+    /// Takes the candidate starts put aside by `defer` back for a line.
+    pub(crate) fn recall(&mut self, kept: Range<usize>) {
+        self.starts.clear();
+        self.starts.extend_from_slice(&self.deferred[kept]);
+    }
+
+    /// Forgets the starts put aside.
+    pub(crate) fn forget_deferred(&mut self) {
+        self.deferred.clear();
+    }
+
+    /// The starts put aside and the width-based reads of a parallel chunk,
+    /// for `add_deferred`.
     #[cfg(feature = "rayon")]
-    pub(crate) fn lifted(&self) -> bool {
-        self.lifted
+    pub(crate) fn take_deferred(&mut self) -> Deferred {
+        Deferred {
+            starts: std::mem::take(&mut self.deferred),
+            width_lines: std::mem::take(&mut self.width_lines),
+        }
     }
 
-    /// Starts a parallel chunk of the plan lines of a pass whose scratch
-    /// has `lifted` (see `lifted`).
+    /// Adds what a parallel chunk put aside; returns the offset of its first
+    /// start here.
     #[cfg(feature = "rayon")]
-    pub(crate) fn new_chunk(&mut self, lifted: bool) {
-        self.read = false;
-        self.lifted = lifted;
-        self.new_block();
-    }
-
-    /// Adds the reads of the scratch of a parallel chunk.
-    #[cfg(feature = "rayon")]
-    pub(crate) fn add_reads(&mut self, chunk: bool) {
-        self.read |= chunk;
-    }
-
-    /// A symbol was read since `new_scan` (or `new_chunk`).
-    #[cfg(feature = "rayon")]
-    pub(crate) fn read(&self) -> bool {
-        self.read
+    pub(crate) fn add_deferred(&mut self, chunk: Deferred) -> usize {
+        let at = self.deferred.len();
+        self.deferred.extend_from_slice(&chunk.starts);
+        self.width_lines += chunk.width_lines;
+        at
     }
 
     /// Forgets the candidates of the previous line.
@@ -895,7 +915,6 @@ pub(crate) fn read_line(
         let p: &[u8] = if mirror { &scratch.rev } else { profile };
         if read_start(p, start, opts, &mut scratch.edges, out) {
             scratch.budget = usize::MAX;
-            scratch.read = true;
             // The same symbol read from its other end, or one more candidate
             // inside it, adds nothing to the line.
             break;
@@ -932,7 +951,7 @@ mod tests {
         }
         plain.retain(|h| !h.text.is_empty());
         let mut scratch = Scratch::default();
-        scratch.new_block();
+        scratch.new_scan();
         scratch.clear();
         scratch.note(&runs, false, profile.len());
         scratch.note(&rev, true, profile.len());
@@ -1229,7 +1248,7 @@ mod tests {
     }
 
     #[test]
-    fn candidates_without_evidence_are_limited_per_block_until_a_symbol_is_read() {
+    fn candidates_without_evidence_are_limited_per_scan_until_a_symbol_is_read() {
         let opts = line_options(|_| {});
         let p = thin(2, "9033296");
         let candidate = Start {
@@ -1239,7 +1258,7 @@ mod tests {
             mirror: false,
         };
         let mut scratch = Scratch::default();
-        scratch.new_block();
+        scratch.new_scan();
         scratch.starts.push(candidate);
         let mut out = Vec::new();
         scratch.budget = 0;
@@ -1253,25 +1272,34 @@ mod tests {
             "a start the width decoder noted is always tried"
         );
         assert_eq!(scratch.budget, usize::MAX, "a symbol read lifts the limit");
-        scratch.new_block();
-        assert_eq!(
-            scratch.budget, FIT_BUDGET,
-            "but not for the next block of the same pass"
-        );
-        scratch.new_last_block();
-        assert_eq!(
-            scratch.budget,
-            usize::MAX,
-            "it is for the lines after the plan"
-        );
-        scratch.new_pass();
-        scratch.new_block();
-        assert_eq!(scratch.budget, usize::MAX, "and for a later pass");
         scratch.new_scan();
-        scratch.new_pass();
-        scratch.new_block();
-        assert_eq!(scratch.budget, FIT_BUDGET, "a new scan starts limited");
-        scratch.new_last_block();
         assert_eq!(scratch.budget, FIT_BUDGET);
+    }
+
+    #[test]
+    fn deferred_starts_come_back_and_widths_stop_the_fits() {
+        let opts = line_options(|_| {});
+        let p = thin(2, "9033296");
+        let mut scratch = Scratch::default();
+        scratch.new_scan();
+        scratch.starts.push(Start {
+            at: 16.5,
+            noted: true,
+            width: 1.0,
+            mirror: false,
+        });
+        let kept = scratch.defer();
+        scratch.clear();
+        scratch.recall(kept);
+        let mut out = Vec::new();
+        read_line(&p, &opts, &mut scratch, &mut out);
+        assert_eq!(out.len(), 1, "the start put aside reads the symbol");
+        for k in 0..WIDTH_LINES {
+            assert!(!scratch.widths_suffice(), "{k} lines");
+            scratch.note_width_read();
+        }
+        assert!(scratch.widths_suffice());
+        scratch.new_scan();
+        assert!(!scratch.widths_suffice(), "a new scan counts again");
     }
 }

@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::ops::Range;
 
 use breader_core::{
     Effort, FrameContext, ImageView, Point, Symbol, Symbology, SymbologyReader, SymbologySet,
@@ -56,6 +57,23 @@ struct Stage {
     marks: Vec<Mark>,
     raw_marks: Vec<RawMark>,
     template: code39_template::Scratch,
+    /// The template fallback of a line is put off (plan and dense lines,
+    /// see `read_deferred`).
+    defer: bool,
+    /// Lines whose template fallback was put off, in scan order.
+    pending: Vec<Pending>,
+}
+
+/// A line whose template fallback was put off, with its candidate starts in
+/// `code39_template::Scratch`.
+#[derive(Debug, Clone)]
+struct Pending {
+    line: Scanline,
+    index: u32,
+    step: f32,
+    /// Where a plan line's profile is pre-sampled; `None` for a dense line.
+    cursor: Option<Cursor>,
+    kept: Range<usize>,
 }
 
 /// Buffers and decode state of one `scan` call.
@@ -86,6 +104,7 @@ impl Work {
         stage.hits.clear();
         stage.aggregator.reset();
         stage.template.new_scan();
+        stage.pending.clear();
         stage.probes.clear();
         stage.edge_params.clear();
         stage.marks.clear();
@@ -146,6 +165,8 @@ struct PassImage {
     height: usize,
 }
 
+/// Reads one line into `stage`; returns where its candidate starts for the
+/// template fallback were put aside when `stage.defer` is set.
 fn scan_profile<D: LinearDecoder>(
     decoders: &D,
     profile: &[u8],
@@ -154,10 +175,11 @@ fn scan_profile<D: LinearDecoder>(
     step: f32,
     opts: &LineOptions,
     stage: &mut Stage,
-) {
+) -> Option<Range<usize>> {
     let mut retry = false;
     let mut decoded = false;
     let mut thin_seen = false;
+    let mut code39 = false;
     stage.template.clear();
     for variant in 0..stage.edge_params.len() {
         let params = stage.edge_params[variant];
@@ -200,23 +222,53 @@ fn scan_profile<D: LinearDecoder>(
         thin_seen |= stage.runs.thin_start() || stage.reversed.thin_start();
         stage.template.note(&stage.runs, false, profile.len());
         stage.template.note(&stage.reversed, true, profile.len());
+        code39 |= stage
+            .hits
+            .iter()
+            .any(|h| h.symbology == Symbology::Code39 && !h.text.is_empty());
         decoded |= absorb_hits(stage, line, index, step);
+    }
+    if code39 {
+        stage.template.note_width_read();
     }
     // Last resort for thin Code 39: templates against the grey profile
     // (D-058), where nothing was read on the line and a start of a small
-    // Code 39 symbol is possible. Not at Fast.
-    if !decoded && !opts.single_variant && opts.symbologies.contains(Symbology::Code39) {
-        stage
-            .template
-            .note_stretches(&stage.runs, false, profile.len());
-        stage
-            .template
-            .note_stretches(&stage.reversed, true, profile.len());
-        let hits = &mut stage.hits;
-        hits.clear();
-        code39_template::read_line(profile, opts, &mut stage.template, hits);
-        absorb_hits(stage, line, index, step);
+    // Code 39 symbol is possible. Not at Fast. On a plan or dense line the
+    // fits wait until all of them are scanned (`read_deferred`); none are
+    // made once the widths read Code 39 on enough lines (D-062).
+    if decoded || opts.single_variant || !opts.symbologies.contains(Symbology::Code39) {
+        return None;
     }
+    stage
+        .template
+        .note_stretches(&stage.runs, false, profile.len());
+    stage
+        .template
+        .note_stretches(&stage.reversed, true, profile.len());
+    if stage.defer {
+        let kept = stage.template.defer();
+        return (!kept.is_empty()).then_some(kept);
+    }
+    if !stage.template.widths_suffice() {
+        read_templates(profile, line, index, step, opts, stage);
+    }
+    None
+}
+
+/// The template fallback on one line whose candidate starts are in
+/// `stage.template`.
+fn read_templates(
+    profile: &[u8],
+    line: &Scanline,
+    index: u32,
+    step: f32,
+    opts: &LineOptions,
+    stage: &mut Stage,
+) {
+    let hits = &mut stage.hits;
+    hits.clear();
+    code39_template::read_line(profile, opts, &mut stage.template, hits);
+    absorb_hits(stage, line, index, step);
 }
 
 /// Moves the hits of one line into the aggregator and the probes; true when a
@@ -295,25 +347,70 @@ fn scan_line(
     stage: &mut Stage,
 ) {
     let step = sources.plan.line_spacing(line);
-    if line.from.x == line.to.x {
-        let h = sources.height;
-        let column = &sources.columns[cursor.column * h..(cursor.column + 1) * h];
-        scan_profile(&DECODERS, column, line, index, step, sources.opts, stage);
-    } else if Oblique::is_oblique(line) {
-        let range = sources.offsets[cursor.slanted]..sources.offsets[cursor.slanted + 1];
-        scan_profile(
-            &DECODERS,
-            &sources.oblique[range],
-            line,
+    let p = line_profile(img, line, cursor, sources, profile);
+    if let Some(kept) = scan_profile(&DECODERS, p, line, index, step, sources.opts, stage) {
+        stage.pending.push(Pending {
+            line: *line,
             index,
             step,
-            sources.opts,
-            stage,
-        );
+            cursor: Some(cursor),
+            kept,
+        });
+    }
+}
+
+/// The profile of a plan line: pre-sampled for columns and oblique lines,
+/// sampled into `profile` otherwise.
+fn line_profile<'a>(
+    img: &ImageView<'_>,
+    line: &Scanline,
+    cursor: Cursor,
+    sources: &'a Sources<'a>,
+    profile: &'a mut Vec<u8>,
+) -> &'a [u8] {
+    if line.from.x == line.to.x {
+        let h = sources.height;
+        &sources.columns[cursor.column * h..(cursor.column + 1) * h]
+    } else if Oblique::is_oblique(line) {
+        &sources.oblique[sources.offsets[cursor.slanted]..sources.offsets[cursor.slanted + 1]]
     } else {
         profile::sample(img, line, false, profile);
-        scan_profile(&DECODERS, profile, line, index, step, sources.opts, stage);
+        profile
     }
+}
+
+/// The template fallback of the plan and dense lines that `scan_profile` put
+/// off, in scan order, on one thread whether the plan was scanned in parallel
+/// or not, so that the budget of fits is spent in the same order; nothing when
+/// the widths read Code 39 on enough of those lines (D-062). The hits of the
+/// pass start at `from` in the aggregator; the ones read here are put in line
+/// order among them, where they would be had they been read with their line.
+fn read_deferred(
+    img: &ImageView<'_>,
+    sources: &Sources<'_>,
+    profile: &mut Vec<u8>,
+    stage: &mut Stage,
+    from: usize,
+) {
+    let mut pending = std::mem::take(&mut stage.pending);
+    let mid = stage.aggregator.len();
+    if !stage.template.widths_suffice() {
+        for p in &pending {
+            stage.template.recall(p.kept.clone());
+            let prof: &[u8] = match p.cursor {
+                Some(cursor) => line_profile(img, &p.line, cursor, sources, profile),
+                None => {
+                    profile::sample(img, &p.line, false, profile);
+                    profile
+                }
+            };
+            read_templates(prof, &p.line, p.index, p.step, sources.opts, stage);
+        }
+    }
+    stage.aggregator.merge_lines(from, mid);
+    pending.clear();
+    stage.pending = pending;
+    stage.template.forget_deferred();
 }
 
 /// Scans the lines of a denser plan that the plan itself lacks, numbered after
@@ -338,15 +435,17 @@ fn scan_dense(
     for line in extra.iter().filter(|l| !base.iter().any(|b| same(b, l))) {
         profile::sample(img, line, false, &mut work.profile);
         let step = plan.line_spacing(line);
-        scan_profile(
-            &DECODERS,
-            &work.profile,
-            line,
-            first_index + count,
-            step,
-            opts,
-            &mut work.stage,
-        );
+        let index = first_index + count;
+        let stage = &mut work.stage;
+        if let Some(kept) = scan_profile(&DECODERS, &work.profile, line, index, step, opts, stage) {
+            stage.pending.push(Pending {
+                line: *line,
+                index,
+                step,
+                cursor: None,
+                kept,
+            });
+        }
         count += 1;
     }
     work.dense_lines = extra;
@@ -365,20 +464,14 @@ fn scan_lines(
         slanted: 0,
     };
     for (i, line) in lines.iter().enumerate() {
-        if i % BUDGET_LINES == 0 {
-            stage.template.new_block();
-        }
         scan_line(img, line, i as u32, cursor, sources, profile, stage);
         cursor.advance(line);
     }
 }
 
-/// Plan lines that share a budget of template fits (D-058); a block is
-/// scanned the same way on one thread or as one parallel work item.
-const BUDGET_LINES: usize = 16;
 /// Lines per parallel work item.
 #[cfg(feature = "rayon")]
-const PAR_LINES: usize = BUDGET_LINES;
+const PAR_LINES: usize = 16;
 /// Frames below this many pixels are scanned on the calling thread.
 #[cfg(feature = "rayon")]
 const PAR_MIN_PIXELS: usize = 1 << 19;
@@ -391,27 +484,27 @@ fn parallel_worthwhile(img: &ImageView<'_>, lines: usize) -> bool {
         && !breader_core::parallel::is_sequential()
 }
 
-/// What a chunk of lines, or all of them, left in its stage.
+/// What a chunk of lines left in its stage.
 #[cfg(feature = "rayon")]
-#[derive(Default)]
 struct ChunkScan {
     hits: Vec<PlacedHit>,
     marks: Vec<Mark>,
     probes: Vec<PlacedHit>,
-    /// The template fallback read a symbol on a line.
-    template_read: bool,
+    /// Lines whose template fallback was put off, their starts in `deferred`.
+    pending: Vec<Pending>,
+    deferred: code39_template::Deferred,
 }
 
 /// Scans the lines in fixed chunks on the rayon pool. Every chunk collects
-/// its hits on its own; they are returned in line order, so the
-/// caller sees the same sequence as `scan_lines` would push.
+/// its hits on its own; they are added to `stage` in line order, so it
+/// sees the same sequence as `scan_lines` would push.
 #[cfg(feature = "rayon")]
 fn scan_lines_parallel(
     img: &ImageView<'_>,
     lines: &[Scanline],
     sources: &Sources<'_>,
-    template: &Stage,
-) -> ChunkScan {
+    stage: &mut Stage,
+) {
     use rayon::prelude::*;
     let mut starts = Vec::with_capacity(lines.len().div_ceil(PAR_LINES));
     let mut cursor = Cursor {
@@ -424,10 +517,12 @@ fn scan_lines_parallel(
             cursor.advance(line);
         }
     }
-    let edge_params = &template.edge_params;
-    let lifted = template.template.lifted();
+    let edge_params = &stage.edge_params;
     let fresh = || {
-        let mut stage = Stage::default();
+        let mut stage = Stage {
+            defer: true,
+            ..Stage::default()
+        };
         stage.edge_params.clone_from(edge_params);
         (stage, Vec::new())
     };
@@ -437,7 +532,7 @@ fn scan_lines_parallel(
         .enumerate()
         .map_init(fresh, |(stage, profile), (c, (chunk, start))| {
             let mut cursor = *start;
-            stage.template.new_chunk(lifted);
+            stage.template.new_scan();
             for (k, line) in chunk.iter().enumerate() {
                 let index = (c * PAR_LINES + k) as u32;
                 scan_line(img, line, index, cursor, sources, profile, stage);
@@ -447,18 +542,28 @@ fn scan_lines_parallel(
                 hits: stage.aggregator.take_hits(),
                 marks: std::mem::take(&mut stage.marks),
                 probes: std::mem::take(&mut stage.probes),
-                template_read: stage.template.read(),
+                pending: std::mem::take(&mut stage.pending),
+                deferred: stage.template.take_deferred(),
             }
         })
         .collect();
-    let mut all = ChunkScan::default();
+    let mut probes = 0;
     for chunk in per_chunk {
-        all.hits.extend(chunk.hits);
-        all.marks.extend(chunk.marks);
-        all.probes.extend(chunk.probes);
-        all.template_read |= chunk.template_read;
+        for hit in chunk.hits {
+            stage.aggregator.push(hit);
+        }
+        stage.marks.extend(chunk.marks);
+        let room = MAX_PROBES.saturating_sub(probes);
+        probes += chunk.probes.len().min(room);
+        stage.probes.extend(chunk.probes.into_iter().take(room));
+        let at = stage.template.add_deferred(chunk.deferred);
+        stage
+            .pending
+            .extend(chunk.pending.into_iter().map(|p| Pending {
+                kept: p.kept.start + at..p.kept.end + at,
+                ..p
+            }));
     }
-    all
 }
 
 /// Parallel lines on both sides of `seed`, stopping per side once the
@@ -752,29 +857,18 @@ impl LinearReader {
             offsets: &work.offsets,
             opts: &opts,
         };
-        work.stage.template.new_pass();
+        work.stage.defer = true;
+        let pass_hits = work.stage.aggregator.len();
         #[cfg(feature = "rayon")]
         let parallel = parallel_worthwhile(&img, lines.len());
         #[cfg(not(feature = "rayon"))]
         let parallel = false;
         if parallel {
             #[cfg(feature = "rayon")]
-            {
-                let all = scan_lines_parallel(&img, &lines, &sources, &work.stage);
-                for hit in all.hits {
-                    work.stage.aggregator.push(hit);
-                }
-                work.stage.marks.extend(all.marks);
-                work.stage
-                    .probes
-                    .extend(all.probes.into_iter().take(MAX_PROBES));
-                work.stage.template.add_reads(all.template_read);
-            }
+            scan_lines_parallel(&img, &lines, &sources, &mut work.stage);
         } else {
             scan_lines(&img, &lines, &sources, &mut work.profile, &mut work.stage);
         }
-        // The dense and refinement lines share one more block.
-        work.stage.template.new_last_block();
         let plan_lines = lines.len() as u32;
         let dense_lines =
             if effort != Effort::Fast && img.width() * img.height() <= DENSE_MAX_PIXELS {
@@ -782,6 +876,22 @@ impl LinearReader {
             } else {
                 0
             };
+        work.stage.defer = false;
+        let sources = Sources {
+            plan,
+            columns: &work.columns,
+            height: img.height(),
+            oblique: &work.oblique,
+            offsets: &work.offsets,
+            opts: &opts,
+        };
+        read_deferred(
+            &img,
+            &sources,
+            &mut work.profile,
+            &mut work.stage,
+            pass_hits,
+        );
         let settings = Settings {
             min_agreement: min_line_agreement,
             plan_lines,

@@ -277,6 +277,18 @@ impl Aggregator {
         }
     }
 
+    /// Puts the hits from `mid` on among those from `from` to `mid`, both in
+    /// line order, by line and after the hits of the same line, as if each
+    /// had been pushed when its line was scanned. Allocates nothing.
+    pub fn merge_lines(&mut self, from: usize, mid: usize) {
+        let mid = mid.min(self.hits.len());
+        for i in mid..self.hits.len() {
+            let line = self.hits[i].line;
+            let at = from + self.hits[from..i].partition_point(|h| h.line <= line);
+            self.hits[at..=i].rotate_right(1);
+        }
+    }
+
     /// Removes and returns the hits collected so far.
     #[cfg(feature = "rayon")]
     pub fn take_hits(&mut self) -> Vec<PlacedHit> {
@@ -835,6 +847,34 @@ mod tests {
             thin: false,
             part: false,
         }
+    }
+
+    #[test]
+    fn late_hits_are_merged_in_line_order() {
+        let mut agg = Aggregator::default();
+        let first = hit(Symbology::Code39, "EARLIER", 0.0, 0.0, 10.0, 0);
+        agg.push(first);
+        for line in [1, 3, 3, 6] {
+            agg.push(hit(Symbology::Code39, "W", line as f32, 0.0, 10.0, line));
+        }
+        for line in [2, 4, 7] {
+            agg.push(hit(Symbology::Code39, "T", line as f32, 0.0, 10.0, line));
+        }
+        agg.merge_lines(1, 5);
+        let order: Vec<(u32, &[u8])> = agg.hits.iter().map(|h| (h.line, &h.text[..])).collect();
+        assert_eq!(
+            order,
+            [
+                (0, &b"EARLIER"[..]),
+                (1, b"W"),
+                (2, b"T"),
+                (3, b"W"),
+                (3, b"W"),
+                (4, b"T"),
+                (6, b"W"),
+                (7, b"T"),
+            ]
+        );
     }
 
     fn settings(min: u16) -> Settings {
