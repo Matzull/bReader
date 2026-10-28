@@ -276,9 +276,21 @@ impl Scratch {
 }
 
 /// Cumulative normal distribution on a table.
+#[cfg(test)]
 fn phi(z: f32) -> f32 {
+    phi_in(phi_table(), z)
+}
+
+/// [`phi`] with its table at hand.
+#[inline]
+fn phi_in(table: &[f32; LUT_LEN], z: f32) -> f32 {
+    let i = ((z + REACH) * LUT_STEPS + 0.5) as usize;
+    table[i.min(LUT_LEN - 1)]
+}
+
+fn phi_table() -> &'static [f32; LUT_LEN] {
     static TABLE: OnceLock<[f32; LUT_LEN]> = OnceLock::new();
-    let table = TABLE.get_or_init(|| {
+    TABLE.get_or_init(|| {
         let mut t = [0.0; LUT_LEN];
         for (i, v) in t.iter_mut().enumerate() {
             let z = f64::from(i as u32) / f64::from(LUT_STEPS) - f64::from(REACH);
@@ -292,9 +304,7 @@ fn phi(z: f32) -> f32 {
             *v = (0.5 * (1.0 + erf)) as f32;
         }
         t
-    });
-    let i = ((z + REACH) * LUT_STEPS + 0.5) as usize;
-    table[i.min(LUT_LEN - 1)]
+    })
 }
 
 /// Position, module, ratio of wide to narrow, blur (sigma in samples, pixel
@@ -368,6 +378,7 @@ fn for_each_template(
 ) {
     let reach = REACH * sigma;
     let inv = 1.0 / sigma;
+    let table = phi_table();
     let mut first = edges.partition_point(|&e| e < lo as f32 - reach);
     let mut last = first;
     for x in lo..=hi {
@@ -383,7 +394,7 @@ fn for_each_template(
         // of edges behind leaves a bar open.
         let mut t = (first & 1) as f32;
         for (k, &e) in edges[first..last].iter().enumerate() {
-            let v = phi((xf - e) * inv);
+            let v = phi_in(table, (xf - e) * inv);
             if (first + k) & 1 == 0 {
                 t += v;
             } else {
@@ -963,6 +974,108 @@ mod tests {
     }
 
     const TEXT: &[u8] = b"9033296";
+
+    /// Fingerprint and time of `read_chars` and `read_symbol` over 400 thin
+    /// symbols of random text, module, blur, gain, noise and damage, read
+    /// from fits near their start with several ratios and modules: the
+    /// fingerprint stays the same under a change that must not change what
+    /// is read. `cargo test --release -p breader-linear --lib
+    /// read_chars_fingerprint -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn read_chars_fingerprint() {
+        use std::hash::{Hash, Hasher};
+        const ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+        let mut rng = Rng(7);
+        let mut profiles = Vec::new();
+        for _ in 0..400 {
+            let len = 3 + rng.below(10) as usize;
+            let text: String = (0..len)
+                .map(|_| char::from(ALPHABET[rng.below(ALPHABET.len() as u64) as usize]))
+                .collect();
+            let mut modules = code39_modules(&text, 2 + rng.below(2) as usize, 1);
+            for _ in 0..rng.below(4) {
+                let at = rng.below(modules.len() as u64) as usize;
+                let n = 1 + rng.below(6) as usize;
+                let end = (at + n).min(modules.len());
+                for m in &mut modules[at..end] {
+                    *m = !*m;
+                }
+            }
+            let r = Render {
+                offset: rng.unit(),
+                gain: -0.4 + 0.6 * rng.unit(),
+                sigma: 0.3 + 0.7 * rng.unit(),
+                ..Render::px(1.0 + 1.4 * rng.unit())
+            };
+            let mut prof = r.profile(&modules);
+            add_noise(&mut prof, 2.0 + 8.0 * rng.unit(), &mut rng);
+            profiles.push((prof, r.quiet_left * r.px + r.offset));
+        }
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        let mut edges = Vec::new();
+        let t0 = std::time::Instant::now();
+        let mut reads = 0;
+        for (prof, left) in &profiles {
+            let obs = Obs {
+                p: prof,
+                sign: -1.0,
+            };
+            for ds in [-1.0, 0.0, 0.6, 1.5] {
+                let Some((fit, score)) = fit_start(&obs, left + ds) else {
+                    0u8.hash(&mut h);
+                    continue;
+                };
+                score.to_bits().hash(&mut h);
+                for (r, k) in [
+                    (fit.r, 1.0),
+                    (2.0, 1.0),
+                    (3.0, 1.0),
+                    (fit.r, 0.97),
+                    (fit.r, 1.03),
+                ] {
+                    let f = Fit {
+                        r,
+                        m: fit.m * k,
+                        ..fit
+                    };
+                    let mut depth = 0;
+                    match read_chars(&obs, &f, &mut depth) {
+                        Some(c) => {
+                            reads += 1;
+                            c.masks[..c.len].hash(&mut h);
+                            for v in [c.min_corr, c.min_margin, c.end] {
+                                v.to_bits().hash(&mut h);
+                            }
+                        }
+                        None => 1u8.hash(&mut h),
+                    }
+                    depth.hash(&mut h);
+                }
+                match read_symbol(&obs, left + ds, &mut edges) {
+                    Some(f) => {
+                        f.chars.masks[..f.chars.len].hash(&mut h);
+                        for v in [
+                            f.corr.ncc,
+                            f.corr.level,
+                            f.corr.step,
+                            f.fit.m,
+                            f.fit.r,
+                            f.fit.s,
+                        ] {
+                            v.to_bits().hash(&mut h);
+                        }
+                    }
+                    None => 2u8.hash(&mut h),
+                }
+            }
+        }
+        println!(
+            "fingerprint {:016x}, {reads} character reads, {:.1} ms",
+            h.finish(),
+            t0.elapsed().as_secs_f64() * 1e3
+        );
+    }
 
     /// 1.35 samples per module, bars 0.6 sample thinner than spaces: the
     /// element widths of a line scatter by a quarter of a module and the
