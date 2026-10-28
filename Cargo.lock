@@ -215,6 +215,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "breader-cli"
+version = "0.1.0"
+dependencies = [
+ "breader",
+ "image",
+ "qrcode",
+]
+
+[[package]]
 name = "breader-content"
 version = "0.1.0"
 dependencies = [

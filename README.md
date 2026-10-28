@@ -39,6 +39,16 @@ for s in breader.read("label.png"):
 
 See [crates/breader-py/README.md](crates/breader-py/README.md).
 
+## Command line
+
+```
+cargo install --path crates/breader-cli
+breader scan label.png                      # path, symbology, text; one line per symbol
+breader scan --format json --jobs 0 photos/ # JSON Lines, directories searched recursively
+```
+
+Exit status 0 when a symbol was found, 1 when none was, 2 on a usage error or an unreadable input. See [crates/breader-cli/README.md](crates/breader-cli/README.md).
+
 ## Documentation
 
 Start at [docs/README.md](docs/README.md): status, a map of all documents by audience, and the design, testing, dataset and contribution guides. Common entry points:
