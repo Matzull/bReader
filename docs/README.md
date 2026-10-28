@@ -38,6 +38,7 @@ Per-symbology status, spec references and known gaps: [symbologies/README.md](sy
 | [../crates/breader-py/README.md](../crates/breader-py/README.md) | Python API, options table, threading |
 | [../crates/breader-cli/README.md](../crates/breader-cli/README.md) | The `breader` command line tool: options, output formats, exit codes |
 | [../crates/breader-ffi/README.md](../crates/breader-ffi/README.md) | C API: build, linking, ownership and threading rules, example |
+| [../crates/breader-wasm/README.md](../crates/breader-wasm/README.md) | JavaScript / WebAssembly package: build, API, options, limits, demo |
 | [../crates/breader/examples](../crates/breader/examples) | Runnable Rust examples |
 | `cargo doc --open -p breader` | API reference |
 | [../LICENSE-COMMERCIAL.md](../LICENSE-COMMERCIAL.md) | Commercial licensing |

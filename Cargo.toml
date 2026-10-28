@@ -17,7 +17,7 @@ members = [
     "tools/video-bench",
     "tools/synth",
 ]
-exclude = ["crates/breader-py", "fuzz"]
+exclude = ["crates/breader-py", "crates/breader-wasm", "fuzz"]
 default-members = [
     "crates/breader-core",
     "crates/breader-imgproc",

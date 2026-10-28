@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>breader demo</title>
+  <style>
+    body { font: 16px/1.4 system-ui, sans-serif; max-width: 52rem; margin: 1rem auto; padding: 0 1rem; }
+    canvas, video { max-width: 100%; border: 1px solid #888; display: block; margin: .5rem 0; }
+    video { display: none; }
+    #controls > * { margin-right: .75rem; }
+    ul { padding-left: 1.2rem; }
+    code { background: #8882; padding: 0 .25em; }
+    #status { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>breader</h1>
+  <p>Barcode and QR reader running in WebAssembly. Nothing leaves your browser.</p>
+  <div id="controls">
+    <input type="file" id="file" accept="image/*">
+    <button id="camera">Start camera</button>
+    <label>Effort
+      <select id="effort">
+        <option>fast</option>
+        <option selected>balanced</option>
+        <option>exhaustive</option>
+      </select>
+    </label>
+  </div>
+  <p id="status">Loading...</p>
+  <video id="video" playsinline muted></video>
+  <canvas id="canvas" width="320" height="240"></canvas>
+  <ul id="results"></ul>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
