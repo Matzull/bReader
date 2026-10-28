@@ -1,12 +1,24 @@
 name: Fuzz
 
+# Monday to Saturday: every target for a short time (job `nightly`). Sunday: one long run for each
+# of the slow or complex targets, one job each (job `weekly`). Runner minutes are counted on a private
+# repository, so the long runs are kept to the targets that need them. See docs/CI.md and fuzz/README.md.
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * 1-6"
+    - cron: "0 3 * * 0"
   workflow_dispatch:
     inputs:
+      mode:
+        description: Which run to start
+        type: choice
+        options: [nightly, weekly]
+        default: nightly
       seconds:
-        description: Seconds per fuzz target
+        description: Seconds per fuzz target (nightly default 300, weekly default 3600)
+        default: ""
+      long_seconds:
+        description: Seconds per slow target (SLOW_TARGETS) in a manual nightly run
         default: "300"
 
 permissions:
@@ -14,11 +26,21 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # libFuzzer defaults to a 1200 s timeout, which would hide a hang in a decoder.
+  FUZZ_ARGS: -timeout=10 -rss_limit_mb=2048
+  # Targets that execute slowly (D-060: pipeline 30k and rs2m_decode 80k executions in 5 minutes
+  # on 8 workers); a manual nightly run can give them LONG_SECONDS.
+  SLOW_TARGETS: pipeline rs2m_decode
+  # The weekly long runs: the slow targets and the most complex readers (D-060: 1.7k to 2.3k
+  # executions per second for aztec_scan, code39_template and linear_profile).
+  WEEKLY_TARGETS: pipeline rs2m_decode aztec_scan code39_template linear_profile
 
 jobs:
-  fuzz:
+  nightly:
+    # 19 targets x 300 s = 95 minutes of fuzzing, plus the build.
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'nightly' || github.event.schedule == '0 3 * * 1-6'
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 210
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -34,12 +56,20 @@ jobs:
           restore-keys: fuzz-corpus-
       - name: Run every target
         env:
-          SECONDS_PER_TARGET: ${{ github.event.inputs.seconds || '300' }}
+          SECONDS_PER_TARGET: ${{ inputs.seconds || '300' }}
+          LONG_SECONDS: ${{ inputs.long_seconds || '300' }}
         run: |
           failed=0
           for target in $(cargo fuzz list); do
-            echo "::group::$target"
-            if ! cargo fuzz run "$target" -- -max_total_time="$SECONDS_PER_TARGET"; then
+            seconds=$SECONDS_PER_TARGET
+            for slow in $SLOW_TARGETS; do
+              if [ "$slow" = "$target" ]; then seconds=$LONG_SECONDS; fi
+            done
+            max_len=
+            # A 256 x 256 image needs about 65 KiB.
+            if [ "$target" = pipeline ]; then max_len=-max_len=70000; fi
+            echo "::group::$target ($seconds s)"
+            if ! cargo fuzz run "$target" -- -max_total_time="$seconds" $FUZZ_ARGS $max_len; then
               echo "::error::fuzz target $target failed"
               failed=1
             fi
@@ -51,5 +81,57 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-artifacts
+          path: fuzz/artifacts
+          if-no-files-found: ignore
+
+  targets:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'weekly' || github.event.schedule == '0 3 * * 0'
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          echo "list=$(printf '%s\n' $WEEKLY_TARGETS | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  weekly:
+    # One job per target of WEEKLY_TARGETS: 5 x 3600 s = 5 hours of fuzzing in all, at most 5 jobs
+    # at a time, about one hour of wall time.
+    name: weekly (${{ matrix.target }})
+    needs: targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      - name: Restore corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-weekly-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-weekly-${{ matrix.target }}-
+      - name: Run the target
+        env:
+          SECONDS_PER_TARGET: ${{ inputs.seconds || '3600' }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          max_len=
+          if [ "$TARGET" = pipeline ]; then max_len=-max_len=70000; fi
+          cargo fuzz run "$TARGET" -- -max_total_time="$SECONDS_PER_TARGET" $FUZZ_ARGS $max_len
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
           path: fuzz/artifacts
           if-no-files-found: ignore

@@ -48,7 +48,7 @@ cargo +nightly fuzz run pipeline -- -max_total_time=300
 
 `cargo fuzz run` writes new interesting inputs into `corpus/<target>/`. The
 corpus is not versioned (`corpus/`, `artifacts/`, `target/` and `coverage/` are
-gitignored); CI keeps it in its cache between nightly runs, and locally it grows
+gitignored); CI keeps it in its cache between runs, and locally it grows
 across runs. Run `cargo +nightly fuzz cmin <target>` occasionally to shrink it.
 
 `-max_len=<n>` raises the input size limit (the `pipeline` target needs about
@@ -58,6 +58,8 @@ Baseline (5 minutes each, `-rss_limit_mb=2048 -timeout=10`, no findings):
 `pipeline` 60k execs (~200/s), `charset_decode` 30M, `content_pipeline` 13M,
 `gs1_parse` 5.4M, `linear_runs` 1.7M, `rs_decode` 1.4M, `linear_profile` 1.4M,
 `qr_grid` 0.5M.
+
+CI ([D-069](../docs/decisions.md#d-069), `.github/workflows/fuzz.yml`): Monday to Saturday every target runs 300 s. On Sunday the targets of `WEEKLY_TARGETS` (top of the workflow: the slow `pipeline` and `rs2m_decode`, 30k and 80k executions in 5 minutes on 8 workers in D-060, and the complex `aztec_scan`, `code39_template`, `linear_profile`) run 3600 s each in their own job; runner minutes count on a private repository, so a new target joins that list only when it is slow or complex. Every run passes `-timeout=10 -rss_limit_mb=2048`. A manual run (`workflow_dispatch`, `mode` nightly or weekly) can change the seconds. The corpus of the weekly jobs is cached per target and starts empty the first time. A manual nightly run can give the targets of `SLOW_TARGETS` more time with `long_seconds`.
 
 Phase 2 campaign ([D-060](../docs/decisions.md#d-060)): 1200 s or 300 s per target with `-jobs=8 -workers=8`; execution counts per target are in the decision. `-jobs` leaves `fuzz-N.log` files in `fuzz/`; delete them.
 

@@ -30,6 +30,39 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - uses: EmbarkStudios/cargo-deny-action@v2
 
+  msrv:
+    # `rust-version = "1.94"` (D-069): everything must compile on the oldest supported compiler. The
+    # lockfile is used as committed, so a dependency that needs a newer compiler fails here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-targets --all-features --locked
+      # Outside the workspace (own lockfiles, same rust-version).
+      - run: cargo check --manifest-path crates/breader-py/Cargo.toml --all-targets --locked
+      - run: cargo check --manifest-path crates/breader-wasm/Cargo.toml --all-targets --locked
+
+  miri:
+    # The only `unsafe` code: the SIMD kernels of breader-imgproc and the C interface (D-064). The
+    # C example test of breader-ffi compiles C and is not run under Miri (`tests/c_example.rs`).
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri, rust-src
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo miri test -p breader-imgproc --lib -- simd::tests
+      - name: Miri (breader-ffi unit tests)
+        # breader_scan_file opens files, which Miri forbids with isolation on.
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: cargo miri test -p breader-ffi --lib
+
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
