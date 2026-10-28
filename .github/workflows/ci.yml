@@ -149,3 +149,31 @@ jobs:
         # Run from the tests directory so the source package is not imported instead of the wheel.
         working-directory: crates/breader-py/tests
         run: python -m pytest -q
+
+  wasm:
+    # The WebAssembly / JavaScript package (D-065): native unit tests, a release build for the web
+    # and Node targets, and the Node test against the nodejs build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/breader-wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - run: cargo fmt --manifest-path crates/breader-wasm/Cargo.toml --check
+      - run: cargo clippy --manifest-path crates/breader-wasm/Cargo.toml --all-targets -- -D warnings
+      - run: cargo clippy --manifest-path crates/breader-wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings
+      - run: cargo test --manifest-path crates/breader-wasm/Cargo.toml
+      - run: node crates/breader-wasm/build.mjs
+      - run: node crates/breader-wasm/tests/node.mjs
+      - name: Package is private
+        run: node -e 'const p=require("./crates/breader-wasm/pkg/package.json"); if(p.name!=="breader"||p.private!==true) process.exit(1)'

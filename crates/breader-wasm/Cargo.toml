@@ -1,0 +1,30 @@
+[package]
+name = "breader-wasm"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+license = "AGPL-3.0-only"
+description = "WebAssembly / JavaScript bindings for the breader barcode reader"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# No `image` feature (the browser decodes image files) and no `rayon` (no threads on wasm32).
+breader = { path = "../breader" }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Os", "--enable-bulk-memory", "--enable-nontrapping-float-to-int", "--enable-sign-ext", "--enable-mutable-globals"]
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[workspace]

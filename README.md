@@ -1,6 +1,6 @@
 # breader
 
-A fast, clean-room barcode and QR code reader written in Rust. No unsafe code, no C dependencies, optional Python bindings and optional multi-threading.
+A fast, clean-room barcode and QR code reader written in Rust. No unsafe code, no C dependencies, optional Python bindings, a WebAssembly build and optional multi-threading.
 
 ## Supported symbologies
 
@@ -38,6 +38,22 @@ for s in breader.read("label.png"):
 ```
 
 See [crates/breader-py/README.md](crates/breader-py/README.md).
+
+## JavaScript / WebAssembly
+
+```
+node crates/breader-wasm/build.mjs     # needs wasm-pack and the wasm32-unknown-unknown target
+```
+
+```js
+import init, { Reader } from "./pkg/breader.js";
+
+await init();
+const reader = new Reader({ symbologies: ["qr", "ean13"] });
+for (const s of reader.scanImageData(ctx.getImageData(0, 0, w, h))) console.log(s.symbology, s.text);
+```
+
+Single-threaded, no image decoding (the browser does that), private package. See [crates/breader-wasm/README.md](crates/breader-wasm/README.md).
 
 ## Documentation
 

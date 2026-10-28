@@ -117,6 +117,14 @@ impl std::fmt::Debug for Pipeline {
     }
 }
 
+/// Whether the time budget of `options` is spent; `start` is set exactly when a budget is.
+fn over_budget(options: &ScanOptions, start: Option<Instant>) -> bool {
+    match (options.time_budget, start) {
+        (Some(budget), Some(start)) => start.elapsed() >= budget,
+        _ => false,
+    }
+}
+
 impl Pipeline {
     /// Same as [`PipelineBuilder::new`].
     pub fn builder() -> PipelineBuilder {
@@ -166,7 +174,8 @@ impl Pipeline {
         options: &ScanOptions,
         scratch: &mut Scratch,
     ) -> Vec<Symbol> {
-        let start = Instant::now();
+        // The clock is only read when a budget is set (std's `Instant` panics on wasm32-unknown-unknown).
+        let start = options.time_budget.map(|_| Instant::now());
         let mut upscaled = std::mem::take(&mut scratch.upscaled);
         let mut inner = scratch.retry.take().unwrap_or_default();
         let mut ctx = FrameContext::new(
@@ -182,7 +191,7 @@ impl Pipeline {
         if let Some(up) = &self.upscale {
             let limit = options.upscale_max_side();
             let small = image.width().max(image.height()) <= limit;
-            let in_budget = options.time_budget.is_none_or(|b| start.elapsed() < b);
+            let in_budget = !over_budget(options, start);
             if small && in_budget && symbols.is_empty() {
                 up.apply(image, &mut upscaled);
                 let (sx, sy) = (
@@ -214,11 +223,16 @@ impl Pipeline {
     }
 
     /// Runs the regular passes of `ctx`, appending to `symbols`.
-    fn run_passes(&self, ctx: &mut FrameContext<'_>, start: Instant, symbols: &mut Vec<Symbol>) {
+    fn run_passes(
+        &self,
+        ctx: &mut FrameContext<'_>,
+        start: Option<Instant>,
+        symbols: &mut Vec<Symbol>,
+    ) {
         let options = ctx.options();
         let mut found = 0;
         for pass in self.pass_iter(options) {
-            if options.time_budget.is_some_and(|b| start.elapsed() >= b) {
+            if over_budget(options, start) {
                 break;
             }
             ctx.set_pass(pass);

@@ -8,3 +8,5 @@ __pycache__/
 /.claude/worktrees
 /PROGRESS.md
 /synth-local
+/crates/breader-wasm/pkg/
+/crates/breader-wasm/pkg-node/
