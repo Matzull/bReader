@@ -45,6 +45,17 @@ jobs:
       - run: cargo test --workspace
       # Only the crates with the rayon feature have feature-gated code.
       - run: cargo test -p breader -p breader-imgproc -p breader-linear -p breader-qr -p breader-datamatrix --features breader/rayon
+      # The C interface (D-064). `cargo test --workspace` above already compiled the C example
+      # with -Werror and ran it on a QR code (crates/breader-ffi/tests/c_example.rs); here the
+      # committed header must be what cbindgen generates, and the release library must link.
+      - name: C interface (header up to date, release library)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cargo install cbindgen --locked --version 0.29.4
+          cbindgen --config crates/breader-ffi/cbindgen.toml --crate breader-ffi --output crates/breader-ffi/include/breader.h
+          git diff --exit-code -- crates/breader-ffi/include/breader.h
+          cargo build --release -p breader-ffi
+          cc -std=c99 -Wall -Wextra -Werror -pedantic -O2 -Icrates/breader-ffi/include crates/breader-ffi/examples/c/scan.c -Ltarget/release -lbreader -Wl,-rpath,$PWD/target/release -o scan-c
       # Release only (ignored in debug builds): the NFR-4 allocation counts are release numbers.
       - name: Allocation test (release)
         if: matrix.os == 'ubuntu-latest'

@@ -16,6 +16,7 @@ crates/
   breader-aztec     Aztec Code: bullseye search, core fit, reference-grid sampling, spiral decoding (GF(16) to GF(4096) Reed-Solomon, high-level modes)
   breader-content   charset/ECI decoding, GS1 parsing, content classification, dedup
   breader           facade: Reader, default pipeline, feature flags
+  breader-ffi       C interface (cdylib and staticlib, generated header include/breader.h; the only crate with unsafe code)
   breader-py        Python bindings (outside the workspace build, built with maturin)
 tools/
   bench             dataset harness, regression gate and baseline comparison

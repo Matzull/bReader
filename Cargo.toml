@@ -11,6 +11,7 @@ members = [
     "crates/breader-aztec",
     "crates/breader-content",
     "crates/breader",
+    "crates/breader-ffi",
     "tools/bench",
     "tools/video-bench",
     "tools/synth",
