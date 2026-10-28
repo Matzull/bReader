@@ -44,7 +44,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
       # Only the crates with the rayon feature have feature-gated code.
-      - run: cargo test -p breader -p breader-imgproc -p breader-linear -p breader-qr -p breader-datamatrix --features breader/rayon
+      - run: cargo test -p breader -p breader-cli -p breader-imgproc -p breader-linear -p breader-qr -p breader-datamatrix --features breader/rayon
       # Release only (ignored in debug builds): the NFR-4 allocation counts are release numbers.
       - name: Allocation test (release)
         if: matrix.os == 'ubuntu-latest'

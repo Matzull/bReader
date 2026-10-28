@@ -11,6 +11,7 @@ members = [
     "crates/breader-aztec",
     "crates/breader-content",
     "crates/breader",
+    "crates/breader-cli",
     "tools/bench",
     "tools/video-bench",
     "tools/synth",
@@ -27,6 +28,7 @@ default-members = [
     "crates/breader-aztec",
     "crates/breader-content",
     "crates/breader",
+    "crates/breader-cli",
 ]
 
 [workspace.package]
