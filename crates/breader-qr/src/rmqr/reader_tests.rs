@@ -231,10 +231,7 @@ fn the_symbology_option_selects_rmqr() {
     let view = ImageView::from_packed(&img, w, h).unwrap();
     let p = pipeline();
     let only = |set: SymbologySet| {
-        let o = ScanOptions {
-            symbologies: set,
-            ..ScanOptions::default()
-        };
+        let o = ScanOptions::default().with_symbologies(set);
         p.scan(view, &o, &mut Scratch::new())
     };
     assert_eq!(rmqr_count(&only(SymbologySet::all())), 1);

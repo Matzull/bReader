@@ -5,6 +5,11 @@
 //! [`Binarizer`], [`SymbologyReader`], [`PostProcessor`]) and the [`Pipeline`]
 //! that runs them. It contains no symbology decoders; those live in the family
 //! crates and are assembled by the `breader` facade crate.
+//!
+//! Depend on `breader`, which re-exports the public items of this crate: they
+//! are covered by its SemVer promise (docs/API-STABILITY.md). Items that the
+//! facade does not re-export are `#[doc(hidden)]` plumbing between the
+//! workspace crates.
 
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
@@ -24,9 +29,15 @@ mod symbol;
 mod symbology;
 
 pub use bitmatrix::BitMatrix;
-pub use context::{FrameCache, FrameContext, Pass, Scratch};
+/// Plumbing shared between the reader crates; not covered by SemVer.
+#[doc(hidden)]
+pub use context::FrameCache;
+pub use context::{FrameContext, Pass, Scratch};
 pub use error::Error;
-pub use geometry::{Homography, Perspective, Point, Quad};
+/// Plumbing shared between the reader crates; not covered by SemVer.
+#[doc(hidden)]
+pub use geometry::{Homography, Perspective};
+pub use geometry::{Point, Quad};
 pub use image::{ImageBuffer, ImageView, PixelFormat};
 pub use module::{
     Binarizer, Detector, PostProcessor, Preprocessor, Reject, SymbolDecoder, SymbologyReader,
@@ -36,6 +47,8 @@ pub use options::{
     ScanOptions,
 };
 pub use pipeline::{Pipeline, PipelineBuilder};
+/// Plumbing shared between the reader crates; not covered by SemVer.
+#[doc(hidden)]
 pub use plane::Plane;
 pub use symbol::{
     AztecMeta, Charset, Content, DataMatrixMeta, DataSegment, EcLevel, Gs1Element, LinearMeta,

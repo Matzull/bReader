@@ -4,8 +4,8 @@
 use std::cell::RefCell;
 
 use breader_core::{
-    AztecMeta, BitMatrix, Content, Effort, FrameCache, FrameContext, Plane, Point, Quad, Symbol,
-    SymbolMeta, Symbology, SymbologyReader, SymbologySet,
+    AztecMeta, BitMatrix, Effort, FrameCache, FrameContext, Plane, Point, Quad, Symbol, SymbolMeta,
+    Symbology, SymbologyReader, SymbologySet,
 };
 
 use crate::decode::{DecodedAztec, Shape, decode_grid, probe};
@@ -56,7 +56,8 @@ impl Params {
                 plans: 4,
                 first_pass_only: true,
             },
-            Effort::Exhaustive => Self {
+            // Exhaustive, and any preset added later.
+            _ => Self {
                 row_step: 1,
                 max_candidates: 64,
                 max_decodes: 48,
@@ -327,29 +328,25 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
     }
     let quad = Quad::new(pts);
     let dec = &found.decoded;
-    Some(Symbol {
-        symbology: Symbology::Aztec,
-        data: dec.data.clone(),
-        text: None,
-        segments: dec.segments.clone(),
-        content: Content::Unparsed,
+    let mut meta = AztecMeta::new(dec.compact, dec.layers);
+    meta.data_codewords = dec.data_codewords;
+    meta.ec_codewords = dec.ec_codewords;
+    meta.errors_corrected = dec.errors_corrected;
+    meta.erasures = dec.erasures;
+    meta.mirrored = dec.mirrored;
+    meta.rune = dec.rune;
+    meta.reader_init = dec.reader_init;
+    meta.eci = dec.eci.clone();
+    let mut symbol = Symbol::new(
+        Symbology::Aztec,
+        dec.data.clone(),
         quad,
-        orientation_deg: quad.orientation_deg(),
-        aim_id: dec.aim_id,
-        meta: SymbolMeta::Aztec(AztecMeta {
-            compact: dec.compact,
-            layers: dec.layers,
-            data_codewords: dec.data_codewords,
-            ec_codewords: dec.ec_codewords,
-            errors_corrected: dec.errors_corrected,
-            erasures: dec.erasures,
-            mirrored: dec.mirrored,
-            rune: dec.rune,
-            reader_init: dec.reader_init,
-            eci: dec.eci.clone(),
-        }),
-        quality: 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32),
-    })
+        dec.aim_id,
+        SymbolMeta::Aztec(meta),
+    );
+    symbol.segments = dec.segments.clone();
+    symbol.quality = 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32);
+    Some(symbol)
 }
 
 fn scan_with(work: &mut Work, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {

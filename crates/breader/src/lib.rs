@@ -195,6 +195,7 @@ impl Default for Reader {
 /// Failure of `Reader::scan_file`.
 #[cfg(feature = "image")]
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum FileError {
     /// The file could not be read or decoded.
     Image(image::ImageError),

@@ -26,6 +26,7 @@ fn report(tracker: &Tracker, update: &breader::FrameUpdate) {
             }
             TrackEvent::Updated(_) => {}
             TrackEvent::Lost(id) => println!("frame {}: lost    #{id}", update.frame_index),
+            _ => {}
         }
     }
 }

@@ -95,6 +95,7 @@ Start at [docs/README.md](docs/README.md): status, a map of all documents by aud
 - [docs/GUIDE.md](docs/GUIDE.md): options, effort presets, parallelism, tracker, GS1.
 - [docs/symbologies](docs/symbologies/README.md): supported symbologies, status and design per family.
 - [docs/BASELINES.md](docs/BASELINES.md): measurements against other engines.
+- [docs/API-STABILITY.md](docs/API-STABILITY.md): what 1.0 guarantees and what may change in a minor release; [CHANGELOG.md](CHANGELOG.md).
 - API reference: `cargo doc --open -p breader`.
 
 ## Performance

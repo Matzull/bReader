@@ -210,7 +210,7 @@ fn allowed(only: Option<&str>, effort: Effort, texture: bool) -> usize {
     match effort {
         Effort::Fast => fast,
         Effort::Balanced => balanced,
-        Effort::Exhaustive => exhaustive,
+        _ => exhaustive,
     }
 }
 

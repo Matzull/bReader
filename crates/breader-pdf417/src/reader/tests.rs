@@ -190,11 +190,7 @@ impl Binarizer for NoBinarizer {
 }
 
 fn pass() -> Pass {
-    Pass {
-        preprocessor: None,
-        binarizer: 0,
-        inverted: false,
-    }
+    Pass::new(None, 0, false)
 }
 
 /// Reads the raster with the PDF417 reader alone, scanning on its own.

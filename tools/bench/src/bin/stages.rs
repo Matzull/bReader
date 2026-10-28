@@ -74,18 +74,9 @@ fn main() {
         ("balanced all", ScanOptions::default()),
         (
             "balanced linear",
-            ScanOptions {
-                symbologies: linear,
-                ..Default::default()
-            },
+            ScanOptions::default().with_symbologies(linear),
         ),
-        (
-            "balanced qr",
-            ScanOptions {
-                symbologies: qr,
-                ..Default::default()
-            },
-        ),
+        ("balanced qr", ScanOptions::default().with_symbologies(qr)),
         (
             "exhaustive all",
             ScanOptions::with_effort(Effort::Exhaustive),
@@ -93,17 +84,11 @@ fn main() {
         ("fast all", ScanOptions::with_effort(Effort::Fast)),
         (
             "fast linear",
-            ScanOptions {
-                symbologies: linear,
-                ..ScanOptions::with_effort(Effort::Fast)
-            },
+            ScanOptions::with_effort(Effort::Fast).with_symbologies(linear),
         ),
         (
             "fast qr",
-            ScanOptions {
-                symbologies: qr,
-                ..ScanOptions::with_effort(Effort::Fast)
-            },
+            ScanOptions::with_effort(Effort::Fast).with_symbologies(qr),
         ),
     ];
     for (name, opts) in cases {

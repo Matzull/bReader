@@ -22,6 +22,18 @@ Input is converted to an 8-bit luma plane. `Luma8`, `Nv12`, `Nv21` and `I420` ar
 
 ## ScanOptions
 
+`ScanOptions`, `Code39Options`, `ItfOptions` and `TrackerConfig` are `#[non_exhaustive]` so that options can be added in a minor release ([API-STABILITY](API-STABILITY.md)): build them from `Default` (or `ScanOptions::with_effort`), then assign fields or chain the `with_*` methods. A struct literal does not compile outside the crate.
+
+```rust
+use breader::{Code39Options, EanAddonPolicy, Effort, ScanOptions, Symbology, SymbologySet};
+
+let mut options = ScanOptions::with_effort(Effort::Fast)
+    .with_symbologies(SymbologySet::EMPTY.with(Symbology::Ean13).with(Symbology::Code39))
+    .with_ean_addon(EanAddonPolicy::Optional)
+    .with_code39(Code39Options::default().with_full_ascii(true));
+options.max_symbols = 1; // fields stay public and assignable
+```
+
 | Rust field | Python option | Default | Meaning |
 |---|---|---|---|
 | `symbologies` | `symbologies` | all | Symbologies to look for. Readers whose symbologies are all disabled are skipped, so restricting this saves time. |

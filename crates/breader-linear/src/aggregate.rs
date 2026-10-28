@@ -1,6 +1,4 @@
-use breader_core::{
-    Content, EanAddonPolicy, LinearMeta, Point, Quad, Symbol, SymbolMeta, Symbology,
-};
+use breader_core::{EanAddonPolicy, LinearMeta, Point, Quad, Symbol, SymbolMeta, Symbology};
 
 use std::cell::RefCell;
 
@@ -728,31 +726,21 @@ impl Aggregator {
             Some(a) => (a.symbology, a.text.clone()),
             None => (first.symbology, first.text.clone()),
         };
-        Symbol {
-            symbology,
-            data,
-            text: None,
-            segments: Vec::new(),
-            content: Content::Unparsed,
-            orientation_deg: quad.orientation_deg(),
-            quad,
-            aim_id,
-            meta: SymbolMeta::Linear(LinearMeta {
-                addon: c
-                    .addon
-                    .as_ref()
-                    .and_then(|a| String::from_utf8(a.clone()).ok()),
-                checksum_verified: first.checksum_verified || c.stacked.is_some(),
-                lines_agreeing: c.lines,
-                codabar_start_stop: first.start_stop,
-                databar_segments: match &c.stacked {
-                    Some(a) => (a.segments > 0).then_some(a.segments),
-                    None => (first.segments > 0).then_some(first.segments),
-                },
-                databar_rows: c.stacked.as_ref().map(|a| a.rows),
-            }),
-            quality: quality.clamp(0.0, 1.0),
-        }
+        let mut meta = LinearMeta::new(c.lines);
+        meta.addon = c
+            .addon
+            .as_ref()
+            .and_then(|a| String::from_utf8(a.clone()).ok());
+        meta.checksum_verified = first.checksum_verified || c.stacked.is_some();
+        meta.codabar_start_stop = first.start_stop;
+        meta.databar_segments = match &c.stacked {
+            Some(a) => (a.segments > 0).then_some(a.segments),
+            None => (first.segments > 0).then_some(first.segments),
+        };
+        meta.databar_rows = c.stacked.as_ref().map(|a| a.rows);
+        let mut symbol = Symbol::new(symbology, data, quad, aim_id, SymbolMeta::Linear(meta));
+        symbol.quality = quality.clamp(0.0, 1.0);
+        symbol
     }
 }
 

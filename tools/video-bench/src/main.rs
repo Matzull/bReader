@@ -179,6 +179,7 @@ impl Runner {
                         }
                         TrackEvent::Lost(id) => self.acc.track_lost(id),
                         TrackEvent::Updated(_) => {}
+                        _ => {}
                     }
                 }
                 self.acc.observe_tracker(index, keys);

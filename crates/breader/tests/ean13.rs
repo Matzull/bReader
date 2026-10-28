@@ -122,10 +122,8 @@ fn addon_policy_is_honored_by_the_facade() {
     modules.extend(bits("01"));
     modules.extend(digit(2, b'L'));
     let (img, _) = render(&modules, 3, 110, 12);
-    let mut reader = Reader::with_options(ScanOptions {
-        ean_addon: EanAddonPolicy::Optional,
-        ..ScanOptions::default()
-    });
+    let mut reader =
+        Reader::with_options(ScanOptions::default().with_ean_addon(EanAddonPolicy::Optional));
     let symbols = reader.scan(img.view());
     assert_eq!(symbols.len(), 1, "{symbols:?}");
     assert_eq!(symbols[0].data, b"9780735200449");

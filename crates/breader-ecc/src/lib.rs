@@ -4,6 +4,8 @@
 //! Block layout: `block[0]` is the highest-degree coefficient; the last
 //! `ec_len` symbols are check symbols. The code's generator polynomial has
 //! roots `alpha^base, ..., alpha^(base + ec_len - 1)`.
+//!
+//! Implementation crate of breader: not covered by SemVer; depend on `breader`, which re-exports what is public (docs/API-STABILITY.md).
 
 #![forbid(unsafe_code)]
 

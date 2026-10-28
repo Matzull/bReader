@@ -35,18 +35,17 @@ fn symbol(bytes: &[u8]) -> Option<Symbol> {
         at = end;
     }
     let p = Point::new(0.0, 0.0);
-    Some(Symbol {
+    let mut symbol = Symbol::new(
         symbology,
         data,
-        text: None,
-        segments,
-        content: Content::Unparsed,
-        quad: Quad::new([p; 4]),
-        orientation_deg: 0.0,
-        aim_id: [b']', b'A' + aim % 26, b'0' + aim % 10],
-        meta: SymbolMeta::Linear(LinearMeta::default()),
-        quality: 0.5,
-    })
+        Quad::new([p; 4]),
+        [b']', b'A' + aim % 26, b'0' + aim % 10],
+        SymbolMeta::Linear(LinearMeta::default()),
+    );
+    symbol.segments = segments;
+    symbol.orientation_deg = 0.0;
+    symbol.quality = 0.5;
+    Some(symbol)
 }
 
 fuzz_target!(|data: &[u8]| {

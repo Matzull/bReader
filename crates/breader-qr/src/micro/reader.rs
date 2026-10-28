@@ -1,8 +1,7 @@
 //! Micro QR candidates from the finder patterns of the QR scan.
 
 use breader_core::{
-    BitMatrix, Content, Effort, Homography, Plane, Point, QrMeta, Quad, Symbol, SymbolMeta,
-    Symbology,
+    BitMatrix, Effort, Homography, Plane, Point, QrMeta, Quad, Symbol, SymbolMeta, Symbology,
 };
 
 use super::decode::{DecodedMicro, decode_grid};
@@ -35,7 +34,8 @@ impl MicroParams {
         let base = match e {
             Effort::Fast => (4, false),
             Effort::Balanced => (10, true),
-            Effort::Exhaustive => (40, true),
+            // Exhaustive, and any preset added later.
+            _ => (40, true),
         };
         Self {
             max_candidates: base.0,
@@ -190,28 +190,26 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
     }
     let quad = Quad::new(pts);
     let dec = &found.decoded;
-    Some(Symbol {
-        symbology: Symbology::MicroQr,
-        data: dec.data.clone(),
-        text: None,
-        segments: dec.segments.clone(),
-        content: Content::Unparsed,
+    let mut meta = QrMeta::new(
+        dec.version,
+        found.dim as u16,
+        found.dim as u16,
+        dec.ec_level,
+    );
+    meta.mask = dec.mask;
+    meta.errors_corrected = dec.errors_corrected;
+    meta.mirrored = dec.mirrored;
+    let mut symbol = Symbol::new(
+        Symbology::MicroQr,
+        dec.data.clone(),
         quad,
-        orientation_deg: quad.orientation_deg(),
         // ISO/IEC 15424 modifier for Micro QR not verified against the standard.
-        aim_id: *b"]Q1",
-        meta: SymbolMeta::Qr(QrMeta {
-            version: dec.version,
-            width: found.dim as u16,
-            height: found.dim as u16,
-            ec_level: dec.ec_level,
-            mask: dec.mask,
-            errors_corrected: dec.errors_corrected,
-            eci: Vec::new(),
-            mirrored: dec.mirrored,
-        }),
-        quality: 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32),
-    })
+        *b"]Q1",
+        SymbolMeta::Qr(meta),
+    );
+    symbol.segments = dec.segments.clone();
+    symbol.quality = 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32);
+    Some(symbol)
 }
 
 /// Buffers kept between scans.

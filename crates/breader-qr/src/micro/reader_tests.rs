@@ -186,10 +186,7 @@ fn the_symbology_option_selects_qr_and_micro_qr() {
     let view = ImageView::from_packed(&img, w, h).unwrap();
     let p = pipeline();
     let only = |set: SymbologySet| {
-        let o = ScanOptions {
-            symbologies: set,
-            ..ScanOptions::default()
-        };
+        let o = ScanOptions::default().with_symbologies(set);
         p.scan(view, &o, &mut Scratch::new())
     };
     assert_eq!(micro_count(&only(SymbologySet::all())), 1);
@@ -207,10 +204,7 @@ fn the_symbology_option_selects_qr_and_micro_qr() {
     };
     let (img, w, h) = draw(&qm, 5.0, 10.0, 0, false, false);
     let view = ImageView::from_packed(&img, w, h).unwrap();
-    let o = ScanOptions {
-        symbologies: SymbologySet::EMPTY.with(Symbology::MicroQr),
-        ..ScanOptions::default()
-    };
+    let o = ScanOptions::default().with_symbologies(SymbologySet::EMPTY.with(Symbology::MicroQr));
     assert!(p.scan(view, &o, &mut Scratch::new()).is_empty());
 }
 

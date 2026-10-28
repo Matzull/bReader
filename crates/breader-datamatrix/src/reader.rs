@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use breader_core::{
-    BitMatrix, Content, DataMatrixMeta, Effort, FrameContext, Plane, Point, Quad, Reject, Symbol,
+    BitMatrix, DataMatrixMeta, Effort, FrameContext, Plane, Point, Quad, Reject, Symbol,
     SymbolMeta, Symbology, SymbologyReader, SymbologySet,
 };
 
@@ -72,7 +72,8 @@ impl Params {
                 invert: true,
                 search: true,
             },
-            Effort::Exhaustive => Self {
+            // Exhaustive, and any preset added later.
+            _ => Self {
                 max_candidates: 192,
                 hypotheses: 3,
                 max_decodes: 300,
@@ -276,26 +277,22 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
     }
     let quad = Quad::new(pts);
     let dec = &found.decoded;
-    Some(Symbol {
-        symbology: Symbology::DataMatrix,
-        data: dec.data.clone(),
-        text: None,
-        segments: dec.segments.clone(),
-        content: Content::Unparsed,
+    let mut meta = DataMatrixMeta::new(dec.rows, dec.cols);
+    meta.errors_corrected = dec.errors_corrected;
+    meta.mirrored = dec.mirrored;
+    meta.eci = dec.eci.clone();
+    meta.structured_append = dec.structured_append;
+    meta.reader_init = dec.reader_programming;
+    let mut symbol = Symbol::new(
+        Symbology::DataMatrix,
+        dec.data.clone(),
         quad,
-        orientation_deg: quad.orientation_deg(),
-        aim_id: dec.aim_id,
-        meta: SymbolMeta::DataMatrix(DataMatrixMeta {
-            rows: dec.rows,
-            cols: dec.cols,
-            errors_corrected: dec.errors_corrected,
-            mirrored: dec.mirrored,
-            eci: dec.eci.clone(),
-            structured_append: dec.structured_append,
-            reader_init: dec.reader_programming,
-        }),
-        quality: 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32),
-    })
+        dec.aim_id,
+        SymbolMeta::DataMatrix(meta),
+    );
+    symbol.segments = dec.segments.clone();
+    symbol.quality = 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32);
+    Some(symbol)
 }
 
 fn scan_with(work: &mut Work, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {

@@ -28,8 +28,9 @@ A change is done when all of this holds:
 4. The gates pass with `--check` ([testing](testing.md#test-and-gate-tiers)): tier a locally (`tools/check-regression.sh`), tier b before merge and for changes that raise false-positive exposure (`--tier b`, which includes the BarBeR development subset; [testing](testing.md#test-and-gate-tiers)), the release tier only when publishing a version. No read count drops.
 5. **0 false positives** on every dataset including negatives.
 6. Baselines rewritten if reads increased, in the same change, with the movement written in BASELINES.
-7. Docs updated (see the table at the end), `tools/check-docs.py` passes (no broken links or anchors) and, if a design choice was made or reversed, a [decision](decisions.md) entry.
-8. New public behavior has tests; a bug fix has the failing case as a test; a misdecode fix has its repro.
+7. A user-visible change (a new or changed read, option, API item, binding, command line or C function, default) adds a line under `## [Unreleased]` in [CHANGELOG](../CHANGELOG.md). A change of the public Rust API follows [API-STABILITY](API-STABILITY.md) (`#[non_exhaustive]` on enums and structs that can grow, `with_*` methods on options, new trait methods with default bodies) and passes the `semver` job of CI.
+8. Docs updated (see the table at the end), `tools/check-docs.py` passes (no broken links or anchors) and, if a design choice was made or reversed, a [decision](decisions.md) entry.
+9. New public behavior has tests; a bug fix has the failing case as a test; a misdecode fix has its repro.
 
 ## Checklists
 

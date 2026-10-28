@@ -180,7 +180,7 @@ Bullseye finder on the binary plane (both polarities through the shared `Plane` 
 
 ## 4. Facade (`breader`)
 
-`Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear`, `datamatrix`, `pdf417`, `aztec` (all five default), `image`, `rayon`.
+`Reader` owns a `Pipeline`, `ScanOptions`, `Scratch` and a luma conversion buffer. `Reader::new()` builds the default pipeline for the enabled features; `Reader::from_pipeline` accepts any custom pipeline. Cargo features: `qr`, `linear`, `datamatrix`, `pdf417`, `aztec` (all five default), `image`, `rayon`. The facade is the only crate with a SemVer promise; which enums and structs are `#[non_exhaustive]`, and why, is in [API-STABILITY](API-STABILITY.md).
 
 ## 5. Performance plan (M7)
 

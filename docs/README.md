@@ -35,6 +35,8 @@ Per-symbology status, spec references and known gaps: [symbologies/README.md](sy
 |---|---|
 | [../README.md](../README.md) | Install, five-line examples for Rust and Python, license |
 | [GUIDE](GUIDE.md) | Options, effort presets, escalation, time budget, up-scale retry, parallelism, video tracker, GS1, custom pipelines |
+| [API-STABILITY](API-STABILITY.md) | What 1.0 guarantees: SemVer scope, MSRV, which outputs may change in a minor release, C ABI, Python and WASM rules, the audit of the public API |
+| [../CHANGELOG.md](../CHANGELOG.md) | What changed in each release |
 | [../crates/breader-py/README.md](../crates/breader-py/README.md) | Python API, options table, threading |
 | [../crates/breader-cli/README.md](../crates/breader-cli/README.md) | The `breader` command line tool: options, output formats, exit codes |
 | [../crates/breader-ffi/README.md](../crates/breader-ffi/README.md) | C API: build, linking, ownership and threading rules, example |

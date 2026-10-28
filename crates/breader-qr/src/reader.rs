@@ -1,8 +1,8 @@
 //! QR reader orchestration: finders, triplets, sampling and decoding.
 
 use breader_core::{
-    BitMatrix, Content, FrameContext, Homography, Plane, Point, QrMeta, Quad, Symbol, SymbolMeta,
-    Symbology, SymbologyReader, SymbologySet,
+    BitMatrix, FrameContext, Homography, Plane, Point, QrMeta, Quad, Symbol, SymbolMeta, Symbology,
+    SymbologyReader, SymbologySet,
 };
 
 use crate::decode::{DecodedQr, decode_grid, read_version};
@@ -64,7 +64,8 @@ impl Params {
                 wide_finders: true,
                 max_wide_failures: 12,
             },
-            breader_core::Effort::Exhaustive => Self {
+            // Exhaustive, and any preset added later.
+            _ => Self {
                 row_step: 1,
                 max_finders: 640,
                 max_failures: 24,
@@ -467,27 +468,26 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
     }
     let quad = Quad::new(pts);
     let dec = &found.decoded;
-    Some(Symbol {
-        symbology: Symbology::Qr,
-        data: dec.data.clone(),
-        text: None,
-        segments: dec.segments.clone(),
-        content: Content::Unparsed,
+    let mut meta = QrMeta::new(
+        dec.version,
+        found.dim as u16,
+        found.dim as u16,
+        dec.ec_level,
+    );
+    meta.mask = dec.mask;
+    meta.errors_corrected = dec.errors_corrected;
+    meta.eci = dec.eci.clone();
+    meta.mirrored = dec.mirrored;
+    let mut symbol = Symbol::new(
+        Symbology::Qr,
+        dec.data.clone(),
         quad,
-        orientation_deg: quad.orientation_deg(),
-        aim_id: dec.aim_id,
-        meta: SymbolMeta::Qr(QrMeta {
-            version: dec.version,
-            width: found.dim as u16,
-            height: found.dim as u16,
-            ec_level: dec.ec_level,
-            mask: dec.mask,
-            errors_corrected: dec.errors_corrected,
-            eci: dec.eci.clone(),
-            mirrored: dec.mirrored,
-        }),
-        quality: 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32),
-    })
+        dec.aim_id,
+        SymbolMeta::Qr(meta),
+    );
+    symbol.segments = dec.segments.clone();
+    symbol.quality = 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32);
+    Some(symbol)
 }
 
 /// A symbol already reported in this frame.

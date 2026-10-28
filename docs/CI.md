@@ -11,6 +11,8 @@ Workflows live in `.github/workflows/`. All use `contents: read` only, except th
 | `fuzz.yml` | Mon to Sat 03:00 UTC (`nightly`), Sunday 03:00 UTC (`weekly`), manual (`mode`) | Nightly toolchain. `nightly`: every target from `cargo fuzz list` for 300 s (95 minutes of fuzzing; a manual run can give the slow ones of `SLOW_TARGETS` more with `long_seconds`), job limit 210 minutes; caches `fuzz/corpus`. `weekly`: a matrix with one job per target of `WEEKLY_TARGETS` (`pipeline`, `rs2m_decode`, `aztec_scan`, `code39_template`, `linear_profile`), 3600 s each, 5 hours of runner time in all, each job limited to 2 hours; the corpus of each target is cached on its own (`fuzz-corpus-weekly-<target>-`). Both pass `-timeout=10 -rss_limit_mb=2048` (libFuzzer's default timeout is 1200 s, which would hide a hang) and `-max_len=70000` for `pipeline`, and upload `fuzz/artifacts` when something crashes. Manual runs can change the seconds (`seconds`, `long_seconds`). |
 | `release.yml` | tags `v*`, manual | Builds what a release ships, publishes nothing ([D-066](decisions.md#d-066)). `crates`: lifts `publish = false` in the runner's checkout only and runs `cargo package --workspace` (every library crate packaged and built on its own, as crates.io would), keeping the `.crate` files. `wheels`: abi3 wheels for linux x86_64 and aarch64, macOS arm64 and x86_64, Windows x64. `sdist`: the Python source distribution, installed from source in a clean environment. `binaries`: one archive per platform (linux x86_64, macOS arm64, Windows x64) with the `breader` command line tool and the C library (shared and static) with its header, each crate built in its own target directory ([D-067](decisions.md#d-067)). `draft` (tags only): attaches all of it to a draft GitHub release. Publishing to crates.io or PyPI is a manual step for the owner. |
 
+`semver` (pull requests only) runs `cargo-semver-checks` on the facade and the crates it re-exports from; see [Semver check](#semver-check).
+
 The Dynamsoft datasets have no stated license, so they are only fetched by the scheduled or manual job, never on every push. The zxing-cpp samples are fetched by the same workflow (sparse checkout of `test/samples` at a pinned tag); only the images and their expected-result files are used, as test data.
 
 ## Tiers in CI
@@ -87,6 +89,17 @@ cargo run -r -p video-bench -- data/dynamsoft/video-based-testing --write-baseli
 Do this for all three efforts, review the diff of the JSON files and commit it with the change that caused it. Writing is refused when the run has false positives. A drop in reads should be fixed, not recorded.
 
 `data/` is gitignored; CI regenerates the synthetic sets (`synth` is deterministic for a given seed and count).
+
+## Semver check
+
+The `semver` job of `ci.yml` runs on pull requests and compares the public Rust API of `breader` (the facade) with the base branch, with [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) (installed by `taiki-e/install-action`). The tool only sees the items a package defines, not its re-exports from other crates, so the job checks `breader`, `breader-core` and `breader-content` (the two crates the facade re-exports from; their changes to items the facade hides do not matter, and the tool ignores `#[doc(hidden)]` items). The crates are unpublished, so there is no registry baseline: `baseline-rev: origin/<base branch>` makes the tool build the rustdoc JSON of the base revision and of the pull request and diff the two. The checkout has `fetch-depth: 0` so the base revision is there. Items that are `#[doc(hidden)]` or not public are ignored by the tool, which is why the internal plumbing listed in [API-STABILITY](API-STABILITY.md) is hidden.
+
+What a failure means: the change breaks the public API in a way the next version number must reflect. The report names the lint (for example `enum_variant_added` for an enum that is not `#[non_exhaustive]`, `struct_pub_field_missing`, `function_missing`). Either fix the change (add `#[non_exhaustive]`, keep the old item next to the new one) or, for an intended break, record it in the [CHANGELOG](../CHANGELOG.md) and tell the owner. Locally (under the heavy lock if other agents share the machine):
+
+```sh
+cargo install cargo-semver-checks --locked
+cargo semver-checks --package breader --package breader-core --package breader-content --baseline-rev origin/main
+```
 
 ## ARM runners
 

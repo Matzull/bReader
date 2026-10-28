@@ -273,11 +273,7 @@ fn macro_block(cws: &[u16], start: usize) -> Result<(MacroPdf417, usize), Reject
     if id.is_empty() {
         return Err(Reject::Format);
     }
-    let mut block = MacroPdf417 {
-        segment_index: index,
-        file_id: id.iter().map(|c| format!("{c:03}")).collect(),
-        ..MacroPdf417::default()
-    };
+    let mut block = MacroPdf417::new(index, id.iter().map(|c| format!("{c:03}")).collect());
     i += id.len();
     let mut seen = [false; 7];
     while cws.get(i) == Some(&MACRO_FIELD) {

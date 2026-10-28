@@ -12,7 +12,7 @@
 
 use breader::modules::{QrReader, TextDecoder};
 use breader::{
-    Binarizer, BitMatrix, Content, FrameContext, ImageBuffer, ImageView, LinearMeta, Pipeline,
+    Binarizer, BitMatrix, FrameContext, ImageBuffer, ImageView, LinearMeta, Pipeline,
     PostProcessor, Quad, Reader, ScanOptions, Symbol, SymbolMeta, Symbology, SymbologyReader,
     SymbologySet,
 };
@@ -57,18 +57,16 @@ impl SymbologyReader for DarkCorner {
         if ctx.pass().inverted || !ctx.binary().get(0, 0) {
             return;
         }
-        out.push(Symbol {
-            symbology: Symbology::Code39,
-            data: b"DARK".to_vec(),
-            text: None,
-            segments: Vec::new(),
-            content: Content::Unparsed,
-            quad: Quad::default(),
-            orientation_deg: 0.0,
-            aim_id: *b"]A0",
-            meta: SymbolMeta::Linear(LinearMeta::default()),
-            quality: 0.0,
-        });
+        // `Symbol` is non-exhaustive: build it with `new`, then assign what differs.
+        let mut symbol = Symbol::new(
+            Symbology::Code39,
+            b"DARK".to_vec(),
+            Quad::default(),
+            *b"]A0",
+            SymbolMeta::Linear(LinearMeta::default()),
+        );
+        symbol.quality = 0.0;
+        out.push(symbol);
     }
 }
 

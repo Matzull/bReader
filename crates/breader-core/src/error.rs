@@ -2,6 +2,7 @@ use std::fmt;
 
 /// Errors from image validation and pipeline construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Error {
     /// Width or height is zero.
     InvalidDimensions {
