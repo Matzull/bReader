@@ -1,5 +1,7 @@
 //! Post-processing stages: de-duplication, charset decoding, GS1 parsing and
 //! content classification.
+//!
+//! Implementation crate of breader: not covered by SemVer; depend on `breader`, which re-exports what is public (docs/API-STABILITY.md).
 
 pub mod charset;
 mod classify;
@@ -45,18 +47,15 @@ mod tests {
     };
 
     fn symbol(data: &[u8], quad: Quad) -> Symbol {
-        Symbol {
-            symbology: Symbology::Code128,
-            data: data.to_vec(),
-            text: None,
-            segments: Vec::new(),
-            content: Content::Unparsed,
+        let mut symbol = Symbol::new(
+            Symbology::Code128,
+            data.to_vec(),
             quad,
-            orientation_deg: 0.0,
-            aim_id: *b"]C0",
-            meta: SymbolMeta::Linear(LinearMeta::default()),
-            quality: 1.0,
-        }
+            *b"]C0",
+            SymbolMeta::Linear(LinearMeta::default()),
+        );
+        symbol.orientation_deg = 0.0;
+        symbol
     }
 
     fn square(x: f32, y: f32, size: f32) -> Quad {

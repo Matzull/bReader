@@ -75,6 +75,8 @@ fn effort_name(e: Effort) -> &'static str {
         Effort::Fast => "fast",
         Effort::Balanced => "balanced",
         Effort::Exhaustive => "exhaustive",
+        // A value added after this binding was written.
+        _ => "unknown",
     }
 }
 
@@ -94,6 +96,8 @@ fn escalation_name(e: Escalation) -> &'static str {
         Escalation::All => "all",
         Escalation::UntilFound => "found",
         Escalation::UntilStable => "stable",
+        // A value added after this binding was written.
+        _ => "unknown",
     }
 }
 
@@ -113,6 +117,8 @@ fn addon_name(p: EanAddonPolicy) -> &'static str {
         EanAddonPolicy::Ignore => "ignore",
         EanAddonPolicy::Optional => "optional",
         EanAddonPolicy::Required => "required",
+        // A value added after this binding was written.
+        _ => "unknown",
     }
 }
 
@@ -579,15 +585,8 @@ impl Reader {
             u16::try_from(positive("min_line_agreement", min_line_agreement)?)
                 .map_err(|_| value_err("min_line_agreement is too large"))?;
         options.ean_addon = parse_addon(ean_addon)?;
-        options.code39 = Code39Options {
-            full_ascii: code39_full_ascii,
-            require_checksum: code39_checksum,
-            min_length: positive("code39_min_length", code39_min_length)?,
-        };
-        let mut itf = ItfOptions {
-            min_length: positive("itf_min_length", itf_min_length)?,
-            ..ItfOptions::default()
-        };
+        options.code39 = Code39Options::default().with_full_ascii(code39_full_ascii).with_require_checksum(code39_checksum).with_min_length(positive("code39_min_length", code39_min_length)?);
+        let mut itf = ItfOptions::default().with_min_length(positive("itf_min_length", itf_min_length)?);
         if let Some(lengths) = itf_lengths {
             itf.allowed_lengths = lengths
                 .into_iter()

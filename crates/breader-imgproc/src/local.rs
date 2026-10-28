@@ -8,6 +8,7 @@ use crate::pack::pack_row_with;
 /// Block-adaptive binarizer: per-tile thresholds smoothed over a window of
 /// neighbouring tiles. Pixels below the threshold are dark.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct LocalBinarizer {
     /// Tile side in pixels.
     pub block: usize,

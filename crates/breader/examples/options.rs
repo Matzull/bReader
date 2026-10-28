@@ -38,26 +38,23 @@ fn main() {
     // Only look for the symbologies you need; readers of the others are skipped.
     run(
         "QR only",
-        ScanOptions {
-            symbologies: SymbologySet::EMPTY.with(Symbology::Qr),
-            ..ScanOptions::default()
-        },
+        ScanOptions::default().with_symbologies(SymbologySet::EMPTY.with(Symbology::Qr)),
         &path,
     );
     run(
         "retail 1D only",
-        ScanOptions {
-            symbologies: [
-                Symbology::Ean13,
-                Symbology::Ean8,
-                Symbology::UpcA,
-                Symbology::UpcE,
-            ]
-            .into_iter()
-            .collect(),
-            ean_addon: EanAddonPolicy::Optional,
-            ..ScanOptions::default()
-        },
+        ScanOptions::default()
+            .with_symbologies(
+                [
+                    Symbology::Ean13,
+                    Symbology::Ean8,
+                    Symbology::UpcA,
+                    Symbology::UpcE,
+                ]
+                .into_iter()
+                .collect(),
+            )
+            .with_ean_addon(EanAddonPolicy::Optional),
         &path,
     );
 
@@ -66,14 +63,13 @@ fn main() {
     // false positives.
     run(
         "ITF, 6 or 14 digits",
-        ScanOptions {
-            symbologies: SymbologySet::EMPTY.with(Symbology::Itf),
-            itf: ItfOptions {
-                allowed_lengths: vec![6, 14],
-                min_length: 6,
-            },
-            ..ScanOptions::default()
-        },
+        ScanOptions::default()
+            .with_symbologies(SymbologySet::EMPTY.with(Symbology::Itf))
+            .with_itf(
+                ItfOptions::default()
+                    .with_allowed_lengths(vec![6, 14])
+                    .with_min_length(6),
+            ),
         &path,
     );
 
@@ -81,23 +77,16 @@ fn main() {
     // once the budget is exceeded, but a pass in progress is not interrupted.
     run(
         "Exhaustive, 5 ms budget",
-        ScanOptions {
-            effort: Effort::Exhaustive,
-            time_budget: Some(Duration::from_millis(5)),
-            ..ScanOptions::default()
-        },
+        ScanOptions::with_effort(Effort::Exhaustive).with_time_budget(Duration::from_millis(5)),
         &path,
     );
 
     // Stop after the first hit, or after the first pass that adds nothing.
     run(
         "Exhaustive, until found",
-        ScanOptions {
-            effort: Effort::Exhaustive,
-            escalation: Some(Escalation::UntilFound),
-            max_symbols: 1,
-            ..ScanOptions::default()
-        },
+        ScanOptions::with_effort(Effort::Exhaustive)
+            .with_escalation(Escalation::UntilFound)
+            .with_max_symbols(1),
         &path,
     );
 }

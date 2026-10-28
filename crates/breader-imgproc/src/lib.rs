@@ -1,4 +1,6 @@
 //! Pixel format conversion, preprocessing and binarization.
+//!
+//! Implementation crate of breader: not covered by SemVer; depend on `breader`, which re-exports what is public (docs/API-STABILITY.md).
 
 mod downscale;
 mod local;

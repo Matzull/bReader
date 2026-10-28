@@ -125,7 +125,8 @@ fn edge_variants(effort: Effort) -> &'static [EdgeParams] {
     const CROSSING: EdgeParams = EdgeParams::crossing();
     match effort {
         Effort::Fast => &[SMOOTH],
-        Effort::Balanced | Effort::Exhaustive => &[FINE, SMOOTH, CROSSING],
+        // Balanced, Exhaustive and any preset added later.
+        _ => &[FINE, SMOOTH, CROSSING],
     }
 }
 
@@ -776,7 +777,8 @@ impl LinearReader {
         let limit = match effort {
             Effort::Fast => 0,
             Effort::Balanced => REFINE_PROBES_BALANCED,
-            Effort::Exhaustive => REFINE_PROBES_EXHAUSTIVE,
+            // Exhaustive, and any preset added later.
+            _ => REFINE_PROBES_EXHAUSTIVE,
         };
         let planned = work.stage.probes.len();
         let mut done = [Point::new(0.0, 0.0); REFINE_PROBES_EXHAUSTIVE];
@@ -978,11 +980,7 @@ mod tests {
     }
 
     fn scan(img: &ImageBuffer, opts: &ScanOptions) -> Vec<Symbol> {
-        let pass = Pass {
-            preprocessor: None,
-            binarizer: 0,
-            inverted: false,
-        };
+        let pass = Pass::new(None, 0, false);
         scan_pass(img, opts, pass, &[])
     }
 
@@ -1191,10 +1189,7 @@ mod tests {
             assert_eq!(found[0].data, TEXT.as_bytes());
             assert!(found[0].quad.contains(Point::new(350.0, 260.0)));
         }
-        let off = ScanOptions {
-            try_invert: Some(false),
-            ..ScanOptions::default()
-        };
+        let off = ScanOptions::default().with_try_invert(false);
         assert!(scan(&img, &off).is_empty());
         let normal = picture(&ean13_modules(TEXT), 15.0);
         assert_eq!(scan(&normal, &off).len(), 1);
@@ -1204,11 +1199,7 @@ mod tests {
     fn inverted_passes_are_left_to_the_reader() {
         assert!(LinearReader.handles_inversion());
         let img = picture(&ean13_modules(TEXT), 0.0);
-        let pass = Pass {
-            preprocessor: None,
-            binarizer: 0,
-            inverted: true,
-        };
+        let pass = Pass::new(None, 0, true);
         assert!(scan_pass(&img, &ScanOptions::default(), pass, &[]).is_empty());
     }
 
@@ -1240,11 +1231,7 @@ mod tests {
     fn quad_is_reported_in_original_frame_coordinates() {
         let img = picture(&ean13_modules(TEXT), 0.0);
         let pre: Vec<Box<dyn Preprocessor>> = vec![Box::new(Half)];
-        let pass = Pass {
-            preprocessor: Some(0),
-            binarizer: 0,
-            inverted: false,
-        };
+        let pass = Pass::new(Some(0), 0, false);
         let found = scan_pass(&img, &ScanOptions::default(), pass, &pre);
         assert_eq!(found.len(), 1);
         let q = found[0].quad;
@@ -1262,11 +1249,7 @@ mod tests {
         let binarizers: Vec<Box<dyn Binarizer>> = Vec::new();
         let opts = ScanOptions::default();
         let mut ctx = FrameContext::new(img.view(), &opts, &pre, &binarizers, &mut scratch);
-        ctx.set_pass(Pass {
-            preprocessor: Some(0),
-            binarizer: 0,
-            inverted: false,
-        });
+        ctx.set_pass(Pass::new(Some(0), 0, false));
         let mut out = Vec::new();
         LinearReader.scan(&mut ctx, &mut out);
         assert!(out.is_empty());
@@ -1279,27 +1262,22 @@ mod tests {
             let found = scan(&img, &ScanOptions::with_effort(effort));
             assert_eq!(found.len(), 1, "{effort:?}");
         }
-        let other = ScanOptions {
-            symbologies: SymbologySet::EMPTY
+        let other = ScanOptions::default().with_symbologies(
+            SymbologySet::EMPTY
                 .with(Symbology::Ean8)
                 .with(Symbology::Code39),
-            ..ScanOptions::default()
-        };
+        );
         assert!(scan(&img, &other).is_empty());
-        let qr_only = ScanOptions {
-            symbologies: SymbologySet::EMPTY.with(Symbology::Qr),
-            ..ScanOptions::default()
-        };
+        let qr_only =
+            ScanOptions::default().with_symbologies(SymbologySet::EMPTY.with(Symbology::Qr));
         assert!(scan(&img, &qr_only).is_empty());
     }
 
     #[test]
     fn min_line_agreement_gates_the_result() {
         let img = picture(&ean13_modules(TEXT), 0.0);
-        let with_agreement = |min_line_agreement| ScanOptions {
-            min_line_agreement,
-            ..ScanOptions::default()
-        };
+        let with_agreement =
+            |min_line_agreement| ScanOptions::default().with_min_line_agreement(min_line_agreement);
         let found = scan(&img, &with_agreement(1));
         assert_eq!(found.len(), 1);
         let lines = linear_meta(&found[0]).lines_agreeing;
@@ -1314,10 +1292,7 @@ mod tests {
     fn addon_policy_controls_reporting() {
         let with = with_addon(ean13_modules("9780735200449"), 9, addon_modules("52495"));
         let img = picture(&with, 0.0);
-        let policy = |ean_addon| ScanOptions {
-            ean_addon,
-            ..ScanOptions::default()
-        };
+        let policy = |ean_addon| ScanOptions::default().with_ean_addon(ean_addon);
         let found = scan(&img, &ScanOptions::default());
         assert_eq!(found.len(), 1);
         assert_eq!(linear_meta(&found[0]).addon, None);
@@ -1469,13 +1444,8 @@ mod tests {
             1
         );
 
-        let full = ScanOptions {
-            code39: breader_core::Code39Options {
-                full_ascii: true,
-                ..Default::default()
-            },
-            ..ScanOptions::default()
-        };
+        let full = ScanOptions::default()
+            .with_code39(breader_core::Code39Options::default().with_full_ascii(true));
         let img = wide_picture(&code39_modules("+A+B+C", 3, 1), 2.4, 0.0);
         let found = scan(&img, &full);
         assert_eq!(found.len(), 1);
@@ -1495,21 +1465,17 @@ mod tests {
         assert_eq!(&found[0].aim_id, b"]I1");
         assert!(linear_meta(&found[0]).lines_agreeing >= 3);
 
-        let only12 = ScanOptions {
-            itf: breader_core::ItfOptions {
-                allowed_lengths: vec![12],
-                min_length: 6,
-            },
-            ..ScanOptions::default()
-        };
+        let only12 = ScanOptions::default().with_itf(
+            breader_core::ItfOptions::default()
+                .with_allowed_lengths(vec![12])
+                .with_min_length(6),
+        );
         assert!(scan(&img, &only12).is_empty(), "no partial reads");
-        let any = ScanOptions {
-            itf: breader_core::ItfOptions {
-                allowed_lengths: vec![],
-                min_length: 6,
-            },
-            ..ScanOptions::default()
-        };
+        let any = ScanOptions::default().with_itf(
+            breader_core::ItfOptions::default()
+                .with_allowed_lengths(vec![])
+                .with_min_length(6),
+        );
         let found = scan(&img, &any);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].data.len(), 14);
@@ -1538,13 +1504,11 @@ mod tests {
             assert!(linear_meta(&found[0]).lines_agreeing >= 4, "{digits}");
         }
         let img = wide_picture(&itf_modules("123456789012", 3), 2.6, 0.0);
-        let own = ScanOptions {
-            itf: breader_core::ItfOptions {
-                allowed_lengths: vec![12],
-                min_length: 6,
-            },
-            ..ScanOptions::default()
-        };
+        let own = ScanOptions::default().with_itf(
+            breader_core::ItfOptions::default()
+                .with_allowed_lengths(vec![12])
+                .with_min_length(6),
+        );
         assert_eq!(scan(&img, &own).len(), 1);
         // Below the minimum of 6 digits nothing is read.
         let img = wide_picture(&itf_modules("1234", 3), 2.6, 0.0);
@@ -1748,15 +1712,10 @@ mod tests {
                 )
             })
             .collect();
-        let off = ScanOptions {
-            symbologies: others,
-            ..ScanOptions::default()
-        };
+        let off = ScanOptions::default().with_symbologies(others);
         assert!(scan(&img, &off).is_empty());
-        let only = ScanOptions {
-            symbologies: [Symbology::DataBarLimited].into_iter().collect(),
-            ..ScanOptions::default()
-        };
+        let only = ScanOptions::default()
+            .with_symbologies([Symbology::DataBarLimited].into_iter().collect());
         assert!(scan(&img, &only).is_empty());
     }
 
@@ -1771,13 +1730,12 @@ mod tests {
         let meta = linear_meta(&found[0]);
         assert_eq!(meta.codabar_start_stop, Some((b'B', b'D')));
         assert!(meta.lines_agreeing >= 3);
-        let off = ScanOptions {
-            symbologies: SymbologySet::all()
+        let off = ScanOptions::default().with_symbologies(
+            SymbologySet::all()
                 .iter()
                 .filter(|s| *s != Symbology::Codabar)
                 .collect(),
-            ..ScanOptions::default()
-        };
+        );
         assert!(scan(&img, &off).is_empty());
         // No stop character: nothing, and nothing else either.
         let m = codabar_modules('B', "40129/5", 'D', 3, 1);
@@ -1813,13 +1771,12 @@ mod tests {
         }
         // Switched off, nothing is read; a wrong check character reads nothing.
         let img = wide_picture(&modules, 2.6, 0.0);
-        let off = ScanOptions {
-            symbologies: SymbologySet::all()
+        let off = ScanOptions::default().with_symbologies(
+            SymbologySet::all()
                 .iter()
                 .filter(|s| *s != Symbology::Code93)
                 .collect(),
-            ..ScanOptions::default()
-        };
+        );
         assert!(scan(&img, &off).is_empty());
         let mut values = code93_ascii_values(text);
         let (c, k) = code93_checks(&values);

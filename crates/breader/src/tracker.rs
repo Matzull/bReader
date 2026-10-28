@@ -5,7 +5,11 @@ use breader_core::{Effort, ImageView, Point, ScanOptions, Symbol};
 use crate::Reader;
 
 /// Scheduling parameters of a [`Tracker`].
+///
+/// Non-exhaustive: start from [`Default`], then assign fields or chain the
+/// `with_*` methods.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct TrackerConfig {
     /// The frame is split into this many horizontal strips; one strip is
     /// scanned at `full_effort` per frame, cycling. 1 scans the whole frame
@@ -26,6 +30,57 @@ pub struct TrackerConfig {
     pub full_effort: Effort,
 }
 
+impl TrackerConfig {
+    /// Sets [`strips`](Self::strips).
+    #[must_use]
+    pub fn with_strips(mut self, strips: u32) -> Self {
+        self.strips = strips;
+        self
+    }
+
+    /// Sets [`strip_overlap`](Self::strip_overlap).
+    #[must_use]
+    pub fn with_strip_overlap(mut self, strip_overlap: f32) -> Self {
+        self.strip_overlap = strip_overlap;
+        self
+    }
+
+    /// Sets [`lost_after`](Self::lost_after).
+    #[must_use]
+    pub fn with_lost_after(mut self, lost_after: u32) -> Self {
+        self.lost_after = lost_after;
+        self
+    }
+
+    /// Sets [`roi_margin`](Self::roi_margin).
+    #[must_use]
+    pub fn with_roi_margin(mut self, roi_margin: f32) -> Self {
+        self.roi_margin = roi_margin;
+        self
+    }
+
+    /// Sets [`roi_effort`](Self::roi_effort).
+    #[must_use]
+    pub fn with_roi_effort(mut self, effort: Effort) -> Self {
+        self.roi_effort = effort;
+        self
+    }
+
+    /// Sets [`global_effort`](Self::global_effort).
+    #[must_use]
+    pub fn with_global_effort(mut self, effort: Effort) -> Self {
+        self.global_effort = effort;
+        self
+    }
+
+    /// Sets [`full_effort`](Self::full_effort).
+    #[must_use]
+    pub fn with_full_effort(mut self, effort: Effort) -> Self {
+        self.full_effort = effort;
+        self
+    }
+}
+
 impl Default for TrackerConfig {
     fn default() -> Self {
         Self {
@@ -42,6 +97,7 @@ impl Default for TrackerConfig {
 
 /// A symbol followed across frames. Identity is symbology + data + position.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Track {
     /// Unique within a tracker, assigned in increasing order.
     pub id: u64,
@@ -57,6 +113,7 @@ pub struct Track {
 
 /// A change to the set of tracks, carrying the [`Track::id`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TrackEvent {
     /// First detection of a symbol.
     New(u64),
@@ -67,6 +124,7 @@ pub enum TrackEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 /// Result of processing one frame.
 pub struct FrameUpdate {
     /// What changed, in the order: detections (new/updated), then losses.

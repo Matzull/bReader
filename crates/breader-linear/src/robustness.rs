@@ -48,10 +48,7 @@ const ALL: (
 /// The most permissive configuration: every length of ITF, Code 39 without a
 /// minimum length, and optional add-ons.
 fn options() -> LineOptions {
-    let mut o = ScanOptions {
-        ean_addon: breader_core::EanAddonPolicy::Optional,
-        ..ScanOptions::default()
-    };
+    let mut o = ScanOptions::default().with_ean_addon(breader_core::EanAddonPolicy::Optional);
     o.itf.allowed_lengths.clear();
     o.itf.min_length = 2;
     o.code39.min_length = 1;
@@ -435,11 +432,7 @@ fn random_images_yield_no_symbols() {
                 for preprocessor in [None, Some(0)] {
                     let mut ctx =
                         FrameContext::new(img.view(), &opts, &pre, &binarizers, &mut scratch);
-                    ctx.set_pass(Pass {
-                        preprocessor,
-                        binarizer: 0,
-                        inverted,
-                    });
+                    ctx.set_pass(Pass::new(preprocessor, 0, inverted));
                     LinearReader.scan(&mut ctx, &mut found);
                 }
             }

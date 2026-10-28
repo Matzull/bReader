@@ -808,10 +808,7 @@ mod tests {
     }
 
     fn opts() -> LineOptions {
-        LineOptions::from(&ScanOptions {
-            ean_addon: EanAddonPolicy::Optional,
-            ..ScanOptions::default()
-        })
+        LineOptions::from(&ScanOptions::default().with_ean_addon(EanAddonPolicy::Optional))
     }
 
     fn decode(profile: &[u8]) -> Vec<LineHit> {

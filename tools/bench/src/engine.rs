@@ -42,10 +42,8 @@ pub struct BreaderEngine {
 
 impl BreaderEngine {
     pub fn new(effort: Effort, escalation: Option<Escalation>) -> Self {
-        let options = ScanOptions {
-            escalation,
-            ..ScanOptions::with_effort(effort)
-        };
+        let mut options = ScanOptions::with_effort(effort);
+        options.escalation = escalation;
         Self {
             reader: Reader::with_options(options),
         }

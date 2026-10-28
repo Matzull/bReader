@@ -86,7 +86,8 @@ pub(crate) fn block_layout(version: u8, level: EcLevel) -> Option<BlockLayout> {
         EcLevel::M => 1,
         EcLevel::Q => 2,
         EcLevel::H => 3,
-        EcLevel::DetectionOnly => return None,
+        // DetectionOnly (Micro QR M1) and any level added later.
+        _ => return None,
     };
     Some(row[col])
 }

@@ -12,7 +12,7 @@ fn qec(l: EcLevel) -> QEc {
         EcLevel::M => QEc::M,
         EcLevel::Q => QEc::Q,
         EcLevel::H => QEc::H,
-        EcLevel::DetectionOnly => unreachable!(),
+        _ => unreachable!(),
     }
 }
 
@@ -159,8 +159,8 @@ fn place(version: u8, level: EcLevel, mask: u8, codewords: &[u8]) -> BitMatrix {
         EcLevel::L => 1,
         EcLevel::M => 0,
         EcLevel::Q => 3,
-        EcLevel::DetectionOnly => unreachable!(),
         EcLevel::H => 2,
+        _ => unreachable!(),
     };
     let fmt = bch_word((lv << 3) | u32::from(mask), 0x537, 11, 5) ^ 0x5412;
     for p in spec::format_positions(d) {

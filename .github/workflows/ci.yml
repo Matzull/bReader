@@ -72,6 +72,24 @@ jobs:
       - name: Synthetic regression gate
         run: tools/check-regression.sh --synthetic-only --tier ${{ github.event_name == 'pull_request' && 'a' || 'b' }}
 
+  semver:
+    # The public Rust API of the facade against the base branch (docs/API-STABILITY.md). The crates are
+    # unpublished, so the baseline is a revision of the repository, not a registry release.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks
+      # The tool only sees items defined in the package it checks, not the re-exports of other crates, so the
+      # crates the facade re-exports from are checked too.
+      - run: cargo semver-checks --package breader --package breader-core --package breader-content --baseline-rev origin/${{ github.base_ref }}
+
   changes:
     # The wheels and pytest cost far more than the tests: build them on main, on tags, and when the
     # bindings or the facade crate changed.

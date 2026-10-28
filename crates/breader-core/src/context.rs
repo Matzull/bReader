@@ -4,6 +4,7 @@ use crate::{Binarizer, BitMatrix, ImageBuffer, ImageView, Preprocessor, ScanOpti
 
 /// One attempt over the frame with a given image variant and binarization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub struct Pass {
     /// Index into the pipeline's preprocessors; `None` = original image.
     pub preprocessor: Option<usize>,
@@ -11,6 +12,18 @@ pub struct Pass {
     pub binarizer: usize,
     /// Whether the binary image is polarity-flipped (light-on-dark codes).
     pub inverted: bool,
+}
+
+impl Pass {
+    /// A pass over `preprocessor` (`None` = the original image) binarized by
+    /// the binarizer at index `binarizer`, polarity-flipped when `inverted`.
+    pub const fn new(preprocessor: Option<usize>, binarizer: usize, inverted: bool) -> Self {
+        Self {
+            preprocessor,
+            binarizer,
+            inverted,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -139,7 +152,9 @@ impl<'a> FrameContext<'a> {
     }
 
     /// The frame-wide value of type `T`, created on first use and reset at the
-    /// start of every frame.
+    /// start of every frame. Plumbing between the reader crates (see
+    /// [`FrameCache`]); not covered by SemVer.
+    #[doc(hidden)]
     pub fn shared<T: FrameCache>(&mut self) -> &mut T {
         let slots = &mut self.scratch.shared;
         let idx = match slots.iter_mut().position(|s| s.as_any().is::<T>()) {

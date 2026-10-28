@@ -30,29 +30,29 @@ fn options(seed: u16) -> LineOptions {
     if set.is_empty() {
         set = SymbologySet::all();
     }
-    let opts = ScanOptions {
-        symbologies: set,
-        ean_addon: match seed >> 8 & 3 {
+    let opts = ScanOptions::default()
+        .with_symbologies(set)
+        .with_ean_addon(match seed >> 8 & 3 {
             0 => EanAddonPolicy::Ignore,
             1 => EanAddonPolicy::Optional,
             _ => EanAddonPolicy::Required,
-        },
-        code39: Code39Options {
-            full_ascii: seed >> 10 & 1 == 1,
-            require_checksum: seed >> 11 & 1 == 1,
-            min_length: usize::from(seed >> 12 & 3),
-        },
-        itf: ItfOptions {
-            allowed_lengths: if seed >> 14 & 1 == 1 {
-                vec![6, 14]
-            } else {
-                Vec::new()
-            },
-            min_length: 2,
-        },
-        try_invert: Some(seed >> 15 & 1 == 1),
-        ..ScanOptions::default()
-    };
+        })
+        .with_code39(
+            Code39Options::default()
+                .with_full_ascii(seed >> 10 & 1 == 1)
+                .with_require_checksum(seed >> 11 & 1 == 1)
+                .with_min_length(usize::from(seed >> 12 & 3)),
+        )
+        .with_itf(
+            ItfOptions::default()
+                .with_allowed_lengths(if seed >> 14 & 1 == 1 {
+                    vec![6, 14]
+                } else {
+                    Vec::new()
+                })
+                .with_min_length(2),
+        )
+        .with_try_invert(seed >> 15 & 1 == 1);
     LineOptions::from(&opts)
 }
 

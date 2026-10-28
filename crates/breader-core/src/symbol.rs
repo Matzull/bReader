@@ -1,7 +1,11 @@
 use crate::{Quad, Symbology};
 
 /// A decoded and validated symbol.
+///
+/// Output only and non-exhaustive: read the fields, or build one with
+/// [`Symbol::new`] (for custom readers and tests), then assign the rest.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Symbol {
     /// Symbology of the result.
     pub symbology: Symbology,
@@ -24,6 +28,32 @@ pub struct Symbol {
     pub meta: SymbolMeta,
     /// Decoder-specific quality estimate in [0, 1]; never used to accept a result.
     pub quality: f32,
+}
+
+impl Symbol {
+    /// A symbol with the given essentials. `text` is `None`, `segments` empty,
+    /// `content` [`Content::Unparsed`], `orientation_deg` taken from `quad` and
+    /// `quality` 1.0; assign the fields to change them.
+    pub fn new(
+        symbology: Symbology,
+        data: Vec<u8>,
+        quad: Quad,
+        aim_id: [u8; 3],
+        meta: SymbolMeta,
+    ) -> Self {
+        Self {
+            symbology,
+            data,
+            text: None,
+            segments: Vec::new(),
+            content: Content::Unparsed,
+            quad,
+            orientation_deg: quad.orientation_deg(),
+            aim_id,
+            meta,
+            quality: 1.0,
+        }
+    }
 }
 
 /// A byte range of [`Symbol::data`] with its charset.
@@ -98,6 +128,7 @@ pub enum SymbolMeta {
 
 /// Details of a decoded Data Matrix symbol.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DataMatrixMeta {
     /// Symbol height in modules, including the finder and clock patterns.
     pub rows: u16,
@@ -118,6 +149,7 @@ pub struct DataMatrixMeta {
 
 /// Details of a decoded Aztec Code symbol.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AztecMeta {
     /// Compact symbol (1 to 4 layers, or an Aztec Rune) rather than full-range.
     pub compact: bool,
@@ -145,6 +177,7 @@ pub struct AztecMeta {
 
 /// Details of a decoded PDF417 symbol.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Pdf417Meta {
     /// Number of rows, 3 to 90.
     pub rows: u16,
@@ -167,6 +200,7 @@ pub struct Pdf417Meta {
 
 /// Macro PDF417 control block: the position of a symbol in a multi-symbol file.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct MacroPdf417 {
     /// Zero-based position of this symbol in the file.
     pub segment_index: u32,
@@ -191,6 +225,7 @@ pub struct MacroPdf417 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 /// QR error correction level.
 pub enum EcLevel {
     /// About 7 % of codewords recoverable.
@@ -206,6 +241,7 @@ pub enum EcLevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 /// Details of a decoded QR Code, Micro QR Code or rMQR Code.
 pub struct QrMeta {
     /// Symbol version, 1 to 40. For [`Symbology::MicroQr`](crate::Symbology::MicroQr)
@@ -230,6 +266,7 @@ pub struct QrMeta {
 
 /// Details of a decoded 1D symbol.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct LinearMeta {
     /// EAN-2 / EAN-5 supplement digits, if present.
     pub addon: Option<String>,
@@ -249,4 +286,96 @@ pub struct LinearMeta {
     /// ([D-048](../../docs/decisions.md#d-048)). `None` for one-row symbols
     /// and other symbologies.
     pub databar_rows: Option<u8>,
+}
+
+impl QrMeta {
+    /// Details for a symbol of the given version, size and level; `mask` and
+    /// `errors_corrected` are 0, `eci` empty and `mirrored` false until assigned.
+    pub fn new(version: u8, width: u16, height: u16, ec_level: EcLevel) -> Self {
+        Self {
+            version,
+            width,
+            height,
+            ec_level,
+            mask: 0,
+            errors_corrected: 0,
+            eci: Vec::new(),
+            mirrored: false,
+        }
+    }
+}
+
+impl DataMatrixMeta {
+    /// Details for a symbol of `rows` x `cols` modules; the counters are 0, the
+    /// flags false and the lists empty until assigned.
+    pub fn new(rows: u16, cols: u16) -> Self {
+        Self {
+            rows,
+            cols,
+            errors_corrected: 0,
+            mirrored: false,
+            eci: Vec::new(),
+            structured_append: None,
+            reader_init: false,
+        }
+    }
+}
+
+impl AztecMeta {
+    /// Details for a symbol of `layers` layers (0 for a Rune); the other fields
+    /// are 0, false, empty or `None` until assigned.
+    pub fn new(compact: bool, layers: u8) -> Self {
+        Self {
+            compact,
+            layers,
+            data_codewords: 0,
+            ec_codewords: 0,
+            errors_corrected: 0,
+            erasures: 0,
+            mirrored: false,
+            rune: None,
+            reader_init: false,
+            eci: Vec::new(),
+        }
+    }
+}
+
+impl Pdf417Meta {
+    /// Details for a symbol of `rows` x `cols` data columns at error correction
+    /// level `ec_level`; the counters are 0, the flags false and `macro_pdf417` `None` until assigned.
+    pub fn new(rows: u16, cols: u16, ec_level: u8) -> Self {
+        Self {
+            rows,
+            cols,
+            ec_level,
+            errors_corrected: 0,
+            erasures: 0,
+            compact: false,
+            macro_pdf417: None,
+            reader_init: false,
+        }
+    }
+}
+
+impl LinearMeta {
+    /// Details of a 1D read confirmed by `lines_agreeing` scanlines; the add-on
+    /// and the symbology-specific fields are empty and the check unverified until assigned.
+    pub fn new(lines_agreeing: u16) -> Self {
+        Self {
+            lines_agreeing,
+            ..Self::default()
+        }
+    }
+}
+
+impl MacroPdf417 {
+    /// A control block for segment `segment_index` of the file `file_id`; the
+    /// optional fields are `None` and `last_segment` false until assigned.
+    pub fn new(segment_index: u32, file_id: String) -> Self {
+        Self {
+            segment_index,
+            file_id,
+            ..Self::default()
+        }
+    }
 }

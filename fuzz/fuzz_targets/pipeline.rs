@@ -50,15 +50,11 @@ fuzz_target!(|data: &[u8]| {
     if set.is_empty() {
         set = SymbologySet::all();
     }
-    let options = ScanOptions {
-        effort,
-        symbologies: set,
-        try_invert: match flags >> 2 & 3 {
-            0 => None,
-            1 => Some(false),
-            _ => Some(true),
-        },
-        ..ScanOptions::default()
+    let mut options = ScanOptions::with_effort(effort).with_symbologies(set);
+    options.try_invert = match flags >> 2 & 3 {
+        0 => None,
+        1 => Some(false),
+        _ => Some(true),
     };
     let mut reader = Reader::with_options(options);
 

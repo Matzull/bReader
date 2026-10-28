@@ -20,10 +20,9 @@ fn tiny_qr(quiet: usize) -> (Vec<u8>, usize) {
 }
 
 fn scan(px: &[u8], side: usize, effort: Effort, retry: Option<usize>) -> Vec<breader::Symbol> {
-    let mut reader = Reader::with_options(ScanOptions {
-        upscale_retry: retry,
-        ..ScanOptions::with_effort(effort)
-    });
+    let mut options = ScanOptions::with_effort(effort);
+    options.upscale_retry = retry;
+    let mut reader = Reader::with_options(options);
     reader.scan(ImageView::from_packed(px, side, side).unwrap())
 }
 

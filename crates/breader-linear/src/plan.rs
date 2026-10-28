@@ -61,7 +61,8 @@ fn density(effort: Effort) -> Density {
             axis: 64,
             diagonal: 32,
         },
-        Effort::Exhaustive => Density {
+        // Exhaustive, and any preset added later.
+        _ => Density {
             axis: 128,
             diagonal: 64,
         },
@@ -72,7 +73,8 @@ fn max_spacing(effort: Effort, angle_deg: f32) -> f32 {
     let base = match effort {
         Effort::Fast => 48.0,
         Effort::Balanced => 24.0,
-        Effort::Exhaustive => 12.0,
+        // Exhaustive, and any preset added later.
+        _ => 12.0,
     };
     if is_axis(angle_deg) { base } else { base * 1.5 }
 }
@@ -86,7 +88,8 @@ fn angles(effort: Effort) -> &'static [f32] {
     match effort {
         Effort::Fast => &[0.0, 90.0],
         Effort::Balanced => &[0.0, 90.0, 45.0, 135.0, 22.5, 67.5, 112.5, 157.5],
-        Effort::Exhaustive => &[
+        // Exhaustive, and any preset added later.
+        _ => &[
             0.0, 90.0, 45.0, 135.0, 15.0, 75.0, 105.0, 165.0, 30.0, 60.0, 120.0, 150.0,
         ],
     }

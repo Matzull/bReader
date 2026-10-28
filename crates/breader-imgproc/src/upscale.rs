@@ -18,7 +18,8 @@ const BEFORE: [i32; 4] = [-1, 9, 21, -2];
 const CHUNK: usize = 256;
 
 impl Upscale {
-    /// Enlargement factor.
+    /// Enlargement factor. Not covered by SemVer.
+    #[doc(hidden)]
     pub const FACTOR: usize = 3;
 }
 

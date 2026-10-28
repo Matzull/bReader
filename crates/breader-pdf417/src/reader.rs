@@ -4,8 +4,8 @@
 use std::cell::RefCell;
 
 use breader_core::{
-    Content, Effort, FrameContext, ImageView, Pdf417Meta, Perspective, Point, Quad, Symbol,
-    SymbolMeta, Symbology, SymbologyReader, SymbologySet,
+    Effort, FrameContext, ImageView, Pdf417Meta, Perspective, Point, Quad, Symbol, SymbolMeta,
+    Symbology, SymbologyReader, SymbologySet,
 };
 use breader_linear::stacked::{EdgeParams, Mark, MarkKind, MarkSet, RawMark, scan_marks};
 
@@ -45,7 +45,8 @@ impl Params {
                 smooth_retry: true,
                 tilts: &[2.5, 5.0, 9.0],
             },
-            Effort::Exhaustive => Self {
+            // Exhaustive, and any preset added later.
+            _ => Self {
                 seeds: 32,
                 smooth_retry: true,
                 tilts: &[2.0, 4.0, 7.0, 11.0, 16.0],
@@ -761,27 +762,26 @@ fn build_symbol(f: &Found, scale: (f32, f32)) -> Option<Symbol> {
     let dec = &f.solved.decoded;
     let pts = corners(f)?.map(|p| Point::new(p.x * scale.0, p.y * scale.1));
     let quad = Quad::new(pts);
-    Some(Symbol {
-        symbology: Symbology::Pdf417,
-        data: dec.data.clone(),
-        text: None,
-        segments: dec.segments.clone(),
-        content: Content::Unparsed,
+    let mut meta = Pdf417Meta::new(
+        dec.layout.rows as u16,
+        dec.layout.cols as u16,
+        dec.layout.ec_level,
+    );
+    meta.errors_corrected = dec.errors_corrected;
+    meta.erasures = dec.erasures;
+    meta.compact = f.solved.compact;
+    meta.macro_pdf417 = dec.macro_pdf417.clone();
+    meta.reader_init = dec.reader_init;
+    let mut symbol = Symbol::new(
+        Symbology::Pdf417,
+        dec.data.clone(),
         quad,
-        orientation_deg: quad.orientation_deg(),
-        aim_id: dec.aim_id,
-        meta: SymbolMeta::Pdf417(Pdf417Meta {
-            rows: dec.layout.rows as u16,
-            cols: dec.layout.cols as u16,
-            ec_level: dec.layout.ec_level,
-            errors_corrected: dec.errors_corrected,
-            erasures: dec.erasures,
-            compact: f.solved.compact,
-            macro_pdf417: dec.macro_pdf417.clone(),
-            reader_init: dec.reader_init,
-        }),
-        quality: 1.0 / (1.0 + 0.1 * (dec.errors_corrected + dec.erasures) as f32),
-    })
+        dec.aim_id,
+        SymbolMeta::Pdf417(meta),
+    );
+    symbol.segments = dec.segments.clone();
+    symbol.quality = 1.0 / (1.0 + 0.1 * (dec.errors_corrected + dec.erasures) as f32);
+    Some(symbol)
 }
 
 fn scan_with(work: &mut Work, ctx: &mut FrameContext<'_>, out: &mut Vec<Symbol>) {

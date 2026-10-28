@@ -5,7 +5,7 @@
 //! mapping down over the whole (up to 139 modules long) symbol.
 
 use breader_core::{
-    BitMatrix, Content, Homography, Plane, Point, QrMeta, Quad, Symbol, SymbolMeta, Symbology,
+    BitMatrix, Homography, Plane, Point, QrMeta, Quad, Symbol, SymbolMeta, Symbology,
 };
 
 use super::decode::{DecodedRmqr, decode_grid, left_format};
@@ -735,27 +735,25 @@ fn build_symbol(found: &Found, scale: (f32, f32)) -> Option<Symbol> {
         *p = Point::new(q.x * scale.0, q.y * scale.1);
     }
     let quad = Quad::new(pts);
-    Some(Symbol {
-        symbology: Symbology::Rmqr,
-        data: dec.data.clone(),
-        text: None,
-        segments: dec.segments.clone(),
-        content: Content::Unparsed,
+    let mut meta = QrMeta::new(
+        dec.version,
+        dec.width as u16,
+        dec.height as u16,
+        dec.ec_level,
+    );
+    meta.errors_corrected = dec.errors_corrected;
+    meta.eci = dec.eci.clone();
+    meta.mirrored = found.mirrored;
+    let mut symbol = Symbol::new(
+        Symbology::Rmqr,
+        dec.data.clone(),
         quad,
-        orientation_deg: quad.orientation_deg(),
-        aim_id: dec.aim_id,
-        meta: SymbolMeta::Qr(QrMeta {
-            version: dec.version,
-            width: dec.width as u16,
-            height: dec.height as u16,
-            ec_level: dec.ec_level,
-            mask: 0,
-            errors_corrected: dec.errors_corrected,
-            eci: dec.eci.clone(),
-            mirrored: found.mirrored,
-        }),
-        quality: 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32),
-    })
+        dec.aim_id,
+        SymbolMeta::Qr(meta),
+    );
+    symbol.segments = dec.segments.clone();
+    symbol.quality = 1.0 / (1.0 + 0.1 * dec.errors_corrected as f32);
+    Some(symbol)
 }
 
 /// Tries one finder (fitted pose and measured corners) as the top-left finder
