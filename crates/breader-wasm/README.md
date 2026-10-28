@@ -57,6 +57,12 @@ Options (the Python names in camelCase, see [../breader-py/README.md](../breader
 | `maxSymbols` | integer, 0 for no limit | 0 |
 | `eanAddon` | `"ignore"`, `"optional"`, `"required"` | `"ignore"` |
 | `code39FullAscii`, `code39Checksum` | boolean | `false` |
+| `code39MinLength` | integer >= 1 | `3` |
+| `escalation` | `"all"`, `"found"`, `"stable"` | by effort |
+| `upscaleMaxSide` | integer >= 0 (0 disables) | by effort |
+| `minLineAgreement` | integer >= 1 | `2` |
+| `itfLengths` | array of even integers | any even length >= `itfMinLength` |
+| `itfMinLength` | integer >= 1 | `6` |
 | `timeBudgetMs` | **not supported**: throws | |
 
 A result is a plain object: `{ symbology, text (string or null), data (Uint8Array), content ("text", "binary", "url", "gs1", "unparsed"), gs1Hri (string or null), corners: [{x, y} x4], orientation (degrees), aimId, quality }`. The TypeScript types (`ReaderOptions`, `BarcodeSymbol`, ...) are in `breader.d.ts`.
@@ -65,7 +71,7 @@ A result is a plain object: `{ symbology, text (string or null), data (Uint8Arra
 
 - `timeBudgetMs`: the scan loop does not read a clock when no budget is set (so the default path runs on `wasm32-unknown-unknown`), but `std::time::Instant` panics there, so a budget is rejected. Bound the work with `effort`, `symbologies` and `maxSymbols`, or scan in a worker and drop frames.
 - Image files (PNG, JPEG): decode them with the browser (`createImageBitmap`, canvas) and pass the pixels.
-- The video tracker, the Python-only options (`escalation`, `upscaleMaxSide`, `minLineAgreement`, `code39MinLength`, `itfLengths`, `itfMinLength`) and the per-symbology `meta`: not exposed yet.
+- The video tracker and the per-symbology `meta`: not exposed yet (D-067: until someone asks).
 - Multi-threading (`rayon`, which would need `SharedArrayBuffer` and cross-origin isolation).
 
 ## Test

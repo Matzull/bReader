@@ -6,7 +6,7 @@
 #![forbid(unsafe_code)]
 
 use breader::{
-    Content, EanAddonPolicy, Effort, PixelFormat, Reader as CoreReader, ScanOptions,
+    Content, EanAddonPolicy, Effort, Escalation, PixelFormat, Reader as CoreReader, ScanOptions,
     Symbol as CoreSymbol, Symbology, SymbologySet, gs1,
 };
 use js_sys::{Array, Object, Reflect, Uint8Array};
@@ -32,6 +32,18 @@ export interface ReaderOptions {
   eanAddon?: "ignore" | "optional" | "required";
   code39FullAscii?: boolean;
   code39Checksum?: boolean;
+  /** Minimum Code 39 length (default 3). */
+  code39MinLength?: number;
+  /** "all", "found" (stop at the first pass that reads) or "stable"; default: decided by the effort. */
+  escalation?: "all" | "found" | "stable";
+  /** Frames up to this size (longer side) that yield nothing are rescanned 3x up-scaled; 0 disables; default: decided by the effort. */
+  upscaleMaxSide?: number;
+  /** Scanlines that must agree on a 1D result (default 2). */
+  minLineAgreement?: number;
+  /** Even ITF lengths accepted; default: any even length of at least itfMinLength. */
+  itfLengths?: number[];
+  /** Minimum ITF length (default 6). */
+  itfMinLength?: number;
 }
 
 export interface Point { x: number; y: number }
@@ -88,6 +100,12 @@ const OPTION_KEYS: &[&str] = &[
     "eanAddon",
     "code39FullAscii",
     "code39Checksum",
+    "code39MinLength",
+    "escalation",
+    "upscaleMaxSide",
+    "minLineAgreement",
+    "itfLengths",
+    "itfMinLength",
 ];
 
 /// The options as read from JS, before validation. Plain Rust so that it can be tested natively.
@@ -101,6 +119,12 @@ struct RawOptions {
     ean_addon: Option<String>,
     code39_full_ascii: Option<bool>,
     code39_checksum: Option<bool>,
+    code39_min_length: Option<f64>,
+    escalation: Option<String>,
+    upscale_max_side: Option<f64>,
+    min_line_agreement: Option<f64>,
+    itf_lengths: Option<Vec<f64>>,
+    itf_min_length: Option<f64>,
 }
 
 fn symbology_id(s: Symbology) -> &'static str {
@@ -166,6 +190,17 @@ fn parse_addon(name: &str) -> Result<EanAddonPolicy, String> {
     }
 }
 
+fn parse_escalation(name: &str) -> Result<Escalation, String> {
+    match name {
+        "all" => Ok(Escalation::All),
+        "found" => Ok(Escalation::UntilFound),
+        "stable" => Ok(Escalation::UntilStable),
+        _ => Err(format!(
+            "unknown escalation {name:?}, expected all, found or stable"
+        )),
+    }
+}
+
 fn parse_format(name: &str) -> Result<PixelFormat, String> {
     match name {
         "luma8" => Ok(PixelFormat::Luma8),
@@ -221,6 +256,34 @@ fn build_options(raw: &RawOptions) -> Result<ScanOptions, String> {
     }
     options.code39.full_ascii = raw.code39_full_ascii.unwrap_or(false);
     options.code39.require_checksum = raw.code39_checksum.unwrap_or(false);
+    if let Some(v) = raw.code39_min_length {
+        options.code39.min_length = whole("code39MinLength", v, 1.0)?;
+    }
+    if let Some(e) = &raw.escalation {
+        options.escalation = Some(parse_escalation(e)?);
+    }
+    if let Some(v) = raw.upscale_max_side {
+        options.upscale_retry = Some(whole("upscaleMaxSide", v, 0.0)?);
+    }
+    if let Some(v) = raw.min_line_agreement {
+        options.min_line_agreement = u16::try_from(whole("minLineAgreement", v, 1.0)?)
+            .map_err(|_| format!("minLineAgreement is too large, got {v}"))?;
+    }
+    if let Some(v) = raw.itf_min_length {
+        options.itf.min_length = whole("itfMinLength", v, 1.0)?;
+    }
+    if let Some(lengths) = &raw.itf_lengths {
+        options.itf.allowed_lengths = lengths
+            .iter()
+            .map(|&l| {
+                let l = whole("itfLengths entries", l, 1.0)?;
+                if l % 2 != 0 {
+                    return Err(format!("itfLengths entries must be even, got {l}"));
+                }
+                Ok(l)
+            })
+            .collect::<Result<_, _>>()?;
+    }
     Ok(options)
 }
 
@@ -281,6 +344,17 @@ fn read_options(value: &JsValue) -> Result<RawOptions, JsError> {
         ean_addon: opt_field(value, "eanAddon", "a string", string)?,
         code39_full_ascii: opt_field(value, "code39FullAscii", "a boolean", boolean)?,
         code39_checksum: opt_field(value, "code39Checksum", "a boolean", boolean)?,
+        code39_min_length: opt_field(value, "code39MinLength", "a number", number)?,
+        escalation: opt_field(value, "escalation", "a string", string)?,
+        upscale_max_side: opt_field(value, "upscaleMaxSide", "a number", number)?,
+        min_line_agreement: opt_field(value, "minLineAgreement", "a number", number)?,
+        itf_lengths: opt_field(value, "itfLengths", "an array of numbers", |v| {
+            if !Array::is_array(v) {
+                return None;
+            }
+            Array::from(v).iter().map(|x| x.as_f64()).collect()
+        })?,
+        itf_min_length: opt_field(value, "itfMinLength", "a number", number)?,
     })
 }
 
@@ -454,6 +528,7 @@ mod tests {
             ean_addon: Some("required".into()),
             code39_full_ascii: Some(true),
             code39_checksum: Some(true),
+            ..raw()
         })
         .unwrap();
         assert_eq!(o.effort, Effort::Exhaustive);
@@ -506,6 +581,62 @@ mod tests {
             ..raw()
         });
         assert!(e.contains("timeBudgetMs is not supported"), "{e}");
+    }
+
+    #[test]
+    fn the_python_options_are_all_here() {
+        let o = build_options(&RawOptions {
+            code39_min_length: Some(5.0),
+            escalation: Some("found".into()),
+            upscale_max_side: Some(0.0),
+            min_line_agreement: Some(3.0),
+            itf_lengths: Some(vec![14.0, 8.0]),
+            itf_min_length: Some(8.0),
+            ..raw()
+        })
+        .unwrap();
+        assert_eq!(o.code39.min_length, 5);
+        assert_eq!(o.escalation, Some(Escalation::UntilFound));
+        assert_eq!(o.upscale_retry, Some(0));
+        assert_eq!(o.min_line_agreement, 3);
+        assert_eq!(o.itf.allowed_lengths, vec![14, 8]);
+        assert_eq!(o.itf.min_length, 8);
+        let d = build_options(&raw()).unwrap();
+        let s = ScanOptions::default();
+        assert_eq!(
+            (d.code39.min_length, d.min_line_agreement, d.itf.min_length),
+            (s.code39.min_length, s.min_line_agreement, s.itf.min_length)
+        );
+        assert!(d.itf.allowed_lengths.is_empty() && d.escalation.is_none());
+        let bad = |r: RawOptions| build_options(&r).unwrap_err();
+        assert!(
+            bad(RawOptions {
+                escalation: Some("some".into()),
+                ..raw()
+            })
+            .contains("escalation")
+        );
+        assert!(
+            bad(RawOptions {
+                itf_lengths: Some(vec![7.0]),
+                ..raw()
+            })
+            .contains("even")
+        );
+        assert!(
+            bad(RawOptions {
+                min_line_agreement: Some(0.0),
+                ..raw()
+            })
+            .contains("minLineAgreement")
+        );
+        assert!(
+            bad(RawOptions {
+                code39_min_length: Some(1.5),
+                ..raw()
+            })
+            .contains("code39MinLength")
+        );
     }
 
     #[test]

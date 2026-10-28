@@ -90,10 +90,52 @@ jobs:
           path: crates/breader-py/dist/*.tar.gz
           if-no-files-found: error
 
+  binaries:
+    # The `breader` command line tool (D-063) and the C library with its header (D-064), one archive
+    # per platform. Each crate builds in its own target directory: both are named `breader`, and on
+    # Windows the executable and the DLL would write the same `breader.pdb`.
+    name: binaries (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-latest, exe: breader, libs: "libbreader.so libbreader.a" }
+          - { name: macos-arm64, os: macos-latest, exe: breader, libs: "libbreader.dylib libbreader.a" }
+          - { name: windows-x64, os: windows-latest, exe: breader.exe, libs: "breader.dll breader.dll.lib breader.lib" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: |
+          cargo build --release -p breader-cli --target-dir target/cli
+          cargo build --release -p breader-ffi --target-dir target/ffi
+      - name: Archive
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          dir="breader-$version-${{ matrix.name }}"
+          mkdir -p "$dir/bin" "$dir/lib" "$dir/include"
+          cp "target/cli/release/${{ matrix.exe }}" "$dir/bin/"
+          for f in ${{ matrix.libs }}; do cp "target/ffi/release/$f" "$dir/lib/"; done
+          cp crates/breader-ffi/include/breader.h "$dir/include/"
+          cp README.md LICENSE* "$dir/"
+          cp crates/breader-cli/README.md "$dir/README-CLI.md"
+          cp crates/breader-ffi/README.md "$dir/README-C.md"
+          tar -czf "$dir.tar.gz" "$dir"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.name }}
+          path: breader-*.tar.gz
+          if-no-files-found: error
+
   draft:
     name: draft release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [crates, wheels, sdist]
+    needs: [crates, wheels, sdist, binaries]
     runs-on: ubuntu-latest
     permissions:
       contents: write

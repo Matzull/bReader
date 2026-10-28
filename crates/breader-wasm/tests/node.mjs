@@ -136,6 +136,19 @@ fails(() => new breader.Reader({ tryInvert: "yes" }), /tryInvert must be a boole
 fails(() => new breader.Reader({ eanAddon: "maybe" }), /eanAddon/, "eanAddon");
 fails(() => new breader.Reader({ timeBudgetMs: 50 }), /timeBudgetMs is not supported/, "timeBudgetMs");
 fails(() => new breader.Reader({ efort: "fast" }), /unknown option "efort"/, "unknown key");
+fails(() => new breader.Reader({ escalation: "some" }), /unknown escalation "some"/, "escalation");
+fails(() => new breader.Reader({ itfLengths: [7] }), /must be even/, "itfLengths");
+fails(() => new breader.Reader({ itfLengths: 14 }), /itfLengths must be an array of numbers/, "itfLengths type");
+fails(() => new breader.Reader({ minLineAgreement: 0 }), /minLineAgreement/, "minLineAgreement");
+{
+  // The options of the Python bindings that have a JS name are accepted and still read the QR.
+  const tuned = new breader.Reader({
+    escalation: "found", upscaleMaxSide: 0, minLineAgreement: 3,
+    code39MinLength: 4, itfLengths: [14], itfMinLength: 8,
+  });
+  const found = tuned.scan(luma, size, size);
+  if (found.length !== 1 || found[0].symbology !== "qr") throw new Error(`tuned reader: ${JSON.stringify(found)}`);
+}
 fails(() => new breader.Reader(5), /plain object/, "options type");
 fails(() => reader.scan(luma, size, size, "bgr8"), /unknown pixel format "bgr8"/, "format");
 fails(() => reader.scan(luma, 0, size), /width must be a positive integer/, "width");
