@@ -36,18 +36,21 @@ rust-version = "1.94"
 publish = false
 license = "AGPL-3.0-only"
 authors = ["Marcos Alonso"]
+repository = "https://github.com/Matzull/Breader"
+keywords = ["barcode", "qrcode", "datamatrix", "pdf417", "gs1"]
+categories = ["multimedia::images", "computer-vision", "parser-implementations"]
 
 [workspace.dependencies]
-breader-core = { path = "crates/breader-core" }
-breader-imgproc = { path = "crates/breader-imgproc" }
-breader-ecc = { path = "crates/breader-ecc" }
-breader-linear = { path = "crates/breader-linear" }
-breader-qr = { path = "crates/breader-qr" }
-breader-datamatrix = { path = "crates/breader-datamatrix" }
-breader-pdf417 = { path = "crates/breader-pdf417" }
-breader-aztec = { path = "crates/breader-aztec" }
-breader-content = { path = "crates/breader-content" }
-breader = { path = "crates/breader" }
+breader-core = { path = "crates/breader-core", version = "0.1.0" }
+breader-imgproc = { path = "crates/breader-imgproc", version = "0.1.0" }
+breader-ecc = { path = "crates/breader-ecc", version = "0.1.0" }
+breader-linear = { path = "crates/breader-linear", version = "0.1.0" }
+breader-qr = { path = "crates/breader-qr", version = "0.1.0" }
+breader-datamatrix = { path = "crates/breader-datamatrix", version = "0.1.0" }
+breader-pdf417 = { path = "crates/breader-pdf417", version = "0.1.0" }
+breader-aztec = { path = "crates/breader-aztec", version = "0.1.0" }
+breader-content = { path = "crates/breader-content", version = "0.1.0" }
+breader = { path = "crates/breader", version = "0.1.0" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

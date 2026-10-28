@@ -20,6 +20,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[project.urls]
+Repository = "https://github.com/Matzull/Breader"
+Documentation = "https://github.com/Matzull/Breader/blob/main/crates/breader-py/README.md"
+
 [project.optional-dependencies]
 test = ["pytest", "numpy", "pillow", "segno"]
 

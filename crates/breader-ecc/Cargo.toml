@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
+description = "Reed-Solomon and BCH error correction for the breader barcode reader"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [lints]
 workspace = true

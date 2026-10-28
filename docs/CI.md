@@ -2,13 +2,14 @@
 
 Documentation hub: [README.md](README.md). How the gates are maintained (rewriting and merging baselines, false-positive triage): [testing.md](testing.md). Datasets: [datasets.md](datasets.md).
 
-Workflows live in `.github/workflows/`. All use `contents: read` only.
+Workflows live in `.github/workflows/`. All use `contents: read` only, except the `draft` job of `release.yml` (`contents: write`, to draft a release).
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `ci.yml` | pull request, push to `main`, tags `v*` | `lint`: fmt, clippy (`--workspace --all-targets --all-features -D warnings`), cargo-deny. `test`: `cargo test --workspace` on ubuntu x86_64, ubuntu arm64, macOS arm64 and Windows; a second run with `--features breader/rayon` limited to the five crates that have the feature (`breader`, `-imgproc`, `-linear`, `-qr`, `-datamatrix`); on ubuntu x86_64 also the release-only allocation test (`cargo test --release -p breader --test allocation`). `regression`: `tools/check-regression.sh --synthetic-only` at tier a on pull requests and tier b on pushes to main. `changes` decides whether the Python jobs run: always on pushes to main and tags, on pull requests only when `crates/breader-py/`, `crates/breader/` (the facade) or `ci.yml` changed. `python-wheels` / `python-test`: abi3 wheels (linux x86_64 and aarch64, macOS arm64, Windows x64) and pytest against the installed wheel. |
 | `datasets.yml` | weekly (Mon 05:00 UTC), manual | One job, `gate-c2`: restores `data/dynamsoft` (cache keyed on the upstream commit, fetched on a miss) and `data/zxing-samples` (cache keyed on the pinned zxing-cpp tag, annotations regenerated), installs ffmpeg and runs `tools/check-regression.sh --tier c2`: all sets at all efforts (synthetic, the four Dynamsoft image sets, zxing-cpp `test/samples`) and the video gate with all engines. BarBeR is skipped (no data in CI). |
 | `fuzz.yml` | nightly (03:00 UTC), manual | Nightly toolchain, runs every target from `cargo fuzz list` for 300 s (manual runs can change it), caches `fuzz/corpus`, uploads `fuzz/artifacts` when something crashes. |
+| `release.yml` | tags `v*`, manual | Builds what a release ships, publishes nothing ([D-066](decisions.md#d-066)). `crates`: lifts `publish = false` in the runner's checkout only and runs `cargo package --workspace` (every library crate packaged and built on its own, as crates.io would), keeping the `.crate` files. `wheels`: abi3 wheels for linux x86_64 and aarch64, macOS arm64 and x86_64, Windows x64. `sdist`: the Python source distribution, installed from source in a clean environment. `draft` (tags only): attaches all of it to a draft GitHub release. Publishing to crates.io or PyPI is a manual step for the owner. |
 
 The Dynamsoft datasets have no stated license, so they are only fetched by the scheduled or manual job, never on every push. The zxing-cpp samples are fetched by the same workflow (sparse checkout of `test/samples` at a pinned tag); only the images and their expected-result files are used, as test data.
 

@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
+description = "PDF417 and compact PDF417 reader of breader"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 breader-core.workspace = true

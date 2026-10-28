@@ -5,6 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
+description = "Clean-room barcode and QR code reader: QR, Micro QR, rMQR, Data Matrix, PDF417, Aztec, EAN/UPC, Code 128/39/93, ITF, Codabar and GS1 DataBar"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
 
 [features]
 default = ["qr", "linear", "datamatrix", "pdf417", "aztec"]

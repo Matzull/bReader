@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
+description = "Image processing for the breader barcode reader: luma conversion, binarizers, scaling"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 rayon = ["dep:rayon"]

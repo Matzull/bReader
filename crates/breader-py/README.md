@@ -2,7 +2,7 @@
 
 Fast barcode and QR code reader for Python, written in Rust. No runtime dependencies (numpy and Pillow are optional). Ships as a single `abi3` wheel for Python 3.9+.
 
-Supported symbologies: QR Code, Data Matrix (ECC 200, including rectangular and DMRE sizes), PDF417, EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39, ITF (Interleaved 2 of 5), Codabar, Code 93 (Full ASCII through the shift characters). GS1 element strings are parsed for QR/Code 128 FNC1 payloads and GTIN symbologies.
+Supported symbologies: QR Code, Micro QR Code (M1 to M4), rMQR Code, Data Matrix (ECC 200, including rectangular and DMRE sizes), PDF417 (including compact), Aztec Code (compact, full-range and Runes), EAN-13, EAN-8, UPC-A, UPC-E (with EAN-2/5 add-ons), Code 128, Code 39, Code 93, ITF (Interleaved 2 of 5), Codabar and GS1 DataBar (Omnidirectional, Limited, Expanded, one row and stacked). GS1 element strings are parsed for QR/Code 128 FNC1 payloads, GS1 DataBar and GTIN symbologies.
 
 ## Install
 

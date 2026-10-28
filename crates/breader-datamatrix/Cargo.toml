@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
+description = "Data Matrix (ECC 200, DMRE) reader of breader"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 rayon = []

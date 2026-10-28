@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
+description = "Core types, options and pipeline traits of the breader barcode reader"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 

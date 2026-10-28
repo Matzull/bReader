@@ -1,0 +1,108 @@
+name: release
+
+# Builds everything a release ships and attaches it to a DRAFT GitHub release. Nothing is published
+# to crates.io or PyPI: that stays a manual, owner-only step (D-066). Run it by pushing a `v*` tag, or
+# by hand from the Actions tab (the artifacts are then kept on the run and no release is drafted).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  crates:
+    name: crate packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # `publish = false` keeps `cargo publish` from ever running by accident, but it also makes
+      # `cargo package` resolve the inter-crate dependencies on crates.io. Lift it in this checkout
+      # only, so every crate is packaged and built on its own as crates.io would.
+      - name: Package and verify every library crate
+        run: |
+          sed -i 's/^publish = false/publish = true/' Cargo.toml
+          cargo package --workspace --allow-dirty --exclude bench --exclude video-bench --exclude synth
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crates
+          path: target/package/*.crate
+          if-no-files-found: error
+
+  wheels:
+    name: wheel (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-latest, target: x86_64 }
+          - { name: linux-aarch64, os: ubuntu-latest, target: aarch64 }
+          - { name: macos-arm64, os: macos-latest, target: aarch64 }
+          - { name: macos-x86_64, os: macos-latest, target: x86_64 }
+          - { name: windows-x64, os: windows-latest, target: x64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          manylinux: auto
+          working-directory: crates/breader-py
+          args: --release --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.name }}
+          path: crates/breader-py/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: Python sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          working-directory: crates/breader-py
+          args: --out dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The sdist must build on its own: install it from source in a clean environment.
+      - name: Install the sdist from source
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install crates/breader-py/dist/*.tar.gz
+          cd /tmp && python -c "import breader; print(breader.__version__)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: crates/breader-py/dist/*.tar.gz
+          if-no-files-found: error
+
+  draft:
+    name: draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [crates, wheels, sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/*
