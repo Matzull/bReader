@@ -7,7 +7,8 @@ const TEXT: &str = "HELLO FFI 123";
 
 /// A QR code as a grey image: (pixels, side).
 fn qr(text: &str) -> (Vec<u8>, usize) {
-    const PX: usize = 6;
+    // Miri runs the decoder some thousand times slower: a smaller picture.
+    const PX: usize = if cfg!(miri) { 3 } else { 6 };
     const QUIET: usize = 4;
     let code = QrCode::with_error_correction_level(text.as_bytes(), EcLevel::M).unwrap();
     let dim = code.width();
@@ -24,6 +25,31 @@ fn qr(text: &str) -> (Vec<u8>, usize) {
         }
     }
     (img, side)
+}
+
+/// Miri interprets the decoder some thousand times slower than it runs: the tests that scan use
+/// the Fast effort under it (the QR code is read at Fast as well).
+fn test_options() -> ScanOptions {
+    if cfg!(miri) {
+        ScanOptions::with_effort(Effort::Fast)
+    } else {
+        ScanOptions::default()
+    }
+}
+
+/// A reader with the options above, through the C interface.
+///
+/// # Safety
+/// The handle is freed by the caller, once.
+unsafe fn new_reader() -> *mut BreaderReader {
+    // SAFETY: the options handle is live for the call and freed once.
+    unsafe {
+        let o = breader_options_new();
+        (*o).0 = test_options();
+        let reader = breader_reader_new(o);
+        breader_options_free(o);
+        reader
+    }
 }
 
 fn scan_luma(
@@ -77,7 +103,7 @@ fn scans_a_qr_and_exposes_every_field() {
     // SAFETY: handles come from this library and are freed once; pointers are used before
     // the results are freed.
     unsafe {
-        let reader = breader_reader_new(null());
+        let reader = new_reader();
         assert!(!reader.is_null());
         let (st, res) = scan_luma(reader, &img, side);
         assert_eq!(st, BREADER_OK);
@@ -204,7 +230,7 @@ fn symbology_masks_match_ids() {
 fn every_pixel_format_scans_a_blank_frame() {
     // SAFETY: the buffer outlives each call; the handles are freed once.
     unsafe {
-        let reader = breader_reader_new(null());
+        let reader = new_reader();
         for f in [
             BREADER_PIXEL_LUMA8,
             BREADER_PIXEL_RGB8,
@@ -281,7 +307,7 @@ fn a_panic_becomes_a_status() {
 #[test]
 fn text_with_a_nul_is_returned_as_null_and_data_keeps_it() {
     let (img, side) = qr(TEXT);
-    let mut reader = Reader::new();
+    let mut reader = Reader::with_options(test_options());
     let mut symbols = reader
         .scan_pixels(&img, PixelFormat::Luma8, side, side, side)
         .unwrap();

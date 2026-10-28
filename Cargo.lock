@@ -191,6 +191,7 @@ checksum = "6099cdc01846bc367c4e7dd630dc5966dccf36b652fae7a74e17b640411a91b2"
 name = "breader"
 version = "0.1.0"
 dependencies = [
+ "barcoders",
  "breader-aztec",
  "breader-content",
  "breader-core",
@@ -199,6 +200,7 @@ dependencies = [
  "breader-linear",
  "breader-pdf417",
  "breader-qr",
+ "datamatrix",
  "image",
  "qrcode",
 ]

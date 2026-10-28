@@ -38,6 +38,10 @@ image = { version = "0.25", optional = true, default-features = false, features 
 
 [dev-dependencies]
 qrcode = { version = "0.14", default-features = false }
+# Encoders and a decoder for the rayon determinism test (same crates and features as tools/synth).
+barcoders = { version = "2", default-features = false, features = ["std"] }
+datamatrix = { version = "0.3", default-features = false }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [[example]]
 name = "scan_file"
