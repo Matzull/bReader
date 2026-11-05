@@ -75,3 +75,7 @@ pip install maturin pytest numpy pillow segno
 maturin develop --release
 pytest
 ```
+
+## Android
+
+[`tools/build-android-wheels.sh`](../../tools/build-android-wheels.sh) cross-compiles wheels for Android apps packaged with Flet (`flet build apk`), linked against the Python that Flet ships. It needs the Android NDK and maturin; see the script header for the options and why the wheels only load on that Python version.
