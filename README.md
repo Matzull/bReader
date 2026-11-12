@@ -1,4 +1,4 @@
-# Breader
+# bReader
 
 A fast, clean-room barcode and QR code reader written in Rust. No unsafe code, no C dependencies, optional Python bindings, a WebAssembly build and optional multi-threading.
 
